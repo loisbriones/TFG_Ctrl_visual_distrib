@@ -1,4 +1,5 @@
 import cv2 as cv
+from cv2.typing import Point
 import numpy as np
 
 camara = cv.VideoCapture(0)
@@ -13,6 +14,11 @@ def detectar_y_dibujar(mascara, color_bgr, nombre_texto, imagen):
     for c in contornos:
         if cv.contourArea(c) > 500:
             x, y, w, h = cv.boundingRect(c)
+
+            cx = x + (w // 2)
+            cy = y + (h // 2)
+
+            cv.circle(imagen, (cx, cy), 5, (255, 255, 255), -1)
             cv.rectangle(imagen, (x, y), (x + w, y + h), color_bgr, 3)
             cv.putText(
                 imagen,
