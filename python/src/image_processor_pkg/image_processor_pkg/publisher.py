@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 import cv2 as cv
 import numpy as np
-from vision_tracker.msg import ObjectLocation
+from image_processor_pkg.msg import ObjectLocation
 
 # Perfil para QoS preconfigurado, tiene:
 #   History: Keep last,
