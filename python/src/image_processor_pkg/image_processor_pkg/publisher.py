@@ -28,7 +28,7 @@ class ImageProcessor(Node):
             ObjectLocation, "object_position", qos_profile_sensor_data
         )
 
-        self.cap = cv.VideoCapture(0)
+        self.cap = cv.VideoCapture(0, cv.CAP_V4L2)
 
         self.timer = self.create_timer(0.033, self.process_frame)
 

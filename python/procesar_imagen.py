@@ -12,7 +12,7 @@ camara.set(cv.CAP_PROP_FRAME_HEIGHT, 350)
 def detectar_y_dibujar(mascara, color_bgr, nombre_texto, imagen):
     contornos, _ = cv.findContours(mascara, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     for c in contornos:
-        if cv.contourArea(c) > 500:
+        if cv.contourArea(c) > 50:
             x, y, w, h = cv.boundingRect(c)
 
             cx = x + (w // 2)

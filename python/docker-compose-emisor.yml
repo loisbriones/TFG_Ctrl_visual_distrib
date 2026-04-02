@@ -2,17 +2,19 @@ services:
   emisor:
     build: .
     network_mode: "host"
-    privileged: true # Necesario para acceder a la cámara (/dev/video0)
+    privileged: true
     devices:
       - "/dev/video0:/dev/video0"
     environment:
       - ROS_DOMAIN_ID=42
       - ROS_LOCALHOST_ONLY=0
     volumes:
+      # Mapeamos la carpeta completa del paquete 
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
     command: >
-      bash -c "cd /ros2_ws && 
-               colcon build --packages-select image_processor_pkg && 
-               source /ros2_ws/install/setup.bash && 
-               export PYTHONPATH=$PYTHONPATH:/ros2_ws/install/image_processor_pkg/lib/python3.10/site-packages &&
-               ros2 run image_processor_pkg publisher.py"
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        colcon build --symlink-install --packages-select image_processor_pkg &&
+        source install/setup.bash &&
+        ros2 run image_processor_pkg publisher.py
+      "
