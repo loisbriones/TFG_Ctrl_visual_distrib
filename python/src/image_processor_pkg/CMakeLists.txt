@@ -15,6 +15,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 install(PROGRAMS 
   image_processor_pkg/publisher.py
   image_processor_pkg/subscriber.py
+  image_processor_pkg/procesar_imagen.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
