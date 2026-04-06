@@ -59,6 +59,8 @@ class ImageProcessor(Node):
             self.msg.color = p["color"]
             self.msg.x = p["cx"]
             self.msg.y = p["cy"]
+            self.msg.proc_time = proc_duration
+
             self.msg.stamp = self.get_clock().now().to_msg()
 
             self.publisher_.publish(self.msg)

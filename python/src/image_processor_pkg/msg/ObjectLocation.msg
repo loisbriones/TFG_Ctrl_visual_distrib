@@ -1,4 +1,5 @@
 string color
 int32 x
 int32 y
-builtin_interface/Time stamp
+builtin_interfaces/Time stamp
+float64 proc_time
