@@ -18,7 +18,7 @@ from image_processor_pkg.msg import ObjectLocation
 #   avoid ros namespace conventions: false
 # Informacion sacada de: https://docs.ros2.org/latest/api/rclcpp/classrclcpp_1_1SensorDataQoS.html
 from rclpy.qos import qos_profile_sensor_data
-from .procesar_imagen import ColorDetector
+from procesar_imagen import ColorDetector
 
 
 class ImageProcessor(Node):
