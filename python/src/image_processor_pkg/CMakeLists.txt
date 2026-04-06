@@ -5,10 +5,12 @@ project(image_processor_pkg)
 find_package(ament_cmake REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(builtin_interfaces REQUIRED)
 
 # Genearar los mensajes
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ObjectLocation.msg"
+  DEPENDENCIES builtin_interfaces
 )
 
 # Cargar los scripts de python: publisher y subscriber

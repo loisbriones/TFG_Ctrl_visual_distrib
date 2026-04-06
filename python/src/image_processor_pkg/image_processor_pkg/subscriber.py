@@ -32,6 +32,17 @@ class PositionReceiver(Node):
         self.get_logger().info("Node PositionReceiver Ready")
 
     def topic_callback(self, msg):
+        # Tiempo actual al recibir
+        tiempo_recibido = self.get_clock().now()
+
+        # Tiempo enviado (convertir msg.stamp a objeto Time de rclpy)
+        tiempo_envio = rclpy.time.Time.from_msg(msg.stamp)
+
+        # --- MEDICIÓN 2: LATENCIA DE RED ---
+        # Calculamos la diferencia en nanosegundos y pasamos a milisegundos
+        latencia_ns = tiempo_recibido - tiempo_envio
+        latencia_ms = latencia_ns.nanoseconds / 1e6
+
         color = msg.color
         cx = msg.x
         cy = msg.y
@@ -39,6 +50,7 @@ class PositionReceiver(Node):
         self.get_logger().info(
             f"Recibido de la otra RPi -> Color: {color} en [{cx}, {cy}]"
         )
+        self.get_logger().info(f"LATENCIA RED: {latencia_ms:4.f} ms")
 
 
 def main(args=None):
