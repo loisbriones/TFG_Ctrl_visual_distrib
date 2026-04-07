@@ -31,7 +31,7 @@ class ColorDetector:
         else:
             self.target_color_1_lower, self.target_color_1_upper = COLOR_RANGES[
                 target_color_1
-            ]
+            ][0]
 
         if target_color_2 == "rojo":
             self.target_color_2_lower_red1, self.target_color_2_upper_red1 = (
@@ -43,7 +43,7 @@ class ColorDetector:
         else:
             self.target_color_2_lower, self.target_color_2_upper = COLOR_RANGES[
                 target_color_2
-            ]
+            ][0]
 
     def find_object(self, frame, min_area, target_color_1, target_color_2):
         frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)

@@ -14,7 +14,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 )
 
 install(DIRECTORY config
-  DESTIANTION share/${PROJECT_NAME}
+  DESTINATION share/${PROJECT_NAME}
 )
 
 # Cargar los scripts de python: publisher y subscriber
