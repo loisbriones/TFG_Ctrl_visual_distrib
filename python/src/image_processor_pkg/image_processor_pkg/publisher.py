@@ -247,7 +247,7 @@ class ImageProcessor(Node):
                     self.kernel_size = param.value
                     self.actualizar_detector()
 
-            elif param.name == "debug":
+            elif param.name == "camera.debug":
                 self.debug = param.value
                 self.save_data = param.value 
                      
@@ -435,6 +435,9 @@ class ImageProcessor(Node):
             self.puntos_for_debug[car_name]["debug_y"] = y1
         
     def _tarea_debug(self):
+
+        if not self.debug:
+            return
 
         if self.save_data:
             return

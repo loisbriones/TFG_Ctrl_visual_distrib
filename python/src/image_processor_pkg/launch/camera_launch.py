@@ -22,7 +22,7 @@ def generate_launch_description():
             namespace=node_id,
             parameters=[
                 params_file,
-                {'camara_id', node_id}
+                {'camara_id': node_id}
             ],
         )
     ])
