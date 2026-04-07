@@ -26,13 +26,35 @@ class ImageProcessor(Node):
     def __init__(self):
         super().__init__("image_processor")
 
+        # ----- CAMARA PARAMETERS -----
+        self.declare_parameter("camara.width", 640)
+        self.declare_parameter("camara.width", 480)
+
+        # ----- DETECTION PARAMETERS -----
+        self.declare_parameter("detection.min_area", 50)
+        self.declare_parameter("detection.target_color_1", "rojo")
+        self.declare_parameter("detection.target_color_2", "verde")
+        self.declare_parameter("kernel_size", 5)
+
+        width = self.get_parameter("camara.width").value
+        height = self.get_parameter("camara.width").value
+
+        self.min_area = self.get_parameter("detection.min_area").value
+        self.target_color_1 = self.get_parameter("detection.target_color_1").value
+        self.target_color_2 = self.get_parameter("detection.target_color_2").value
+        self.kernel_size = self.get_parameter("kernel_size").value
+
         self.publisher_ = self.create_publisher(
             ObjectLocation, "object_position", qos_profile_sensor_data
         )
 
-        self.cap = cv.VideoCapture(0, cv.CAP_V4L2)
+        self.cam = cv.VideoCapture(0, cv.CAP_V4L2)
+        self.cam.set(cv.CAP_PROP_FRAME_WIDTH, width)
+        self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, height)
 
-        self.color_detector = ColorDetector()
+        self.color_detector = ColorDetector(
+            self.target_color_1, self.target_color_2, self.kernel_size
+        )
 
         self.msg = ObjectLocation()
 
@@ -42,13 +64,17 @@ class ImageProcessor(Node):
 
     def process_frame(self):
         # Capturar frame
-        ret, frame = self.cap.read()
+        ret, frame = self.cam.read()
 
         if not ret:
             return
 
         start_proc = time.perf_counter()
-        points = self.color_detector.find_object(frame)
+
+        points = self.color_detector.find_object(
+            frame, self.min_area, self.target_color_1, self.target_color_2
+        )
+
         end_proc = time.perf_counter()
 
         # Convertir a ms

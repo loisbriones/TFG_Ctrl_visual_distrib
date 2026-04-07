@@ -1,49 +1,106 @@
 import cv2 as cv
 import numpy as np
 
+COLOR_RANGES = {
+    "rojo": [
+        (np.array([0, 100, 100]), np.array([10, 255, 255])),
+        (np.array([160, 100, 100]), np.array([180, 255, 255])),
+    ],
+    "naranja": [(np.array([11, 100, 100]), np.array([25, 255, 255]))],
+    "amarillo": [(np.array([26, 100, 100]), np.array([34, 255, 255]))],
+    "verde": [(np.array([35, 100, 100]), np.array([85, 255, 255]))],
+    "cian": [(np.array([86, 100, 100]), np.array([100, 255, 255]))],
+    "azul": [(np.array([101, 100, 100]), np.array([130, 255, 255]))],
+    "violeta": [(np.array([131, 100, 100]), np.array([160, 255, 255]))],
+}
+
 
 class ColorDetector:
-    def __init__(self):
-        self.kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5))
-
-        # --- CONFIGURACIÓN ROJO ---
-        self.lower_red1, self.upper_red1 = (
-            np.array([0, 100, 100]),
-            np.array([10, 255, 255]),
-        )
-        self.lower_red2, self.upper_red2 = (
-            np.array([170, 100, 100]),
-            np.array([180, 255, 255]),
+    def __init__(self, target_color_1, target_color_2, kernel_size):
+        self.kernel = cv.getStructuringElement(
+            cv.MORPH_RECT, (kernel_size, kernel_size)
         )
 
-        # --- CONFIGURACIÓN VERDE ---
-        self.lower_green, self.upper_green = (
-            np.array([35, 100, 100]),
-            np.array([85, 255, 255]),
-        )
+        if target_color_1 == "rojo":
+            self.target_color_1_lower_red1, self.target_color_1_upper_red1 = (
+                COLOR_RANGES["rojo"][0]
+            )
+            self.target_color_1_lower_red2, self.target_color_1_upper_red2 = (
+                COLOR_RANGES["rojo"][2]
+            )
+        else:
+            self.target_color_1_lower, self.target_color_1_upper = COLOR_RANGES[
+                target_color_1
+            ]
 
-    def find_object(self, frame):
+        if target_color_2 == "rojo":
+            self.target_color_2_lower_red1, self.target_color_2_upper_red1 = (
+                COLOR_RANGES["rojo"][0]
+            )
+            self.target_color_2_lower_red2, self.target_color_2_upper_red2 = (
+                COLOR_RANGES["rojo"][2]
+            )
+        else:
+            self.target_color_2_lower, self.target_color_2_upper = COLOR_RANGES[
+                target_color_2
+            ]
+
+    def find_object(self, frame, min_area, target_color_1, target_color_2):
         frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
 
-        mask_red = cv.add(
-            cv.inRange(frame_hsv, self.lower_red1, self.upper_red1),
-            cv.inRange(frame_hsv, self.lower_red2, self.upper_red2),
-        )
-        mask_green = cv.inRange(frame_hsv, self.lower_green, self.upper_green)
+        if target_color_1 == "rojo":
+            mask_target_color_1 = cv.add(
+                cv.inRange(
+                    frame_hsv,
+                    self.target_color_1_lower_red1,
+                    self.target_color_1_upper_red1,
+                ),
+                cv.inRange(
+                    frame_hsv,
+                    self.target_color_1_lower_red2,
+                    self.target_color_1_upper_red2,
+                ),
+            )
+        else:
+            mask_target_color_1 = cv.inRange(
+                frame_hsv, self.target_color_1_lower, self.target_color_1_upper
+            )
+
+        if target_color_2 == "rojo":
+            mask_target_color_2 = cv.add(
+                cv.inRange(
+                    frame_hsv,
+                    self.target_color_1_lower_red1,
+                    self.target_color_1_upper_red1,
+                ),
+                cv.inRange(
+                    frame_hsv,
+                    self.target_color_1_lower_red2,
+                    self.target_color_1_upper_red2,
+                ),
+            )
+        else:
+            mask_target_color_2 = cv.inRange(
+                frame_hsv, self.target_color_1_lower, self.target_color_1_upper
+            )
 
         points_detected = []
 
-        points_detected.extend(self._detectar(mask_red, "ROJO"))
-        points_detected.extend(self._detectar(mask_green, "VERDE"))
+        points_detected.extend(
+            self._detectar(mask_target_color_1, target_color_1, min_area)
+        )
+        points_detected.extend(
+            self._detectar(mask_target_color_2, target_color_2, min_area)
+        )
 
         return points_detected
 
-    def _detectar(self, mask, color_bgr):
+    def _detectar(self, mask, color_bgr, min_area):
         puntos = []
         contornos, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
         for c in contornos:
-            if cv.contourArea(c) > 50:
+            if cv.contourArea(c) > min_area:
                 x, y, w, h = cv.boundingRect(c)
 
                 cx = x + (w // 2)
