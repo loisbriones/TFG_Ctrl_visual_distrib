@@ -329,6 +329,9 @@ class ImageProcessor(Node):
         self.is_processing = True
         try:
 
+            if self.debug and self.save_data:
+                    self.next_debug_frame = current_frame.copy()
+
             futures = []
             for car_name in self.coches:                
                 futures.append(self.thread_pool.submit(self.tarea_por_coche, current_frame, car_name, self.info_coches[car_name]))
@@ -337,7 +340,6 @@ class ImageProcessor(Node):
             wait(futures)
     
             if self.debug and self.save_data:
-                    self.next_debug_frame = current_frame.copy()
                     self.save_data = False 
     
         finally:
@@ -433,15 +435,16 @@ class ImageProcessor(Node):
             # Guardar para el dibujo de debug
             self.puntos_for_debug[car_name]["debug_x"] = x1
             self.puntos_for_debug[car_name]["debug_y"] = y1
+            # Guardamos los puntos detectados (front y back) en la lista de debug
+            self.puntos_for_debug[car_name]["debug_points"] = [
+                v for v in detections.values() if v is not None
+            ]
         
     def _tarea_debug(self):
 
-        if not self.debug:
-            return
+        if not self.debug or self.save_data or self.next_debug_frame is None:
+            return         
 
-        if self.save_data:
-            return
-         
         # Dibujamos los puntos de TODOS los coches que estén en el diccionario
         for car_name in self.coches:
             if self.puntos_for_debug[car_name] is not None:
