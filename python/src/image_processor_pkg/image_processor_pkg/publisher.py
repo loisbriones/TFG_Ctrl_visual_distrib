@@ -27,22 +27,22 @@ class ImageProcessor(Node):
         super().__init__("image_processor")
 
         # ----- CAMARA PARAMETERS -----
-        self.declare_parameter("camara.width", 640)
-        self.declare_parameter("camara.width", 480)
+        self.declare_parameter("camera.width", 640)
+        self.declare_parameter("camera.height", 480)
 
         # ----- DETECTION PARAMETERS -----
         self.declare_parameter("detection.min_area", 50)
         self.declare_parameter("detection.target_color_1", "rojo")
         self.declare_parameter("detection.target_color_2", "verde")
-        self.declare_parameter("kernel_size", 5)
+        self.declare_parameter("detection.kernel_size", 5)
 
-        width = self.get_parameter("camara.width").value
-        height = self.get_parameter("camara.width").value
+        width = self.get_parameter("camera.width").value
+        height = self.get_parameter("camera.height").value
 
         self.min_area = self.get_parameter("detection.min_area").value
         self.target_color_1 = self.get_parameter("detection.target_color_1").value
         self.target_color_2 = self.get_parameter("detection.target_color_2").value
-        self.kernel_size = self.get_parameter("kernel_size").value
+        self.kernel_size = self.get_parameter("detection.kernel_size").value
 
         self.publisher_ = self.create_publisher(
             ObjectLocation, "object_position", qos_profile_sensor_data
@@ -79,7 +79,6 @@ class ImageProcessor(Node):
 
         # Convertir a ms
         proc_duration = (end_proc - start_proc) * 1000
-        self.get_logger().info(f"TIEMPO PROCESADO: {proc_duration:.4f} ms")
 
         for p in points:
             self.msg.color = p["color"]

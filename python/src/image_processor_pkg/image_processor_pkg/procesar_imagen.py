@@ -26,7 +26,7 @@ class ColorDetector:
                 COLOR_RANGES["rojo"][0]
             )
             self.target_color_1_lower_red2, self.target_color_1_upper_red2 = (
-                COLOR_RANGES["rojo"][2]
+                COLOR_RANGES["rojo"][1]
             )
         else:
             self.target_color_1_lower, self.target_color_1_upper = COLOR_RANGES[
@@ -38,7 +38,7 @@ class ColorDetector:
                 COLOR_RANGES["rojo"][0]
             )
             self.target_color_2_lower_red2, self.target_color_2_upper_red2 = (
-                COLOR_RANGES["rojo"][2]
+                COLOR_RANGES["rojo"][1]
             )
         else:
             self.target_color_2_lower, self.target_color_2_upper = COLOR_RANGES[
@@ -70,18 +70,18 @@ class ColorDetector:
             mask_target_color_2 = cv.add(
                 cv.inRange(
                     frame_hsv,
-                    self.target_color_1_lower_red1,
-                    self.target_color_1_upper_red1,
+                    self.target_color_2_lower_red1,
+                    self.target_color_2_upper_red1,
                 ),
                 cv.inRange(
                     frame_hsv,
-                    self.target_color_1_lower_red2,
-                    self.target_color_1_upper_red2,
+                    self.target_color_2_lower_red2,
+                    self.target_color_2_upper_red2,
                 ),
             )
         else:
             mask_target_color_2 = cv.inRange(
-                frame_hsv, self.target_color_1_lower, self.target_color_1_upper
+                frame_hsv, self.target_color_2_lower, self.target_color_2_upper
             )
 
         points_detected = []

@@ -13,6 +13,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   DEPENDENCIES builtin_interfaces
 )
 
+install(DIRECTORY config
+  DESTIANTION share/${PROJECT_NAME}
+)
+
 # Cargar los scripts de python: publisher y subscriber
 install(PROGRAMS 
   image_processor_pkg/publisher.py
