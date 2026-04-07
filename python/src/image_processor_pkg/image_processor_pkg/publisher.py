@@ -18,6 +18,9 @@ from image_processor_pkg.msg import ObjectLocation
 #   avoid ros namespace conventions: false
 # Informacion sacada de: https://docs.ros2.org/latest/api/rclcpp/classrclcpp_1_1SensorDataQoS.html
 from rclpy.qos import qos_profile_sensor_data
+from rcl_interfaces.msg import SetParametersResult
+from rclpy.parameter import Parameter
+
 from procesar_imagen import ColorDetector
 import time
 
@@ -60,7 +63,53 @@ class ImageProcessor(Node):
 
         self.timer = self.create_timer(0.033, self.process_frame)
 
+        self.add_on_set_parameters_callback(self.parameters_callback)
+
         self.get_logger().info("Node ImageProcessor Ready")
+
+    def parameters_callback(self, params):
+        result = SetParametersResult(successful=True)
+
+        for param in params:
+            if param.name == "detection.min_area":
+                if param.value < 0:
+                    result.successful = False
+                    result.reason = "El área mínima no puede ser negativa"
+                else:
+                    self.min_area = param.value
+                    self.get_logger().info(
+                        f"Parámetro actualizado: min_area = {self.min_area}"
+                    )
+
+            elif param.name == "detection.target_color_1":
+                self.target_color_1 = param.value
+                self.actualizar_detector()
+                self.get_logger().info(
+                    f"Parámetro actualizado: color_1 = {self.target_color_1}"
+                )
+
+            elif param.name == "detection.target_color_2":
+                self.target_color_2 = param.value
+                self.actualizar_detector()
+                self.get_logger().info(
+                    f"Parámetro actualizado: color_2 = {self.target_color_2}"
+                )
+
+            elif param.name == "detection.kernel_size":
+                if param.value % 2 == 0:
+                    result.successful = False
+                    result.reason = "El kernel_size debe ser un número impar"
+                else:
+                    self.kernel_size = param.value
+                    self.actualizar_detector()
+
+        return result
+
+    def actualizar_detector(self):
+        """Función auxiliar para re-instanciar el detector con los nuevos valores."""
+        self.color_detector = ColorDetector(
+            self.target_color_1, self.target_color_2, self.kernel_size
+        )
 
     def process_frame(self):
         # Capturar frame
