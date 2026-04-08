@@ -24,14 +24,28 @@ from rclpy.parameter import Parameter
 from procesar_imagen import ColorDetector
 import time
 
+CAMERA_MODES = {
+    0: (160, 120),
+    1: (320, 240),
+    2: (640, 480),
+    3: (800, 600),
+    4: (1280, 720),
+}
+
 
 class ImageProcessor(Node):
     def __init__(self):
         super().__init__("image_processor")
 
         # ----- CAMARA PARAMETERS -----
-        self.declare_parameter("camera.width", 640)
-        self.declare_parameter("camera.height", 480)
+        self.declare_parameter("camera.mode", 2)
+        mode = self.get_parameter("camera.mode").value
+
+        width, height = CAMERA_MODES[mode]
+
+        self.cam = cv.VideoCapture(0, cv.CAP_V4L2)
+        self.cam.set(cv.CAP_PROP_FRAME_WIDTH, width)
+        self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, height)
 
         # ----- DETECTION PARAMETERS -----
         self.declare_parameter("detection.min_area", 50)
@@ -39,24 +53,17 @@ class ImageProcessor(Node):
         self.declare_parameter("detection.target_color_2", "verde")
         self.declare_parameter("detection.kernel_size", 5)
 
-        width = self.get_parameter("camera.width").value
-        height = self.get_parameter("camera.height").value
-
         self.min_area = self.get_parameter("detection.min_area").value
         self.target_color_1 = self.get_parameter("detection.target_color_1").value
         self.target_color_2 = self.get_parameter("detection.target_color_2").value
         self.kernel_size = self.get_parameter("detection.kernel_size").value
 
-        self.publisher_ = self.create_publisher(
-            ObjectLocation, "object_position", qos_profile_sensor_data
-        )
-
-        self.cam = cv.VideoCapture(0, cv.CAP_V4L2)
-        self.cam.set(cv.CAP_PROP_FRAME_WIDTH, width)
-        self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, height)
-
         self.color_detector = ColorDetector(
             self.target_color_1, self.target_color_2, self.kernel_size
+        )
+
+        self.publisher_ = self.create_publisher(
+            ObjectLocation, "object_position", qos_profile_sensor_data
         )
 
         self.msg = ObjectLocation()

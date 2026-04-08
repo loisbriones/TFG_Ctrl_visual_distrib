@@ -1,8 +1,7 @@
 image_processor:
   ros__parameters:
     camera:
-      width: 640
-      height: 480
+      mode: 2
     detection:
       target_color_1: "rojo"
       target_color_2: "verde"
