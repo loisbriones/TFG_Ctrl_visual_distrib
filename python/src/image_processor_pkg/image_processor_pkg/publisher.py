@@ -5,6 +5,8 @@ from rclpy.node import Node
 import cv2 as cv
 import numpy as np
 from image_processor_pkg.msg import ObjectLocation
+from sensor_msgs.msg import CompressedImage
+from threading import Thread
 
 # Perfil para QoS preconfigurado, tiene:
 #   History: Keep last,
@@ -37,7 +39,7 @@ class ImageProcessor(Node):
     def __init__(self):
         super().__init__("image_processor")
 
-        # ----- CAMARA PARAMETERS -----
+        # ----- CAMARA -----
         self.declare_parameter("camera.mode", 2)
         mode = self.get_parameter("camera.mode").value
 
@@ -47,7 +49,7 @@ class ImageProcessor(Node):
         self.cam.set(cv.CAP_PROP_FRAME_WIDTH, width)
         self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, height)
 
-        # ----- DETECTION PARAMETERS -----
+        # ----- DETECTION -----
         self.declare_parameter("detection.min_area", 50)
         self.declare_parameter("detection.target_color_1", "rojo")
         self.declare_parameter("detection.target_color_2", "verde")
@@ -61,16 +63,24 @@ class ImageProcessor(Node):
         self.color_detector = ColorDetector(
             self.target_color_1, self.target_color_2, self.kernel_size
         )
+        
+        # ---- DEBUG ----
+        self.declare_parameter("debug", False)
+        self.debug = self.get_parameter("debug").value
+        self.debug_counter = 0
 
-        self.publisher_ = self.create_publisher(
-            ObjectLocation, "object_position", qos_profile_sensor_data
-        )
+        # ---- ACTUALIZACION PARAMETROS ----
+        self.add_on_set_parameters_callback(self.parameters_callback)
 
+        # ---- PUBLISHER -----
+        # Posicion
         self.msg = ObjectLocation()
+        self.object_location_publisher = self.create_publisher(ObjectLocation, "object_position", qos_profile_sensor_data)  
+        # Debug
+        self.debug_publisher = self.create_publisher(CompressedImage, "camara_debug", qos_profile_sensor_data)
+
 
         self.timer = self.create_timer(0.033, self.process_frame)
-
-        self.add_on_set_parameters_callback(self.parameters_callback)
 
         self.get_logger().info("Node ImageProcessor Ready")
 
@@ -110,6 +120,10 @@ class ImageProcessor(Node):
                     self.kernel_size = param.value
                     self.actualizar_detector()
 
+            elif param.name == "debug":
+                self.debug = param.value
+                self.get_logger().info(f"Parámetro actualizado: debug = {self.debug}")
+
         return result
 
     def actualizar_detector(self):
@@ -135,6 +149,9 @@ class ImageProcessor(Node):
 
         # Convertir a ms
         proc_duration = (end_proc - start_proc) * 1000
+        
+        if (self.debug == True) and ((self.debug_counter % 2) == 0):
+            Thread(target=self._tarea_debug,args=(frame.copy(),points),daemon=True)  
 
         for p in points:
             self.msg.color = p["color"]
@@ -144,11 +161,23 @@ class ImageProcessor(Node):
 
             self.msg.stamp = self.get_clock().now().to_msg()
 
-            self.publisher_.publish(self.msg)
+            self.object_location_publisher.publish(self.msg)
             self.get_logger().info(
                 f"[deteccion] color: {self.msg.color} | x: {self.msg.x} | y: {self.msg.y}"
             )
 
+    def _tarea_debug(self,frame,points):
+        for p in points:
+            cv.circle(frame, (p["cx"], p["cy"]), 5, (0, 255, 0), -1) 
+
+        success, buffer = cv.imencode('.jpg', frame, [cv.IMWRITE_JPEG_QUALITY, 70])
+        
+        if success:
+            img_msg = CompressedImage()
+            img_msg.header.stamp = self.get_clock().now().to_msg()
+            img_msg.format = "jpeg"
+            img_msg.data = buffer.tobytes()
+            self.image_pub.publish(img_msg) 
 
 def main(args=None):
     rclpy.init(args=args)

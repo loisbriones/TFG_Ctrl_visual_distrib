@@ -1,5 +1,6 @@
 image_processor:
   ros__parameters:
+    debug: False
     camera:
       mode: 2
     detection:
