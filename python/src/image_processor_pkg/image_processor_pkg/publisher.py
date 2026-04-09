@@ -22,6 +22,8 @@ from threading import Thread
 from rclpy.qos import qos_profile_sensor_data
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.parameter import Parameter
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 
 from procesar_imagen import ColorDetector
 import time
@@ -38,6 +40,9 @@ CAMERA_MODES = {
 class ImageProcessor(Node):
     def __init__(self):
         super().__init__("image_processor")
+    
+        # ---- CALL GROUPS ----
+        self.image_processor_group = MutuallyExclusiveCallbackGroup()
 
         # ----- CAMARA -----
         self.declare_parameter("camera.mode", 2)
@@ -80,7 +85,7 @@ class ImageProcessor(Node):
         self.debug_publisher = self.create_publisher(CompressedImage, "camara_debug", qos_profile_sensor_data)
 
 
-        self.timer = self.create_timer(0.033, self.process_frame)
+        self.timer = self.create_timer(0.033, self.process_frame, callback_group= self.image_processor_group)
 
         self.get_logger().info("Node ImageProcessor Ready")
 
@@ -182,9 +187,12 @@ class ImageProcessor(Node):
 def main(args=None):
     rclpy.init(args=args)
     image_processor = ImageProcessor()
+    
+    executor = MultiThreadedExecutor(num_threads=4) 
+    executor.add_node(image_processor)
 
     try:
-        rclpy.spin(image_processor)
+        executor.spin()
     except KeyboardInterrupt:
         pass  # Manejo limpio de Ctrl+C
     finally:
