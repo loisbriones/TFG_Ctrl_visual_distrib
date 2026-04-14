@@ -195,7 +195,7 @@ class ImageProcessor(Node):
             img_msg.header.stamp = self.get_clock().now().to_msg()
             img_msg.format = "jpeg"
             img_msg.data = buffer.tobytes()
-            self.debug_publisher(img_msg) 
+            self.debug_publisher.publish(img_msg) 
 
 def main(args=None):
     rclpy.init(args=args)
