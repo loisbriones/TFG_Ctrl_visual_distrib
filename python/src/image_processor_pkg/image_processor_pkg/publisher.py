@@ -195,7 +195,7 @@ class ImageProcessor(Node):
             img_msg.header.stamp = self.get_clock().now().to_msg()
             img_msg.format = "jpeg"
             img_msg.data = buffer.tobytes()
-            self.image_pub.publish(img_msg) 
+            self.debug_publisher(img_msg) 
 
 def main(args=None):
     rclpy.init(args=args)
@@ -209,7 +209,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass  # Manejo limpio de Ctrl+C
     finally:
-        image_processor.cap.release()
+        image_processor.cam.release()
         image_processor.destroy_node()
         rclpy.shutdown()
 
