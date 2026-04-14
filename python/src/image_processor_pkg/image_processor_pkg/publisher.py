@@ -3,10 +3,8 @@
 import rclpy
 from rclpy.node import Node
 import cv2 as cv
-import numpy as np
 from image_processor_pkg.msg import ObjectLocation
 from sensor_msgs.msg import CompressedImage
-from threading import Thread
 
 # Perfil para QoS preconfigurado, tiene:
 #   History: Keep last,
@@ -21,7 +19,6 @@ from threading import Thread
 # Informacion sacada de: https://docs.ros2.org/latest/api/rclcpp/classrclcpp_1_1SensorDataQoS.html
 from rclpy.qos import qos_profile_sensor_data
 from rcl_interfaces.msg import SetParametersResult
-from rclpy.parameter import Parameter
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
@@ -42,7 +39,10 @@ class ImageProcessor(Node):
         super().__init__("image_processor")
     
         # ---- CALL GROUPS ----
+        #Posicion
         self.image_processor_group = MutuallyExclusiveCallbackGroup()
+        #Debug
+        self.debug_group = MutuallyExclusiveCallbackGroup()
 
         # ----- CAMARA -----
         self.declare_parameter("camera.mode", 2)
@@ -72,20 +72,25 @@ class ImageProcessor(Node):
         # ---- DEBUG ----
         self.declare_parameter("debug", False)
         self.debug = self.get_parameter("debug").value
-        self.debug_counter = 0
+        self.next_debug_frame = None
+        self.next_debug_points = None
+        self.new_data_available = False
 
         # ---- ACTUALIZACION PARAMETROS ----
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        # ---- PUBLISHER -----
+        # ---- PUBLISHER ----
         # Posicion
         self.msg = ObjectLocation()
         self.object_location_publisher = self.create_publisher(ObjectLocation, "object_position", qos_profile_sensor_data)  
-        # Debug
+        #Debug
         self.debug_publisher = self.create_publisher(CompressedImage, "camara_debug", qos_profile_sensor_data)
 
-
-        self.timer = self.create_timer(0.033, self.process_frame, callback_group= self.image_processor_group)
+        # ---- TIMER ----
+        #Posicion
+        self.timer = self.create_timer(0.033, self.process_frame, callback_group=self.image_processor_group)
+        #Debug
+        self.debug_timer = self.create_timer(0.066, self._tarea_debug, callback_group=self.debug_group)
 
         self.get_logger().info("Node ImageProcessor Ready")
 
@@ -155,9 +160,11 @@ class ImageProcessor(Node):
         # Convertir a ms
         proc_duration = (end_proc - start_proc) * 1000
         
-        if (self.debug == True) and ((self.debug_counter % 2) == 0):
-            Thread(target=self._tarea_debug,args=(frame.copy(),points),daemon=True)  
-
+        if self.debug and not self.new_data_available:
+            self.next_debug_frame = frame.copy()
+            self.next_debug_points = points
+            self.new_data_available = True
+        
         for p in points:
             self.msg.color = p["color"]
             self.msg.x = p["cx"]
@@ -171,11 +178,17 @@ class ImageProcessor(Node):
                 f"[deteccion] color: {self.msg.color} | x: {self.msg.x} | y: {self.msg.y}"
             )
 
-    def _tarea_debug(self,frame,points):
-        for p in points:
-            cv.circle(frame, (p["cx"], p["cy"]), 5, (0, 255, 0), -1) 
+    def _tarea_debug(self):
+        
+        if not self.new_data_available:
+            return
+        
+        self.new_data_available = False
 
-        success, buffer = cv.imencode('.jpg', frame, [cv.IMWRITE_JPEG_QUALITY, 70])
+        for p in self.next_debug_points:
+            cv.circle(self.next_debug_frame, (p["cx"], p["cy"]), 5, (0, 255, 0), -1) 
+
+        success, buffer = cv.imencode('.jpg', self.next_debug_frame, [cv.IMWRITE_JPEG_QUALITY, 70])
         
         if success:
             img_msg = CompressedImage()
