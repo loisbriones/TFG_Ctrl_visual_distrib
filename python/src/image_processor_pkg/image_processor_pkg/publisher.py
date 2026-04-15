@@ -83,6 +83,9 @@ class ImageProcessor(Node):
         self.rh = self.height
         #Tamaño del ROI
         self.roi_size = 150
+        #Posicion en un momento concreto de la esquina
+        self.current_cx = None
+        self.current_cy = None
         #Para que en el modo debug se dibuje bien el centro del objeto detectado
         self.debug_x = 0
         self.debug_y = 0 
@@ -182,8 +185,6 @@ class ImageProcessor(Node):
 
         return mascara_final
 
-
-
     def actualizar_detector(self):
         """Función auxiliar para re-instanciar el detector con los nuevos valores."""
         self.color_detector = ColorDetector(
@@ -207,8 +208,36 @@ class ImageProcessor(Node):
 
             return
         
-        frame_procesar = cv.bitwise_and(frame, frame, mask=self.mascara_trayectoria)
+        
 
+        # 1. Calcular punto de predicción (Extrapolación lineal) [cite: 254, 255]
+        if self.prev_cx is not None and self.current_cx is not None:
+            # P_futuro = P_actual + (P_actual - P_anterior)
+            pred_x = self.current_cx + (self.current_cx - self.prev_cx)
+            pred_y = self.current_cy + (self.current_cy - self.prev_cy)
+        elif self.current_cx is not None:
+            # Si solo tenemos un punto, el ROI se centra en él
+            pred_x, pred_y = self.current_cx, self.current_cy
+        else:
+            # Si perdimos el coche, buscamos en todo el frame 
+            pred_x, pred_y = self.width // 2, self.height // 2
+            self.roi_size = max(self.width, self.height)
+            
+        half_roi = self.roi_size // 2
+        
+        #Mover ROI hacia atras
+        x1 = int(np.clip(pred_x - half_roi, 0, self.width))
+        y1 = int(np.clip(pred_y - half_roi, 0, self.height))
+        #Mover ROI hacia delante
+        x2 = int(np.clip(pred_x + half_roi, 0, self.width))
+        y2 = int(np.clip(pred_y + half_roi, 0, self.height))
+
+        #Aplicamos el ROI al Frame 
+        roi_frame = frame[y1:y2, x1:x2]
+        
+        #Aplicamos la mascara sobre la zona del frame a la que aplicamos el ROI
+        frame_procesar = cv.bitwise_and(roi_frame, roi_frame, mask=self.mascara_trayectoria[y1:y2, x1:x2])
+        
         start_proc = time.perf_counter()
 
         points = self.color_detector.find_object(
@@ -220,24 +249,42 @@ class ImageProcessor(Node):
         # Convertir a ms
         proc_duration = (end_proc - start_proc) * 1000
         
+        if len(points) > 0:
+            # Traducir coordenadas locales del ROI a globales del Frame
+            p = points[0]
+            global_cx = x1 + p["cx"]
+            global_cy = y1 + p["cy"]
+    
+            # Actualizar estado global para la siguiente iteración 
+            self.prev_cx, self.prev_cy = self.current_cx, self.current_cy
+            self.current_cx, self.current_cy = global_cx, global_cy
+            self.roi_size = 150 # Reestablecer tamaño optimizado tras detección exitosa
+            
+            # Publicación del mensaje ObjectLocation
+            self.msg.color = p["color"]
+            self.msg.x = global_cx
+            self.msg.y = global_cy
+            self.msg.proc_time = proc_duration
+            self.msg.stamp = self.get_clock().now().to_msg()
+            
+            self.object_location_publisher.publish(self.msg)
+            
+            # Guardar posición para debug (coordenadas locales al frame de debug)
+            self.debug_x, self.debug_y = p["cx"], p["cy"]
+        else:
+            # Si no se detecta nada, se amplía el área de búsqueda para el próximo frame
+            self.roi_size = min(self.roi_size + 50, max(self.width, self.height))
+            # Resetear historial para forzar búsqueda completa si persiste el fallo
+            self.current_cx = None
+            self.prev_cx = None
+    
+        # Configuracion de valores de debug
         if self.debug and not self.new_data_available:
-            #self.next_debug_frame = frame.copy()
+            #Frame con la mascara aplicado
             self.next_debug_frame = frame_procesar.copy()
             self.next_debug_points = points
-            self.new_data_available = True
+            self.new_data_available = True        
         
-        for p in points:
-            self.msg.color = p["color"]
-            self.msg.x = p["cx"]
-            self.msg.y = p["cy"]
-            self.msg.proc_time = proc_duration
-
-            self.msg.stamp = self.get_clock().now().to_msg()
-
-            self.object_location_publisher.publish(self.msg)
-            self.get_logger().info(
-                f"[deteccion] color: {self.msg.color} | x: {self.msg.x} | y: {self.msg.y}"
-            )
 
     def _tarea_debug(self):
         
