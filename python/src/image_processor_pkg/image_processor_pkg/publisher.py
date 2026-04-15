@@ -158,10 +158,10 @@ class ImageProcessor(Node):
 
         start_proc = time.perf_counter()
 
-        x1 = int(np.clip(self.rx, 0, self.W - 10))
-        y1 = int(np.clip(self.ry, 0, self.H - 10))
-        x2 = int(np.clip(x1 + self.rw, x1 + 1, self.W))
-        y2 = int(np.clip(y1 + self.rh, y1 + 1, self.H))
+        x1 = int(np.clip(self.rx, 0, self.width - 10))
+        y1 = int(np.clip(self.ry, 0, self.height - 10))
+        x2 = int(np.clip(x1 + self.rw, x1 + 1, self.width))
+        y2 = int(np.clip(y1 + self.rh, y1 + 1, self.height))
 
         #y -> height (filas)
         #x -> width (columnas)
