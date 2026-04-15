@@ -3,6 +3,7 @@
 import rclpy
 from rclpy.node import Node
 import cv2 as cv
+import numpy as np
 from image_processor_pkg.msg import ObjectLocation
 from sensor_msgs.msg import CompressedImage
 
@@ -48,11 +49,11 @@ class ImageProcessor(Node):
         self.declare_parameter("camera.mode", 2)
         mode = self.get_parameter("camera.mode").value
 
-        width, height = CAMERA_MODES[mode]
+        self.width, self.height = CAMERA_MODES[mode]
 
         self.cam = cv.VideoCapture(0, cv.CAP_V4L2)
-        self.cam.set(cv.CAP_PROP_FRAME_WIDTH, width)
-        self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, height)
+        self.cam.set(cv.CAP_PROP_FRAME_WIDTH, self.width)
+        self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, self.height)
 
         # ----- DETECTION -----
         self.declare_parameter("detection.min_area", 50)
@@ -69,6 +70,12 @@ class ImageProcessor(Node):
             self.target_color_1, self.target_color_2, self.kernel_size
         )
         
+        self.rx = 0
+        self.ry = 0 
+        self.rw = self.width
+        self.rh = self.height
+        self.roi_size = 150
+
         # ---- DEBUG ----
         self.declare_parameter("debug", False)
         self.debug = self.get_parameter("debug").value
@@ -145,30 +152,51 @@ class ImageProcessor(Node):
     def process_frame(self):
         # Capturar frame
         ret, frame = self.cam.read()
-
+        
         if not ret:
             return
 
         start_proc = time.perf_counter()
 
+        x1 = int(np.clip(self.rx, 0, self.W - 10))
+        y1 = int(np.clip(self.ry, 0, self.H - 10))
+        x2 = int(np.clip(x1 + self.rw, x1 + 1, self.W))
+        y2 = int(np.clip(y1 + self.rh, y1 + 1, self.H))
+
+        #y -> height (filas)
+        #x -> width (columnas)
+        roi = frame[y1:y2, x1:x2]
+
         points = self.color_detector.find_object(
-            frame, self.min_area, self.target_color_1, self.target_color_2
+            roi, self.min_area, self.target_color_1, self.target_color_2
         )
 
         end_proc = time.perf_counter()
 
         # Convertir a ms
         proc_duration = (end_proc - start_proc) * 1000
-        
+
         if self.debug and not self.new_data_available:
             self.next_debug_frame = frame.copy()
             self.next_debug_points = points
             self.new_data_available = True
         
-        for p in points:
+        if(len(points) > 0):
+            p = points[0]
+            
+            #Convertimos las coordenas para que se ajusten al frame completo
+            global_cx = x1 + p["cx"]
+            global_cy = y1 + p["cy"]
+            
+            #Modificamos la posicion del ROI
+            self.rx = global_cx - (self.roi_size // 2)
+            self.ry = global_cy - (self.roi_size // 2)
+            self.rw, self.rh = self.roi_size, self.roi_size
+
             self.msg.color = p["color"]
-            self.msg.x = p["cx"]
-            self.msg.y = p["cy"]
+            #Adaptamos las coordenadas al resto del frame 
+            self.msg.x = global_cx 
+            self.msg.y = global_cy
             self.msg.proc_time = proc_duration
 
             self.msg.stamp = self.get_clock().now().to_msg()
@@ -176,7 +204,7 @@ class ImageProcessor(Node):
             self.object_location_publisher.publish(self.msg)
             self.get_logger().info(
                 f"[deteccion] color: {self.msg.color} | x: {self.msg.x} | y: {self.msg.y}"
-            )
+            )        
 
     def _tarea_debug(self):
         
