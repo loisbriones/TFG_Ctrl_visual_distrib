@@ -4,7 +4,7 @@ image_processor:
     camera:
       mode: 2
     detection:
-      target_color_1: "rojo"
+      target_color_1: "violeta"
       target_color_2: "verde"
-      kernel_size: 5
-      min_area: 50 
+      kernel_size: 3
+      min_area: 30

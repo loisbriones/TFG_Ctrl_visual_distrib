@@ -173,9 +173,9 @@ class ImageProcessor(Node):
         # 2. Dibujar la trayectoria uniendo los puntos con líneas blancas
         puntos = np.array(self.puntos_trayectoria, dtype=np.int32)
         # isClosed=True para cerrar el circuito al final
-        cv.polylines(mascara, [puntos], isClosed=True, color=255, thickness=5)
+        cv.polylines(mascara, [puntos], isClosed=True, color=255, thickness=15)
 
-        # 3. Engrosar y suavizar el carril (Cierre Morfológico) [cite: 173]
+        # 3. Engrosar y suavizar el carril (Cierre Morfológico)
         kernel = np.ones((25, 25), np.uint8)
         mascara_final = cv.morphologyEx(mascara, cv.MORPH_CLOSE, kernel)
         mascara_final = cv.dilate(mascara_final, kernel, iterations=1)
@@ -201,7 +201,10 @@ class ImageProcessor(Node):
             points = self.color_detector.find_object(
                 frame, self.min_area, self.target_color_1, self.target_color_2
             ) 
-            self.puntos_trayectoria.append(points)
+
+            for p in points:         
+                self.puntos_trayectoria.append((p["cx"],p["cy"]))
+
             return
         
         frame_procesar = cv.bitwise_and(frame, frame, mask=self.mascara_trayectoria)
@@ -218,7 +221,8 @@ class ImageProcessor(Node):
         proc_duration = (end_proc - start_proc) * 1000
         
         if self.debug and not self.new_data_available:
-            self.next_debug_frame = frame.copy()
+            #self.next_debug_frame = frame.copy()
+            self.next_debug_frame = frame_procesar.copy()
             self.next_debug_points = points
             self.new_data_available = True
         

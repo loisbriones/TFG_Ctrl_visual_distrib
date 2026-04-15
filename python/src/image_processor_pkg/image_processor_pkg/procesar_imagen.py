@@ -11,7 +11,7 @@ COLOR_RANGES = {
     "verde": [(np.array([35, 100, 100]), np.array([85, 255, 255]))],
     "cian": [(np.array([86, 100, 100]), np.array([100, 255, 255]))],
     "azul": [(np.array([101, 100, 100]), np.array([130, 255, 255]))],
-    "violeta": [(np.array([131, 100, 100]), np.array([160, 255, 255]))],
+    "violeta": [(np.array([120, 50, 50]), np.array([150, 255, 255]))],
 }
 
 
