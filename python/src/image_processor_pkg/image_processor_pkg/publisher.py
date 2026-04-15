@@ -75,6 +75,8 @@ class ImageProcessor(Node):
         self.rw = self.width
         self.rh = self.height
         self.roi_size = 150
+        self.debug_x = 0
+        self.debug_y = 0
 
         # ---- DEBUG ----
         self.declare_parameter("debug", False)
@@ -179,6 +181,8 @@ class ImageProcessor(Node):
         if self.debug and not self.new_data_available:
             self.next_debug_frame = frame.copy()
             self.next_debug_points = points
+            self.debug_x = x1 
+            self.debug_y = y1
             self.new_data_available = True
         
         if(len(points) > 0):
@@ -214,7 +218,7 @@ class ImageProcessor(Node):
         self.new_data_available = False
 
         for p in self.next_debug_points:
-            cv.circle(self.next_debug_frame, (p["cx"], p["cy"]), 5, (0, 255, 0), -1) 
+            cv.circle(self.next_debug_frame, (self.debug_x + p["cx"],self.debug_y + p["cy"]), 5, (0, 255, 0), -1) 
 
         success, buffer = cv.imencode('.jpg', self.next_debug_frame, [cv.IMWRITE_JPEG_QUALITY, 70])
         
