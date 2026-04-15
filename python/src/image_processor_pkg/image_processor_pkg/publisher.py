@@ -55,6 +55,12 @@ class ImageProcessor(Node):
         self.cam.set(cv.CAP_PROP_FRAME_WIDTH, self.width)
         self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, self.height)
 
+        # ---- CALIBRACION ----
+        self.declare_parameter("modo_calibracion", True)
+        self.puntos_trayectoria = []
+        #Mascara para calcular la trayectoria
+        self.mascara_trayectoria = None
+        
         # ----- DETECTION -----
         self.declare_parameter("detection.min_area", 50)
         self.declare_parameter("detection.target_color_1", "rojo")
@@ -70,13 +76,20 @@ class ImageProcessor(Node):
             self.target_color_1, self.target_color_2, self.kernel_size
         )
         
+        #Posiciones para ir modificando el ROI
         self.rx = 0
         self.ry = 0 
         self.rw = self.width
         self.rh = self.height
+        #Tamaño del ROI
         self.roi_size = 150
+        #Para que en el modo debug se dibuje bien el centro del objeto detectado
         self.debug_x = 0
-        self.debug_y = 0
+        self.debug_y = 0 
+        self.modo_calibracion = True  # Empezar en modo grabación de ruta
+        #Puntos para hacer prediccion lineal para mover el ROI
+        self.prev_cx = None
+        self.prev_cy = None
 
         # ---- DEBUG ----
         self.declare_parameter("debug", False)
@@ -142,8 +155,34 @@ class ImageProcessor(Node):
             elif param.name == "debug":
                 self.debug = param.value
                 self.get_logger().info(f"Parámetro actualizado: debug = {self.debug}")
-
+            
+            elif param.name == "modo_calibracion":
+                self.modo_calibracion = param.value 
+                self.get_logger().info(f"Parámetro actualizado: debug = {self.modo_calibracion}")
+                self.mascara_trayectoria = self.generar_mascara()
+                
         return result
+
+    def generar_mascara(self):
+        # 1. Crear lienzo negro
+        mascara = np.zeros((self.height, self.width), dtype=np.uint8)
+
+        if len(self.puntos_trayectoria) < 2:
+            return mascara
+
+        # 2. Dibujar la trayectoria uniendo los puntos con líneas blancas
+        puntos = np.array(self.puntos_trayectoria, dtype=np.int32)
+        # isClosed=True para cerrar el circuito al final
+        cv.polylines(mascara, [puntos], isClosed=True, color=255, thickness=5)
+
+        # 3. Engrosar y suavizar el carril (Cierre Morfológico) [cite: 173]
+        kernel = np.ones((25, 25), np.uint8)
+        mascara_final = cv.morphologyEx(mascara, cv.MORPH_CLOSE, kernel)
+        mascara_final = cv.dilate(mascara_final, kernel, iterations=1)
+
+        return mascara_final
+
+
 
     def actualizar_detector(self):
         """Función auxiliar para re-instanciar el detector con los nuevos valores."""
@@ -154,53 +193,39 @@ class ImageProcessor(Node):
     def process_frame(self):
         # Capturar frame
         ret, frame = self.cam.read()
-        
+
         if not ret:
             return
+        
+        if self.modo_calibracion: 
+            points = self.color_detector.find_object(
+                frame, self.min_area, self.target_color_1, self.target_color_2
+            ) 
+            self.puntos_trayectoria.append(points)
+            return
+        
+        frame_procesar = cv.bitwise_and(frame, frame, mask=self.mascara_trayectoria)
 
         start_proc = time.perf_counter()
 
-        x1 = int(np.clip(self.rx, 0, self.width - 10))
-        y1 = int(np.clip(self.ry, 0, self.height - 10))
-        x2 = int(np.clip(x1 + self.rw, x1 + 1, self.width))
-        y2 = int(np.clip(y1 + self.rh, y1 + 1, self.height))
-
-        #y -> height (filas)
-        #x -> width (columnas)
-        roi = frame[y1:y2, x1:x2]
-
         points = self.color_detector.find_object(
-            roi, self.min_area, self.target_color_1, self.target_color_2
+            frame_procesar, self.min_area, self.target_color_1, self.target_color_2
         )
 
         end_proc = time.perf_counter()
 
         # Convertir a ms
         proc_duration = (end_proc - start_proc) * 1000
-
+        
         if self.debug and not self.new_data_available:
             self.next_debug_frame = frame.copy()
             self.next_debug_points = points
-            self.debug_x = x1 
-            self.debug_y = y1
             self.new_data_available = True
         
-        if(len(points) > 0):
-            p = points[0]
-            
-            #Convertimos las coordenas para que se ajusten al frame completo
-            global_cx = x1 + p["cx"]
-            global_cy = y1 + p["cy"]
-            
-            #Modificamos la posicion del ROI
-            self.rx = global_cx - (self.roi_size // 2)
-            self.ry = global_cy - (self.roi_size // 2)
-            self.rw, self.rh = self.roi_size, self.roi_size
-
+        for p in points:
             self.msg.color = p["color"]
-            #Adaptamos las coordenadas al resto del frame 
-            self.msg.x = global_cx 
-            self.msg.y = global_cy
+            self.msg.x = p["cx"]
+            self.msg.y = p["cy"]
             self.msg.proc_time = proc_duration
 
             self.msg.stamp = self.get_clock().now().to_msg()
@@ -208,7 +233,7 @@ class ImageProcessor(Node):
             self.object_location_publisher.publish(self.msg)
             self.get_logger().info(
                 f"[deteccion] color: {self.msg.color} | x: {self.msg.x} | y: {self.msg.y}"
-            )        
+            )
 
     def _tarea_debug(self):
         
@@ -218,7 +243,7 @@ class ImageProcessor(Node):
         self.new_data_available = False
 
         for p in self.next_debug_points:
-            cv.circle(self.next_debug_frame, (self.debug_x + p["cx"],self.debug_y + p["cy"]), 5, (0, 255, 0), -1) 
+            cv.circle(self.next_debug_frame, (p["cx"], p["cy"]), 5, (0, 255, 0), -1) 
 
         success, buffer = cv.imencode('.jpg', self.next_debug_frame, [cv.IMWRITE_JPEG_QUALITY, 70])
         

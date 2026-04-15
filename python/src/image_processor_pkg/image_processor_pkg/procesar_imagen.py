@@ -97,7 +97,10 @@ class ColorDetector:
 
     def _detectar(self, mask, color_bgr, min_area):
         puntos = []
-        contornos, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+         
+        mask_limpia = cv.morphologyEx(mask, cv.MORPH_CLOSE, self.kernel)
+
+        contornos, _ = cv.findContours(mask_limpia, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
         for c in contornos:
             if cv.contourArea(c) > min_area:
