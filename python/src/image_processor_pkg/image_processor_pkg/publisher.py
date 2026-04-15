@@ -208,9 +208,7 @@ class ImageProcessor(Node):
 
             return
         
-        
-
-        # 1. Calcular punto de predicción (Extrapolación lineal) [cite: 254, 255]
+        #Calcular punto de predicción (Extrapolación lineal)
         if self.prev_cx is not None and self.current_cx is not None:
             # P_futuro = P_actual + (P_actual - P_anterior)
             pred_x = self.current_cx + (self.current_cx - self.prev_cx)
