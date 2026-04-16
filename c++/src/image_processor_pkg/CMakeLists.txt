@@ -45,14 +45,14 @@ ament_target_dependencies(color_detector_lib OpenCV)
 
 # 4. Crear ejecutables y vincular mensajes
 # Nodo Emisor (Publisher)
-add_executable(publisher_node src/publisher_node.cpp)
+add_executable(publisher_node src/publisher.cpp)
 target_link_libraries(publisher_node color_detector_lib)
 ament_target_dependencies(publisher_node rclcpp sensor_msgs cv_bridge OpenCV)
 rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_typesupport_cpp")
 target_link_libraries(publisher_node "${cpp_typesupport_target}")
 
 # Nodo Receptor (Subscriber)
-add_executable(subscriber_node src/subscriber_node.cpp)
+add_executable(subscriber_node src/subscriber.cpp)
 ament_target_dependencies(subscriber_node rclcpp)
 target_link_libraries(subscriber_node "${cpp_typesupport_target}")
 

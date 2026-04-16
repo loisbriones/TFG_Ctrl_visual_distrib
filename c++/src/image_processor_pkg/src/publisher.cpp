@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <map>
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
@@ -58,12 +59,13 @@ public:
         target_color_2 = this->get_parameter("detection.target_color_2").as_string();
         kernel_size = this->get_parameter("detection.kernel_size").as_int();
 
+        // Inicializamos el detector con los parámetros actuales
         color_detector = std::make_unique<ColorDetector>(target_color_1, target_color_2, kernel_size);
 
         // Posiciones ROI y Tracking
         rx = 0; ry = 0; rw = width; rh = height;
         roi_size = 150;
-        current_cx = -1; current_cy = -1; // -1 actúa como None
+        current_cx = -1; current_cy = -1; 
         prev_cx = -1; prev_cy = -1;
 
         // ---- DEBUG ----
@@ -95,12 +97,7 @@ private:
 
         for (const auto &param : params) {
             if (param.get_name() == "detection.min_area") {
-                if (param.as_int() < 0) {
-                    result.successful = false;
-                    result.reason = "El área mínima no puede ser negativa";
-                } else {
-                    min_area = param.as_int();
-                }
+                min_area = param.as_int();
             } else if (param.get_name() == "detection.target_color_1") {
                 target_color_1 = param.as_string();
                 actualizar_detector();
@@ -108,13 +105,8 @@ private:
                 target_color_2 = param.as_string();
                 actualizar_detector();
             } else if (param.get_name() == "detection.kernel_size") {
-                if (param.as_int() % 2 == 0) {
-                    result.successful = false;
-                    result.reason = "El kernel_size debe ser impar";
-                } else {
-                    kernel_size = param.as_int();
-                    actualizar_detector();
-                }
+                kernel_size = param.as_int();
+                actualizar_detector();
             } else if (param.get_name() == "debug") {
                 debug = param.as_bool();
             } else if (param.get_name() == "modo_calibracion") {
@@ -125,9 +117,12 @@ private:
         return result;
     }
 
+    void actualizar_detector() {
+        color_detector = std::make_unique<ColorDetector>(target_color_1, target_color_2, kernel_size);
+    }
+
     cv::Mat generar_mascara() {
         cv::Mat mascara = cv::Mat::zeros(height, width, CV_8UC1);
-
         if (puntos_trayectoria.size() < 2) return mascara;
 
         std::vector<cv::Point> puntos;
@@ -139,16 +134,9 @@ private:
         int npts[] = { static_cast<int>(puntos.size()) };
 
         cv::polylines(mascara, pts, npts, 1, true, cv::Scalar(255), 15);
-
         cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(25, 25));
-        cv::morphologyEx(mascara, mascara, cv::MORPH_CLOSE, kernel);
-        cv::dilate(mascara, mascara, kernel, cv::Point(-1, -1), 1);
-
+        cv::dilate(mascara, mascara, kernel);
         return mascara;
-    }
-
-    void actualizar_detector() {
-        color_detector = std::make_unique<ColorDetector>(target_color_1, target_color_2, kernel_size);
     }
 
     void process_frame() {
@@ -156,14 +144,15 @@ private:
         if (!cam.read(frame)) return;
 
         if (modo_calibracion) {
-            auto points = color_detector->find_object(frame, min_area, target_color_1, target_color_2);
+            // Se actualiza la llamada según el nuevo color_detector.cpp
+            auto points = color_detector->find_object(frame, min_area);
             for (const auto& p : points) {
                 puntos_trayectoria.push_back({p.cx, p.cy});
             }
             return;
         }
 
-        // Predicción lineal
+        // Predicción de ROI
         int pred_x, pred_y;
         if (prev_cx != -1 && current_cx != -1) {
             pred_x = current_cx + (current_cx - prev_cx);
@@ -176,22 +165,27 @@ private:
         }
 
         int half_roi = roi_size / 2;
-        int x1 = std::clamp(pred_x - half_roi, 0, width);
-        int y1 = std::clamp(pred_y - half_roi, 0, height);
-        int x2 = std::clamp(pred_x + half_roi, 0, width);
-        int y2 = std::clamp(pred_y + half_roi, 0, height);
+        int x1 = std::max(0, pred_x - half_roi);
+        int y1 = std::max(0, pred_y - half_roi);
+        int x2 = std::min(width, pred_x + half_roi);
+        int y2 = std::min(height, pred_y + half_roi);
 
-        // ROI Frame
+        if (x2 <= x1 || y2 <= y1) return;
+
         cv::Rect roi_rect(x1, y1, x2 - x1, y2 - y1);
         cv::Mat roi_frame = frame(roi_rect);
         
-        // Máscara sobre ROI
-        cv::Mat mask_roi = mascara_trayectoria(roi_rect);
         cv::Mat frame_procesar;
-        cv::bitwise_and(roi_frame, roi_frame, frame_procesar, mask_roi);
+        if (!mascara_trayectoria.empty()) {
+            cv::Mat mask_roi = mascara_trayectoria(roi_rect);
+            cv::bitwise_and(roi_frame, roi_frame, frame_procesar, mask_roi);
+        } else {
+            frame_procesar = roi_frame.clone();
+        }
 
         auto start_proc = std::chrono::steady_clock::now();
-        auto points = color_detector->find_object(frame_procesar, min_area, target_color_1, target_color_2);
+        // Se actualiza la llamada aquí también
+        auto points = color_detector->find_object(frame_procesar, min_area);
         auto end_proc = std::chrono::steady_clock::now();
 
         double proc_duration = std::chrono::duration<double, std::milli>(end_proc - start_proc).count();
@@ -212,8 +206,6 @@ private:
             msg.proc_time = proc_duration;
             msg.stamp = this->get_clock()->now();
             object_location_publisher->publish(msg);
-
-            debug_x = p.cx; debug_y = p.cy;
         } else {
             roi_size = std::min(roi_size + 50, std::max(width, height));
             current_cx = -1; prev_cx = -1;
@@ -221,7 +213,7 @@ private:
 
         if (debug && !new_data_available) {
             next_debug_frame = frame_procesar.clone();
-            next_debug_points = points;
+            next_debug_points = points; // Aquí usamos el nombre corregido
             new_data_available = true;
         }
     }
@@ -229,23 +221,21 @@ private:
     void _tarea_debug() {
         if (!new_data_available) return;
 
-        new_data_available = false;
-
         for (const auto& p : next_debug_points) {
             cv::circle(next_debug_frame, cv::Point(p.cx, p.cy), 5, cv::Scalar(0, 255, 0), -1);
         }
 
         std::vector<uchar> buffer;
         std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 70};
-        bool success = cv::imencode(".jpg", next_debug_frame, buffer, params);
+        cv::imencode(".jpg", next_debug_frame, buffer, params);
 
-        if (success) {
-            sensor_msgs::msg::CompressedImage img_msg;
-            img_msg.header.stamp = this->get_clock()->now();
-            img_msg.format = "jpeg";
-            img_msg.data = buffer;
-            debug_publisher->publish(img_msg);
-        }
+        sensor_msgs::msg::CompressedImage img_msg;
+        img_msg.header.stamp = this->get_clock()->now();
+        img_msg.format = "jpeg";
+        img_msg.data = buffer;
+        debug_publisher->publish(img_msg);
+
+        new_data_available = false;
     }
 
     // Variables de miembro
@@ -253,7 +243,6 @@ private:
     int width, height, roi_size;
     int rx, ry, rw, rh;
     int current_cx, current_cy, prev_cx, prev_cy;
-    int debug_x, debug_y;
     bool modo_calibracion, debug, new_data_available;
     int min_area, kernel_size;
     std::string target_color_1, target_color_2;
@@ -261,7 +250,9 @@ private:
     std::vector<std::pair<int, int>> puntos_trayectoria;
     cv::Mat mascara_trayectoria;
     cv::Mat next_debug_frame;
-    std::vector<DetectedObject> next_debug_points; // Asumiendo que ColorDetector devuelve una struct similar
+    
+    // CORRECCIÓN: Usar el nombre de estructura correcto definido en el .hpp
+    std::vector<DetectedPoint> next_debug_points; 
 
     std::unique_ptr<ColorDetector> color_detector;
 
@@ -277,10 +268,8 @@ private:
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<ImageProcessor>();
-    
     rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 4);
     executor.add_node(node);
-    
     executor.spin();
     rclcpp::shutdown();
     return 0;

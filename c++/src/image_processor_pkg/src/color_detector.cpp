@@ -2,8 +2,9 @@
 
 ColorDetector::ColorDetector(std::string target_1, std::string target_2, int kernel_size) {
     this->kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(kernel_size, kernel_size));
+    this->t1 = target_1;
+    this->t2 = target_2;
 
-    // Definir rangos (H, S, V)
     color_ranges["rojo"] = { {cv::Scalar(0, 100, 100), cv::Scalar(10, 255, 255)}, {cv::Scalar(160, 100, 100), cv::Scalar(180, 255, 255)} };
     color_ranges["naranja"] = { {cv::Scalar(11, 100, 100), cv::Scalar(25, 255, 255)} };
     color_ranges["amarillo"] = { {cv::Scalar(26, 100, 100), cv::Scalar(34, 255, 255)} };
@@ -15,6 +16,8 @@ ColorDetector::ColorDetector(std::string target_1, std::string target_2, int ker
 
 void ColorDetector::get_mask_for_color(const cv::Mat& hsv_frame, const std::string& color_name, cv::Mat& mask) {
     mask = cv::Mat::zeros(hsv_frame.size(), CV_8UC1);
+    if (color_ranges.find(color_name) == color_ranges.end()) return;
+
     for (const auto& range : color_ranges[color_name]) {
         cv::Mat temp_mask;
         cv::inRange(hsv_frame, range.first, range.second, temp_mask);
@@ -22,16 +25,16 @@ void ColorDetector::get_mask_for_color(const cv::Mat& hsv_frame, const std::stri
     }
 }
 
-std::vector<DetectedPoint> ColorDetector::find_object(cv::Mat frame, double min_area, std::string target_1, std::string target_2) {
+std::vector<DetectedPoint> ColorDetector::find_object(cv::Mat frame, double min_area) {
     cv::Mat hsv;
     cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
 
     cv::Mat mask1, mask2;
-    get_mask_for_color(hsv, target_1, mask1);
-    get_mask_for_color(hsv, target_2, mask2);
+    get_mask_for_color(hsv, this->t1, mask1);
+    get_mask_for_color(hsv, this->t2, mask2);
 
-    auto points = detectar(mask1, target_1, min_area);
-    auto points2 = detectar(mask2, target_2, min_area);
+    auto points = detectar(mask1, this->t1, min_area);
+    auto points2 = detectar(mask2, this->t2, min_area);
     points.insert(points.end(), points2.begin(), points2.end());
 
     return points;
