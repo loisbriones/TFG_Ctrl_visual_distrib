@@ -160,9 +160,9 @@ class ImageProcessor(Node):
                 self.get_logger().info(f"Parámetro actualizado: debug = {self.debug}")
             
             elif param.name == "modo_calibracion":
+                self.mascara_trayectoria = self.generar_mascara()
                 self.modo_calibracion = param.value 
                 self.get_logger().info(f"Parámetro actualizado: debug = {self.modo_calibracion}")
-                self.mascara_trayectoria = self.generar_mascara()
                 
         return result
 
