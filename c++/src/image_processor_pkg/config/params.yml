@@ -1,0 +1,11 @@
+image_processor:
+  ros__parameters:
+    debug: False
+    camera:
+      mode: 2
+    detection:
+      target_color_1: "violeta"
+      target_color_2: "verde"
+      kernel_size: 3
+      min_area: 30
+
