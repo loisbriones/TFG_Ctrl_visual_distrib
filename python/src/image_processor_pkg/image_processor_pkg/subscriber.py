@@ -23,41 +23,46 @@ class PositionReceiver(Node):
     def __init__(self):
         super().__init__("position_receiver")
 
-        # 1. Configuración del archivo CSV
-        # Guardamos en la carpeta del paquete para que persista fuera de Docker
-        self.csv_path = "/ros2_ws/src/image_processor_pkg/mediciones_python.csv"
+        # Ruta base donde querermos guardar los csv
+        self.csv_base_path = "/ros2_ws/src/image_processor_pkg/mediciones_python_"
+
+        #Diccionario para gestionar los escritores de csv
+        self.recursos = {}
+
         self.preparar_csv()
 
         # 2. Suscripción
         self.subscription = self.create_subscription(
             ObjectLocation,
-            "object_position",
+            "/object_position",
             self.topic_callback,
-            qos_profile_sensor_data,  #
+            qos_profile_sensor_data,
         )
 
-        self.get_logger().info("Node PositionReceiver Ready and logging to CSV")  #
+        self.get_logger().info("Node PositionReceiver Ready")
 
-    def preparar_csv(self):
-        """Crea la cabecera si el archivo no existe o si está vacío."""
-        # Verificamos si el archivo no existe O si su tamaño es 0 bytes
-        necesita_cabecera = (
-            not os.path.exists(self.csv_path) or os.stat(self.csv_path).st_size == 0
-        )
+    def obtener_recuro(self,nodo_id):
+        if nodo_id not in self.recursos:
+            file_path = f"{self.base_path}{nodo_id}.csv"
+            
+            # Comprobación de cabecera
+            necesita_cabecera = not os.path.exists(file_path) or os.stat(file_path).st_size == 0
+            
+            f = open(file_path, mode="a", newline="")
+            writer = csv.writer(f)
+            
+            if necesita_cabecera:
+                writer.writerow([
+                    "timestamp_ns", "color", "cpu_proc_ms", 
+                    "network_lat_ms", "total_lat_ms"
+                ])
+                # Para forzar a que haga la escritura a disco para asegurar tener cabecera
+                f.flush()
 
-        if necesita_cabecera:
-            with open(self.csv_path, mode="w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(
-                    [
-                        "timestamp_ns",
-                        "color",
-                        "cpu_proc_ms",
-                        "network_lat_ms",
-                        "total_lat_ms",
-                    ]
-                )
-            self.get_logger().info("Cabecera del CSV creada con éxito.")
+            # Guardamos la pareja (archivo, escritor) en el diccionario
+            self.recursos[nodo_id] = (f, writer)
+
+        return self.recursos[nodo_id]
 
     def topic_callback(self, msg):
         # Tiempo en el que se recibe el mensaje
@@ -76,22 +81,27 @@ class PositionReceiver(Node):
         total_ms = cpu_ms + latencia_red_ms
 
         # --- GUARDAR DATOS ---
-        with open(self.csv_path, mode="a", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                [
-                    tiempo_recibido.nanoseconds,
-                    msg.color,
-                    f"{cpu_ms:.4f}",
-                    f"{latencia_red_ms:.4f}",
-                    f"{total_ms:.4f}",
-                ]
-            )
+        _, writer = self.obtener_recuro(msg.id)
+
+        writer.writerow([
+            tiempo_recibido.nanoseconds,
+            msg.color,
+            f"{cpu_ms:.4f}",
+            f"{latencia_red_ms:.4f}",
+            f"{total_ms:.4f}",
+        ])
 
         # --- LOGS POR CONSOLA ---
         self.get_logger().info(
             f"RECIBIDO -> Color: {msg.color} | CPU: {cpu_ms:.2f}ms | RED: {latencia_red_ms:.2f}ms"
         )
+
+    def destroy_node(self):
+        """ Cerramos los ficheros abiertos, iterando sobre el diccionario """
+        for robot_id, (f_obj, _) in self.recursos.items():
+            f_obj.close()
+            self.get_logger().info(f"Archivo cerrado: ID {robot_id}")
+        super().destroy_node()
 
 
 def main(args=None):

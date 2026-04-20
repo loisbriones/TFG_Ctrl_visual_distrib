@@ -8,6 +8,7 @@ services:
     environment:
       - ROS_DOMAIN_ID=42
       - ROS_LOCALHOST_ONLY=0
+      - NODE_ID=${NODE_ID}
     volumes:
       # Mapeamos la carpeta completa del paquete 
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
@@ -16,5 +17,9 @@ services:
         source /opt/ros/humble/setup.bash &&
         colcon build --symlink-install --packages-select image_processor_pkg &&
         source install/setup.bash &&
-        ros2 run image_processor_pkg publisher.py --ros-args --params-file /ros2_ws/src/image_processor_pkg/config/params.yaml
-      "
+        ros2 run image_processor_pkg publisher.py --ros-args \ 
+          -p node_id:=${NODE_ID} \
+          -r __ns:=/${NODE_ID} \
+          -r object_position:=/object_position \
+          --params-file /ros2_ws/src/image_processor_pkg/config/params.yaml
+        "

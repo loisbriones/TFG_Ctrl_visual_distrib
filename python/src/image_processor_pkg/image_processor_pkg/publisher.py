@@ -44,6 +44,11 @@ class ImageProcessor(Node):
         self.image_processor_group = MutuallyExclusiveCallbackGroup()
         #Debug
         self.debug_group = MutuallyExclusiveCallbackGroup()
+        
+        # ---- ID NODO ---- 
+        #Pensar en si poner un valor por defecto
+        #self.declare_parameter("node_id",0)  
+        self.node_id =  self.get_parameter("node_id").value
 
         # ----- CAMARA -----
         self.declare_parameter("camera.mode", 2)
@@ -259,6 +264,7 @@ class ImageProcessor(Node):
             self.roi_size = 150 # Reestablecer tamaño optimizado tras detección exitosa
             
             # Publicación del mensaje ObjectLocation
+            self.msg.node_id = self.node_id
             self.msg.color = p["color"]
             self.msg.x = global_cx
             self.msg.y = global_cy

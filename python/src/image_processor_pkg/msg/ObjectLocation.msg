@@ -1,3 +1,4 @@
+string node_id
 string color
 int32 x
 int32 y
