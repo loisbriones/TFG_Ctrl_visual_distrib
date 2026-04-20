@@ -47,7 +47,7 @@ class ImageProcessor(Node):
         
         # ---- ID NODO ---- 
         #Pensar en si poner un valor por defecto
-        #self.declare_parameter("node_id",0)  
+        self.declare_parameter("node_id",0)  
         self.node_id =  self.get_parameter("node_id").value
 
         # ----- CAMARA -----
