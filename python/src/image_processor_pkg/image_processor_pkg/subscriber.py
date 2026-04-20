@@ -41,9 +41,9 @@ class PositionReceiver(Node):
 
         self.get_logger().info("Node PositionReceiver Ready")
 
-    def obtener_recuro(self,nodo_id):
+    def obtener_recurso(self,nodo_id):
         if nodo_id not in self.recursos:
-            file_path = f"{self.base_path}{nodo_id}.csv"
+            file_path = f"{self.csv_base_path}{nodo_id}.csv"
             
             # Comprobación de cabecera
             necesita_cabecera = not os.path.exists(file_path) or os.stat(file_path).st_size == 0
@@ -81,7 +81,7 @@ class PositionReceiver(Node):
         total_ms = cpu_ms + latencia_red_ms
 
         # --- GUARDAR DATOS ---
-        _, writer = self.obtener_recuro(msg.id)
+        _, writer = self.obtener_recurso(msg.node_id)
 
         writer.writerow([
             tiempo_recibido.nanoseconds,
