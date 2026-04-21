@@ -29,8 +29,6 @@ class PositionReceiver(Node):
         #Diccionario para gestionar los escritores de csv
         self.recursos = {}
 
-        self.preparar_csv()
-
         # 2. Suscripción
         self.subscription = self.create_subscription(
             ObjectLocation,
