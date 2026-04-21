@@ -17,9 +17,5 @@ services:
         source /opt/ros/humble/setup.bash &&
         colcon build --symlink-install --packages-select image_processor_pkg &&
         source install/setup.bash &&
-        ros2 run image_processor_pkg publisher.py --ros-args
-        -p node_id:=${NODE_ID}
-        -r __ns:=/${NODE_ID}
-        -r object_position:=/object_position
-        --params-file /ros2_ws/src/image_processor_pkg/config/params.yaml
+        ros2 run image_processor_pkg publisher.py --ros-args --param node_id:=${NODE_ID} --remap __ns:=/${NODE_ID} --params-file /ros2_ws/src/image_processor_pkg/config/params.yaml
       "
