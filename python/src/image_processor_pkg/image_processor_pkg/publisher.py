@@ -112,7 +112,7 @@ class ImageProcessor(Node):
         # ---- PUBLISHER ----
         # Posicion
         self.msg = ObjectLocation()
-        self.object_location_publisher = self.create_publisher(ObjectLocation, "object_position", qos_profile_sensor_data)  
+        self.object_location_publisher = self.create_publisher(ObjectLocation, "/object_position", qos_profile_sensor_data)  
         #Debug
         self.debug_publisher = self.create_publisher(CompressedImage, "camara_debug", qos_profile_sensor_data)
 
