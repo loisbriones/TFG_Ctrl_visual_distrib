@@ -31,10 +31,14 @@ public:
         // ---- CALL GROUPS ----
         image_processor_group = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
         debug_group = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        
+        //---- NODE-ID ----
+        this->declare_parameter("node_id",0);
+        node_id = this->get_parameter("node_id").as_string();
 
         // ----- CAMARA -----
         this->declare_parameter("camera.mode", 2);
-        int mode = this->get_parameter("camera.mode").as_int();
+        int mode = this->get_parameter("camera.mode").at();
         
         auto dims = CAMERA_MODES.at(mode);
         width = dims.first;
@@ -79,7 +83,7 @@ public:
 
         // ---- PUBLISHER ----
         auto qos = rclcpp::SensorDataQoS();
-        object_location_publisher = this->create_publisher<image_processor_pkg::msg::ObjectLocation>("object_position", qos);
+        object_location_publisher = this->create_publisher<image_processor_pkg::msg::ObjectLocation>("/object_position", qos);
         debug_publisher = this->create_publisher<sensor_msgs::msg::CompressedImage>("camara_debug", qos);
 
         // ---- TIMER ----
@@ -200,6 +204,7 @@ private:
             roi_size = 150;
 
             image_processor_pkg::msg::ObjectLocation msg;
+            msg.node_id = node_id;
             msg.color = p.color;
             msg.x = global_cx;
             msg.y = global_cy;
