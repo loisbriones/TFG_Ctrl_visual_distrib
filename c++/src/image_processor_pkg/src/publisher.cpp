@@ -33,7 +33,7 @@ public:
         debug_group = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
         
         //---- NODE-ID ----
-        this->declare_parameter("node_id","demo");
+        this->declare_parameter("node_id","rpiTemp");
         node_id = this->get_parameter("node_id").as_string();
 
         // ----- CAMARA -----
