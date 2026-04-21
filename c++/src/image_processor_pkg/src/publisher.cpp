@@ -33,12 +33,12 @@ public:
         debug_group = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
         
         //---- NODE-ID ----
-        this->declare_parameter("node_id",0);
+        this->declare_parameter("node_id","demo");
         node_id = this->get_parameter("node_id").as_string();
 
         // ----- CAMARA -----
         this->declare_parameter("camera.mode", 2);
-        int mode = this->get_parameter("camera.mode").at();
+        int mode = this->get_parameter("camera.mode").as_int();
         
         auto dims = CAMERA_MODES.at(mode);
         width = dims.first;
@@ -250,7 +250,7 @@ private:
     int current_cx, current_cy, prev_cx, prev_cy;
     bool modo_calibracion, debug, new_data_available;
     int min_area, kernel_size;
-    std::string target_color_1, target_color_2;
+    std::string target_color_1, target_color_2, node_id;
 
     std::vector<std::pair<int, int>> puntos_trayectoria;
     cv::Mat mascara_trayectoria;
