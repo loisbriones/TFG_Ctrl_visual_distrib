@@ -7,6 +7,7 @@ services:
       - "/dev/video0:/dev/video0"
     environment:
       - ROS_DOMAIN_ID=42
+      - NODE_ID=${NODE_ID}
     volumes:
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
     command: >
@@ -14,6 +15,6 @@ services:
         source /opt/ros/humble/setup.bash &&
         colcon build --symlink-install --packages-select image_processor_pkg &&
         source install/setup.bash &&
-        ros2 run image_processor_pkg publisher_node --ros-args -p node_id:=prueba -r __ns:=/rpi --params-file /ros2_ws/src/image_processor_pkg/config/params.yml
+        ros2 run image_processor_pkg publisher_node --ros-args -p node_id:=${NODE_ID} -r __ns:=/${NODE_ID} --params-file /ros2_ws/src/image_processor_pkg/config/params.yml
       "
 

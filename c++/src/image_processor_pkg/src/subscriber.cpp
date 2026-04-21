@@ -1,51 +1,91 @@
-
 #include "rclcpp/rclcpp.hpp"
 #include "image_processor_pkg/msg/object_location.hpp"
 #include <fstream>
 #include <iostream>
+#include <map>
+#include <memory>
+#include <string>
+#include <filesystem> // Para verificar si el archivo existe y su tamaño
 
 class PositionReceiver : public rclcpp::Node {
 public:
   PositionReceiver() : Node("position_receiver") {
-    csv_path = "/ros2_ws/src/image_processor_pkg/mediciones_cpp.csv";
-    preparar_csv();
+    // Ruta base para los archivos CSV
+    csv_base_path = "/ros2_ws/src/image_processor_pkg/mediciones_cpp_";
 
     sub = this->create_subscription<image_processor_pkg::msg::ObjectLocation>(
-        "object_position", rclcpp::SensorDataQoS(),
-        std::bind(&PositionReceiver::topic_callback, this,
-                  std::placeholders::_1));
+        "/object_position", rclcpp::SensorDataQoS(),
+        std::bind(&PositionReceiver::topic_callback, this, std::placeholders::_1));
 
     RCLCPP_INFO(this->get_logger(), "Nodo PositionReceiver C++ listo.");
   }
 
-private:
-  void preparar_csv() {
-    std::ifstream check(csv_path);
-    if (!check.is_open() || check.peek() == std::ifstream::traits_type::eof()) {
-      std::ofstream f(csv_path);
-      f << "timestamp_ns,color,cpu_proc_ms,network_lat_ms,total_lat_ms\n";
+  // Destructor para cerrar los archivos correctamente al terminar
+  ~PositionReceiver() {
+    for (auto const& [id, file_ptr] : recursos) {
+      if (file_ptr->is_open()) {
+        file_ptr->close();
+      }
     }
   }
 
-  void topic_callback(
-      const image_processor_pkg::msg::ObjectLocation::SharedPtr msg) {
+private:
+  // Función para obtener o crear el recurso de escritura (equivalente a obtener_recurso en Python)
+  std::ofstream& obtener_recurso(const std::string& node_id) {
+    if (recursos.find(node_id) == recursos.end()) {
+      std::string file_path = csv_base_path + node_id + ".csv";
+      
+      // Comprobar si necesita cabecera (si no existe o está vacío)
+      bool necesita_cabecera = !std::filesystem::exists(file_path) || std::filesystem::file_size(file_path) == 0;
+      
+      // Creamos el puntero al archivo en modo append
+      auto f = std::make_unique<std::ofstream>(file_path, std::ios::app);
+      
+      if (necesita_cabecera) {
+        *f << "timestamp_ns,color,cpu_proc_ms,network_lat_ms,total_lat_ms\n";
+        f->flush(); // Forzar escritura a disco
+      }
+      
+      recursos[node_id] = std::move(f);
+    }
+    return *recursos[node_id];
+  }
+
+  void topic_callback(const image_processor_pkg::msg::ObjectLocation::SharedPtr msg) {
+    // Tiempo actual
     auto now = this->now();
+    // Tiempo de envío desde el mensaje
     auto stamp = rclcpp::Time(msg->stamp);
 
+    // 1. Latencia de red pura
     double latencia_red_ms = (now - stamp).nanoseconds() / 1e6;
+    
+    // 2. Tiempo de procesamiento (del mensaje)
     double cpu_ms = msg->proc_time;
+    
+    // 3. Latencia Total
     double total_ms = cpu_ms + latencia_red_ms;
 
-    std::ofstream f(csv_path, std::ios::app);
-    f << now.nanoseconds() << "," << msg->color << "," << cpu_ms << ","
-      << latencia_red_ms << "," << total_ms << "\n";
+    // --- GUARDAR DATOS ---
+    std::ofstream& f = obtener_recurso(msg->node_id);
 
+    // Configuramos precisión para que coincida con el .4f de Python
+    f << std::fixed << std::setprecision(4);
+    f << now.nanoseconds() << "," 
+      << msg->color << "," 
+      << cpu_ms << ","
+      << latencia_red_ms << "," 
+      << total_ms << "\n";
+
+    // --- LOGS POR CONSOLA ---
     RCLCPP_INFO(this->get_logger(),
                 "RECIBIDO -> Color: %s | CPU: %.2fms | RED: %.2fms",
                 msg->color.c_str(), cpu_ms, latencia_red_ms);
   }
 
-  std::string csv_path;
+  std::string csv_base_path;
+  // Diccionario (map) para gestionar los escritores de CSV
+  std::map<std::string, std::unique_ptr<std::ofstream>> recursos;
   rclcpp::Subscription<image_processor_pkg::msg::ObjectLocation>::SharedPtr sub;
 };
 
