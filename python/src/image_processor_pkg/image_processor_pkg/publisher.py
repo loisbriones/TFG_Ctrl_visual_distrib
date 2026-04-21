@@ -273,8 +273,6 @@ class ImageProcessor(Node):
             
             self.object_location_publisher.publish(self.msg)
             
-            # Guardar posición para debug (coordenadas locales al frame de debug)
-            self.debug_x, self.debug_y = p["cx"], p["cy"]
         else:
             # Si no se detecta nada, se amplía el área de búsqueda para el próximo frame
             self.roi_size = min(self.roi_size + 50, max(self.width, self.height))
@@ -284,8 +282,8 @@ class ImageProcessor(Node):
     
         # Configuracion de valores de debug
         if self.debug and not self.new_data_available:
-            #Frame con la mascara aplicado
-            self.next_debug_frame = frame_procesar.copy()
+            self.next_debug_frame = frame.copy()
+            self.debug_x, self.debug_y = x1,y1 
             self.next_debug_points = points
             self.new_data_available = True        
         
@@ -298,7 +296,7 @@ class ImageProcessor(Node):
         self.new_data_available = False
 
         for p in self.next_debug_points:
-            cv.circle(self.next_debug_frame, (p["cx"], p["cy"]), 5, (0, 255, 0), -1) 
+            cv.circle(self.next_debug_frame, (self.debug_x + p["cx"], self.debug_y + p["cy"]), 5, (0, 0, 0), -1) 
 
         success, buffer = cv.imencode('.jpg', self.next_debug_frame, [cv.IMWRITE_JPEG_QUALITY, 70])
         
