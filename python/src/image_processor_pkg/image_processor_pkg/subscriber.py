@@ -51,7 +51,7 @@ class PositionReceiver(Node):
             
             if necesita_cabecera:
                 writer.writerow([
-                    "timestamp_ns", "color", "cpu_proc_ms", 
+                    "timestamp_ns", "color", "pos_x", "pos_y", "cpu_proc_ms", 
                     "network_lat_ms", "total_lat_ms"
                 ])
                 # Para forzar a que haga la escritura a disco para asegurar tener cabecera
@@ -84,6 +84,8 @@ class PositionReceiver(Node):
         writer.writerow([
             tiempo_recibido.nanoseconds,
             msg.color,
+            msg.x,
+            msg.y,
             f"{cpu_ms:.4f}",
             f"{latencia_red_ms:.4f}",
             f"{total_ms:.4f}",
