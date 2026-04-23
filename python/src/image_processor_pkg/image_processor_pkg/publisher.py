@@ -59,6 +59,7 @@ class ImageProcessor(Node):
         self.cam = cv.VideoCapture(0, cv.CAP_V4L2)
         self.cam.set(cv.CAP_PROP_FRAME_WIDTH, self.width)
         self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, self.height)
+        self.cam.set(cv.CAP_PROP_AUTOFOCUS, 0)
 
         # ---- CALIBRACION ----
         self.declare_parameter("modo_calibracion", True)
