@@ -6,7 +6,7 @@ COLOR_RANGES = {
         (np.array([0, 100, 100]), np.array([10, 255, 255])),
         (np.array([160, 100, 100]), np.array([180, 255, 255])),
     ],
-    "azul": [(np.array([72, 131, 69], dtype=np.uint8),np.array([112, 251, 189], dtype=np.uint8))],
+    "azul": [(np.array([95, 100, 40], dtype=np.uint8), np.array([130, 255, 255], dtype=np.uint8))],
     "verde": [(np.array([35, 100, 100], dtype=np.uint8),np.array([85, 255, 255], dtype=np.uint8))],
     "naranja": [(np.array([11, 100, 100]), np.array([25, 255, 255]))],
     "amarillo":[(np.array([25, 100, 150], dtype=np.uint8),np.array([35, 255, 255], dtype=np.uint8))],

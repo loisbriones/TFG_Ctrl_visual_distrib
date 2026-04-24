@@ -263,23 +263,24 @@ class ImageProcessor(Node):
             self.prev_cx, self.prev_cy = self.current_cx, self.current_cy
             self.current_cx, self.current_cy = global_cx, global_cy
             self.roi_size = 150 # Reestablecer tamaño optimizado tras detección exitosa
-            
-            # Publicación del mensaje ObjectLocation
-            self.msg.node_id = self.node_id
-            self.msg.color = p["color"]
-            self.msg.x = global_cx
-            self.msg.y = global_cy
-            self.msg.proc_time = proc_duration
-            self.msg.stamp = self.get_clock().now().to_msg()
-            
-            self.object_location_publisher.publish(self.msg)
-            
+             
         else:
             # Si no se detecta nada, se amplía el área de búsqueda para el próximo frame
             self.roi_size = min(self.roi_size + 50, max(self.width, self.height))
             # Resetear historial para forzar búsqueda completa si persiste el fallo
             self.current_cx = None
             self.prev_cx = None
+
+        for p in points:
+            # Publicación del mensaje ObjectLocation
+            self.msg.node_id = self.node_id
+            self.msg.color = p["color"]
+            self.msg.x = p["cx"] + x1 
+            self.msg.y = p["cy"] + y1 
+            self.msg.proc_time = proc_duration
+            self.msg.stamp = self.get_clock().now().to_msg()
+            
+            self.object_location_publisher.publish(self.msg)
     
         # Configuracion de valores de debug
         if self.debug and not self.new_data_available:
@@ -297,7 +298,7 @@ class ImageProcessor(Node):
         self.new_data_available = False
 
         for p in self.next_debug_points:
-            cv.circle(self.next_debug_frame, (self.debug_x + p["cx"], self.debug_y + p["cy"]), 5, (0, 0, 0), -1) 
+            cv.circle(self.next_debug_frame, (self.debug_x + p["cx"], self.debug_y + p["cy"]), 5, (0, 255, 255), -1) 
 
         success, buffer = cv.imencode('.jpg', self.next_debug_frame, [cv.IMWRITE_JPEG_QUALITY, 70])
         
