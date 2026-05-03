@@ -17,10 +17,12 @@ COLOR_RANGES = {
 
 class ColorDetector:
     def __init__(self, target_color_1, target_color_2, kernel_size):
+        # Configuramos el kernel que vamos a usar para detectar los colores
         self.kernel = cv.getStructuringElement(
             cv.MORPH_RECT, (kernel_size, kernel_size)
         )
 
+        # Establecemos el primer color que queremos buscar
         if target_color_1 == "rojo":
             self.target_color_1_lower_red1, self.target_color_1_upper_red1 = (
                 COLOR_RANGES["rojo"][0]
@@ -33,6 +35,7 @@ class ColorDetector:
                 target_color_1
             ][0]
 
+        # Establecemos el segundo color que queremos buscar
         if target_color_2 == "rojo":
             self.target_color_2_lower_red1, self.target_color_2_upper_red1 = (
                 COLOR_RANGES["rojo"][0]
@@ -46,8 +49,10 @@ class ColorDetector:
             ][0]
 
     def find_object(self, frame, min_area, target_color_1, target_color_2):
+        # Convertimos el frame que tenemos que procesar a HSV
         frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
-
+        
+        # Generamos una mascara donde solo van los pixeles que tiene target_color_1
         if target_color_1 == "rojo":
             mask_target_color_1 = cv.add(
                 cv.inRange(
@@ -66,6 +71,7 @@ class ColorDetector:
                 frame_hsv, self.target_color_1_lower, self.target_color_1_upper
             )
 
+        # Generamos una mascara donde solo van los pixeles que tienen traget_color_2 
         if target_color_2 == "rojo":
             mask_target_color_2 = cv.add(
                 cv.inRange(
@@ -86,9 +92,11 @@ class ColorDetector:
 
         points_detected = []
 
+        #Buscamos los objetos dentro de la mascara para target_color_1
         points_detected.extend(
             self._detectar(mask_target_color_1, target_color_1, min_area)
         )
+        #Buscamos los objetos dentro de la mascara para target_color_2
         points_detected.extend(
             self._detectar(mask_target_color_2, target_color_2, min_area)
         )
@@ -98,12 +106,14 @@ class ColorDetector:
     def _detectar(self, mask, color_bgr, min_area):
         puntos = []
          
+        # Aplicamos un cierre morfologico para eliminar ruido o pequeñas imprecisiones
         mask_limpia = cv.morphologyEx(mask, cv.MORPH_CLOSE, self.kernel)
-
+        # Lista de puntos que representa el contorno exterior del objeto que acabamos de detectar
         contornos, _ = cv.findContours(mask_limpia, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
         for c in contornos:
             if cv.contourArea(c) > min_area:
+                # Devuelve 4 puntos que representan un rectangulo que envuelve el contorno detectado
                 x, y, w, h = cv.boundingRect(c)
 
                 cx = x + (w // 2)

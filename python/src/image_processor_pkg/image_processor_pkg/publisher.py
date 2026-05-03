@@ -46,7 +46,6 @@ class ImageProcessor(Node):
         self.debug_group = MutuallyExclusiveCallbackGroup()
         
         # ---- ID NODO ---- 
-        #Pensar en si poner un valor por defecto
         self.declare_parameter("node_id","rbiTemp")  
         self.node_id =  self.get_parameter("node_id").value
 
@@ -54,15 +53,21 @@ class ImageProcessor(Node):
         self.declare_parameter("camera.mode", 2)
         mode = self.get_parameter("camera.mode").value
 
+        # Coger modo camara para saber w,h del frame
         self.width, self.height = CAMERA_MODES[mode]
 
+        #Seleccionamos la camara
         self.cam = cv.VideoCapture(0, cv.CAP_V4L2)
+        #Configuramos el ancho de la camara
         self.cam.set(cv.CAP_PROP_FRAME_WIDTH, self.width)
+        #Configuramos el alto de la camara
         self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, self.height)
+        #Desactivamos el autoenfoque de la camara
         self.cam.set(cv.CAP_PROP_AUTOFOCUS, 0)
 
         # ---- CALIBRACION ----
         self.declare_parameter("modo_calibracion", True)
+        #Trayectoria base que sigue el coche
         self.puntos_trayectoria = []
         #Mascara para calcular la trayectoria
         self.mascara_trayectoria = None
@@ -78,6 +83,7 @@ class ImageProcessor(Node):
         self.target_color_2 = self.get_parameter("detection.target_color_2").value
         self.kernel_size = self.get_parameter("detection.kernel_size").value
 
+        #Clase que tiene configurada la logica de deteccion
         self.color_detector = ColorDetector(
             self.target_color_1, self.target_color_2, self.kernel_size
         )
@@ -105,6 +111,7 @@ class ImageProcessor(Node):
         self.debug = self.get_parameter("debug").value
         self.next_debug_frame = None
         self.next_debug_points = None
+        #Para controlar el cuando hay datos de debug y cuando no
         self.new_data_available = False
 
         # ---- ACTUALIZACION PARAMETROS ----
@@ -173,20 +180,22 @@ class ImageProcessor(Node):
         return result
 
     def generar_mascara(self):
-        # 1. Crear lienzo negro
+        # Crear lienzo negro
         mascara = np.zeros((self.height, self.width), dtype=np.uint8)
 
         if len(self.puntos_trayectoria) < 2:
             return mascara
 
-        # 2. Dibujar la trayectoria uniendo los puntos con líneas blancas
         puntos = np.array(self.puntos_trayectoria, dtype=np.int32)
+
+        # Dibujar la trayectoria uniendo los puntos con líneas blancas
         # isClosed=True para cerrar el circuito al final
         cv.polylines(mascara, [puntos], isClosed=True, color=255, thickness=15)
 
-        # 3. Engrosar y suavizar el carril (Cierre Morfológico)
         kernel = np.ones((25, 25), np.uint8)
+        # Cierre morfologico para eliminar pequeños puntos negros que puedan quedar fruto de no detectar nada 
         mascara_final = cv.morphologyEx(mascara, cv.MORPH_CLOSE, kernel)
+        # Dilatiacion expandimos los bordes de la mascara hacia fuera aumenta el area de la mascara
         mascara_final = cv.dilate(mascara_final, kernel, iterations=1)
 
         return mascara_final
@@ -205,10 +214,12 @@ class ImageProcessor(Node):
             return
         
         if self.modo_calibracion: 
+            # Buscamos en todo el frame para detectar el coche
             points = self.color_detector.find_object(
                 frame, self.min_area, self.target_color_1, self.target_color_2
             ) 
 
+            # Guardamos una trayectoria para después guardar la mascara 
             for p in points:         
                 self.puntos_trayectoria.append((p["cx"],p["cy"]))
 
@@ -229,10 +240,10 @@ class ImageProcessor(Node):
             
         half_roi = self.roi_size // 2
         
-        #Mover ROI hacia atras
+        # Calcular esquina superior izquierda del ROI
         x1 = int(np.clip(pred_x - half_roi, 0, self.width))
         y1 = int(np.clip(pred_y - half_roi, 0, self.height))
-        #Mover ROI hacia delante
+        # Calcular esquina inferior derecha del ROI
         x2 = int(np.clip(pred_x + half_roi, 0, self.width))
         y2 = int(np.clip(pred_y + half_roi, 0, self.height))
 
