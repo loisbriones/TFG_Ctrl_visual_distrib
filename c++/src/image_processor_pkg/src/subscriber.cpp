@@ -42,8 +42,9 @@ private:
       auto f = std::make_unique<std::ofstream>(file_path, std::ios::app);
       
       if (necesita_cabecera) {
-        *f << "timestamp_ns,color,cpu_proc_ms,network_lat_ms,total_lat_ms\n";
-        f->flush(); // Forzar escritura a disco
+          // Añadimos pos_x y pos_y para que coincida con Python
+          *f << "timestamp_ns,color,pos_x,pos_y,cpu_proc_ms,network_lat_ms,total_lat_ms\n";
+          f->flush();
       }
       
       recursos[node_id] = std::move(f);
@@ -69,10 +70,11 @@ private:
     // --- GUARDAR DATOS ---
     std::ofstream& f = obtener_recurso(msg->node_id);
 
-    // Configuramos precisión para que coincida con el .4f de Python
     f << std::fixed << std::setprecision(4);
     f << now.nanoseconds() << "," 
       << msg->color << "," 
+      << msg->x << ","        
+      << msg->y << ","        
       << cpu_ms << ","
       << latencia_red_ms << "," 
       << total_ms << "\n";

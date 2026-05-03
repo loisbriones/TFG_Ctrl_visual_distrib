@@ -76,6 +76,8 @@ public:
         this->declare_parameter("debug", false);
         debug = this->get_parameter("debug").as_bool();
         new_data_available = false;
+        debug_x = 0;
+        debug_y = 0;
 
         // ---- ACTUALIZACION PARAMETROS ----
         callback_handle = this->add_on_set_parameters_callback(
@@ -139,6 +141,7 @@ private:
 
         cv::polylines(mascara, pts, npts, 1, true, cv::Scalar(255), 15);
         cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(25, 25));
+        cv::morphologyEx(mascara, mascara, cv::MORPH_CLOSE, kernel_mask);
         cv::dilate(mascara, mascara, kernel);
         return mascara;
     }
@@ -217,7 +220,9 @@ private:
         }
 
         if (debug && !new_data_available) {
-            next_debug_frame = frame_procesar.clone();
+            next_debug_frame = frame.clone();
+            debug_x = x1;
+            debug_y = y1;
             next_debug_points = points; // Aquí usamos el nombre corregido
             new_data_available = true;
         }
@@ -227,7 +232,7 @@ private:
         if (!new_data_available) return;
 
         for (const auto& p : next_debug_points) {
-            cv::circle(next_debug_frame, cv::Point(p.cx, p.cy), 5, cv::Scalar(0, 255, 0), -1);
+            cv::circle(next_debug_frame, cv::Point(debug_x + p.cx, debug_y + p.cy), 5, cv::Scalar(0, 255, 0), -1);
         }
 
         std::vector<uchar> buffer;
@@ -250,6 +255,7 @@ private:
     int current_cx, current_cy, prev_cx, prev_cy;
     bool modo_calibracion, debug, new_data_available;
     int min_area, kernel_size;
+    int debug_x,debug_y;
     std::string target_color_1, target_color_2, node_id;
 
     std::vector<std::pair<int, int>> puntos_trayectoria;

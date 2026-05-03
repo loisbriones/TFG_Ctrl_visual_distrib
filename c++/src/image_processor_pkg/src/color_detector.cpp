@@ -7,10 +7,10 @@ ColorDetector::ColorDetector(std::string target_1, std::string target_2, int ker
 
     color_ranges["rojo"] = { {cv::Scalar(0, 100, 100), cv::Scalar(10, 255, 255)}, {cv::Scalar(160, 100, 100), cv::Scalar(180, 255, 255)} };
     color_ranges["naranja"] = { {cv::Scalar(11, 100, 100), cv::Scalar(25, 255, 255)} };
-    color_ranges["amarillo"] = { {cv::Scalar(26, 100, 100), cv::Scalar(34, 255, 255)} };
+    color_ranges["amarillo"] = { {cv::Scalar(25, 100, 150), cv::Scalar(35, 255, 255)} };
     color_ranges["verde"] = { {cv::Scalar(35, 100, 100), cv::Scalar(85, 255, 255)} };
-    color_ranges["cian"] = { {cv::Scalar(86, 100, 100), cv::Scalar(100, 255, 255)} };
-    color_ranges["azul"] = { {cv::Scalar(101, 100, 100), cv::Scalar(130, 255, 255)} };
+    color_ranges["cian"] = { {cv::Scalar(75, 40, 30), cv::Scalar(105, 255, 255)} };
+    color_ranges["azul"] = { {cv::Scalar(95, 100, 40), cv::Scalar(130, 255, 255)} };
     color_ranges["violeta"] = { {cv::Scalar(120, 50, 50), cv::Scalar(150, 255, 255)} };
 }
 
