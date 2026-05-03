@@ -13,6 +13,7 @@ public:
     // Ruta base para los archivos CSV
     csv_base_path = "/ros2_ws/src/image_processor_pkg/mediciones_cpp_";
 
+    // Nos subscribimos al topic que publica la informacion
     sub = this->create_subscription<image_processor_pkg::msg::ObjectLocation>(
         "/object_position", rclcpp::SensorDataQoS(),
         std::bind(&PositionReceiver::topic_callback, this, std::placeholders::_1));
@@ -30,8 +31,10 @@ public:
   }
 
 private:
-  // Función para obtener o crear el recurso de escritura (equivalente a obtener_recurso en Python)
+  // Función para obtener o crear el recurso de escritura
   std::ofstream& obtener_recurso(const std::string& node_id) {
+
+    // Comprobamos si ya esta abierto el fichero. El recurso esta guardado en el diccinario
     if (recursos.find(node_id) == recursos.end()) {
       std::string file_path = csv_base_path + node_id + ".csv";
       
@@ -42,17 +45,21 @@ private:
       auto f = std::make_unique<std::ofstream>(file_path, std::ios::app);
       
       if (necesita_cabecera) {
-          // Añadimos pos_x y pos_y para que coincida con Python
+          // Añadimos la cabecera al fichero
           *f << "timestamp_ns,color,pos_x,pos_y,cpu_proc_ms,network_lat_ms,total_lat_ms\n";
+          // Forzamos la escritura de la cabecera para evitar errores
           f->flush();
       }
       
       recursos[node_id] = std::move(f);
     }
+    
+    // Devolvemos el puntero al recuros donde guardar los datos
     return *recursos[node_id];
   }
 
   void topic_callback(const image_processor_pkg::msg::ObjectLocation::SharedPtr msg) {
+
     // Tiempo actual
     auto now = this->now();
     // Tiempo de envío desde el mensaje

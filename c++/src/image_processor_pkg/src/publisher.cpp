@@ -40,13 +40,19 @@ public:
         this->declare_parameter("camera.mode", 2);
         int mode = this->get_parameter("camera.mode").as_int();
         
+        // Coger modo camara para saber w,h del frame
         auto dims = CAMERA_MODES.at(mode);
         width = dims.first;
         height = dims.second;
-
+        
+        // Seleccionamos la camara
         cam.open(0, cv::CAP_V4L2);
+        // Configuramos el ancho de la camara
         cam.set(cv::CAP_PROP_FRAME_WIDTH, width);
+        // Configuramos el alto de la camara
         cam.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+        // Desactivamos el autoenfoque de la camara
+        cam.set(cv::CAP_PROP_AUTOFOCUS, 0);
 
         // ---- CALIBRACION ----
         this->declare_parameter("modo_calibracion", true);
@@ -63,12 +69,14 @@ public:
         target_color_2 = this->get_parameter("detection.target_color_2").as_string();
         kernel_size = this->get_parameter("detection.kernel_size").as_int();
 
-        // Inicializamos el detector con los parámetros actuales
+        // Inicializamos el detector, clase con la logica de deteccion 
         color_detector = std::make_unique<ColorDetector>(target_color_1, target_color_2, kernel_size);
 
-        // Posiciones ROI y Tracking
+        // Posiciones ROI
         rx = 0; ry = 0; rw = width; rh = height;
+        // Tamaño del ROI
         roi_size = 150;
+        // Posicion en un momento concreto de la esquina
         current_cx = -1; current_cy = -1; 
         prev_cx = -1; prev_cy = -1;
 
@@ -128,6 +136,7 @@ private:
     }
 
     cv::Mat generar_mascara() {
+        // Crear lienzo negro
         cv::Mat mascara = cv::Mat::zeros(height, width, CV_8UC1);
         if (puntos_trayectoria.size() < 2) return mascara;
 
@@ -135,14 +144,20 @@ private:
         for (const auto& p : puntos_trayectoria) {
             puntos.push_back(cv::Point(p.first, p.second));
         }
-
+        
         const cv::Point* pts[1] = { puntos.data() };
         int npts[] = { static_cast<int>(puntos.size()) };
-
+        
+        // Dibuyjar la trayectoria uniendo los puntos con lineas blancas
         cv::polylines(mascara, pts, npts, 1, true, cv::Scalar(255), 15);
+
+        // Creamos el kernel
         cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(25, 25));
+        // Cierre morfologico para eliminar pequeños puntos negros que puedan quedar fruto de no detectar nada 
         cv::morphologyEx(mascara, mascara, cv::MORPH_CLOSE, kernel_mask);
+        // Dilatiacion expandimos los bordes de la mascara hacia fuera aumenta el area de la mascara
         cv::dilate(mascara, mascara, kernel);
+
         return mascara;
     }
 
@@ -151,8 +166,10 @@ private:
         if (!cam.read(frame)) return;
 
         if (modo_calibracion) {
-            // Se actualiza la llamada según el nuevo color_detector.cpp
+            // Buscamos en todo el frame para detectar el coche
             auto points = color_detector->find_object(frame, min_area);
+            
+            // Guardamos la trayectoria para despues generar la mascara
             for (const auto& p : points) {
                 puntos_trayectoria.push_back({p.cx, p.cy});
             }
@@ -167,23 +184,26 @@ private:
         } else if (current_cx != -1) {
             pred_x = current_cx; pred_y = current_cy;
         } else {
+            // Si no detectamos nada buscamos en todo el frame 
             pred_x = width / 2; pred_y = height / 2;
             roi_size = std::max(width, height);
         }
 
         int half_roi = roi_size / 2;
+        // Calcular las coordenadas de la esquina superior izquierda del ROI 
         int x1 = std::max(0, pred_x - half_roi);
         int y1 = std::max(0, pred_y - half_roi);
+        // Calcular las coordenadas de la esquina inferior derecha del ROI
         int x2 = std::min(width, pred_x + half_roi);
         int y2 = std::min(height, pred_y + half_roi);
-
-        if (x2 <= x1 || y2 <= y1) return;
 
         cv::Rect roi_rect(x1, y1, x2 - x1, y2 - y1);
         cv::Mat roi_frame = frame(roi_rect);
         
         cv::Mat frame_procesar;
+
         if (!mascara_trayectoria.empty()) {
+            // Aplicamos la mascara sobre la zona del frame a la que aplicamos el ROI
             cv::Mat mask_roi = mascara_trayectoria(roi_rect);
             cv::bitwise_and(roi_frame, roi_frame, frame_procesar, mask_roi);
         } else {
@@ -199,22 +219,30 @@ private:
 
         if (!points.empty()) {
             auto p = points[0];
+            // Traducir las coordenadas locales del ROI a globales del Frame
             int global_cx = x1 + p.cx;
             int global_cy = y1 + p.cy;
-
+            
+            // Actualizar el estado para la siguiente iteracion
             prev_cx = current_cx; prev_cy = current_cy;
             current_cx = global_cx; current_cy = global_cy;
             roi_size = 150;
 
-            image_processor_pkg::msg::ObjectLocation msg;
-            msg.node_id = node_id;
-            msg.color = p.color;
-            msg.x = global_cx;
-            msg.y = global_cy;
-            msg.proc_time = proc_duration;
-            msg.stamp = this->get_clock()->now();
-            object_location_publisher->publish(msg);
+            // 2. Bucle para publicar TODOS los puntos detectados
+            for (const auto& p : points) {
+                image_processor_pkg::msg::ObjectLocation msg;
+                msg.node_id = node_id;
+                msg.color = p.color;
+                msg.x = x1 + p.cx; 
+                msg.y = y1 + p.cy; 
+                msg.proc_time = proc_duration;
+                msg.stamp = this->get_clock()->now();
+                
+                object_location_publisher->publish(msg);
+            }
+
         } else {
+            // Si no detectamos nada actualizamos area de busqueda para el proximo frame 
             roi_size = std::min(roi_size + 50, std::max(width, height));
             current_cx = -1; prev_cx = -1;
         }
@@ -232,7 +260,7 @@ private:
         if (!new_data_available) return;
 
         for (const auto& p : next_debug_points) {
-            cv::circle(next_debug_frame, cv::Point(debug_x + p.cx, debug_y + p.cy), 5, cv::Scalar(0, 255, 0), -1);
+            cv::circle(next_debug_frame, cv::Point(debug_x + p.cx, debug_y + p.cy), 5, cv::Scalar(0, 255, 255), -1);
         }
 
         std::vector<uchar> buffer;
@@ -248,7 +276,6 @@ private:
         new_data_available = false;
     }
 
-    // Variables de miembro
     cv::VideoCapture cam;
     int width, height, roi_size;
     int rx, ry, rw, rh;
@@ -262,9 +289,7 @@ private:
     cv::Mat mascara_trayectoria;
     cv::Mat next_debug_frame;
     
-    // CORRECCIÓN: Usar el nombre de estructura correcto definido en el .hpp
     std::vector<DetectedPoint> next_debug_points; 
-
     std::unique_ptr<ColorDetector> color_detector;
 
     rclcpp::CallbackGroup::SharedPtr image_processor_group;
