@@ -58,6 +58,8 @@ class ImageProcessor(Node):
 
         #Seleccionamos la camara
         self.cam = cv.VideoCapture(0, cv.CAP_V4L2)
+        # Esto le pide a la cámara que envíe los datos ya comprimidos en JPEG
+        self.cam.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'MJPG'))
         #Configuramos el ancho de la camara
         self.cam.set(cv.CAP_PROP_FRAME_WIDTH, self.width)
         #Configuramos el alto de la camara

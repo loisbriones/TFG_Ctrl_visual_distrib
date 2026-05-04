@@ -93,13 +93,13 @@ class ColorDetector:
         points_detected = []
 
         #Buscamos los objetos dentro de la mascara para target_color_1
-        points_detected.extend(
-            self._detectar(mask_target_color_1, target_color_1, min_area)
-        )
+        p1 = self._detectar(mask_target_color_1, target_color_1, min_area) 
+        if p1 is not []:
+            points_detected.extend(p1)
         #Buscamos los objetos dentro de la mascara para target_color_2
-        points_detected.extend(
-            self._detectar(mask_target_color_2, target_color_2, min_area)
-        )
+        p2 = self._detectar(mask_target_color_2, target_color_2, min_area) 
+        if p2 is not []:
+            points_detected.extend(p2)
 
         return points_detected
 
@@ -107,18 +107,22 @@ class ColorDetector:
         puntos = []
          
         # Aplicamos un cierre morfologico para eliminar ruido o pequeñas imprecisiones
-        mask_limpia = cv.morphologyEx(mask, cv.MORPH_CLOSE, self.kernel)
+        #mask_limpia = cv.morphologyEx(mask, cv.MORPH_CLOSE, self.kernel)
+        mask_limpia = cv.morphologyEx(mask, cv.MORPH_OPEN, self.kernel)
         # Lista de puntos que representa el contorno exterior del objeto que acabamos de detectar
-        contornos, _ = cv.findContours(mask_limpia, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        contornos, _ = cv.findContours(mask_limpia, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE) 
 
-        for c in contornos:
-            if cv.contourArea(c) > min_area:
-                # Devuelve 4 puntos que representan un rectangulo que envuelve el contorno detectado
-                x, y, w, h = cv.boundingRect(c)
+        if not contornos:
+            return []
 
-                cx = x + (w // 2)
-                cy = y + (h // 2)
+        c = max(contornos, key=cv.contourArea)
 
-                puntos.append({"color": color_bgr, "cx": cx, "cy": cy})
+        # Devuelve 4 puntos que representan un rectangulo que envuelve el contorno detectado
+        x, y, w, h = cv.boundingRect(c)
+
+        cx = x + (w // 2)
+        cy = y + (h // 2)
+
+        puntos.append({"color": color_bgr, "cx": cx, "cy": cy})
 
         return puntos
