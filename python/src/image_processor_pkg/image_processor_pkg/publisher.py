@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 import cv2 as cv
 import numpy as np
-from image_processor_pkg.msg import ObjectLocation,PathAndSectors,SectionLines,LineSegment,Point2D
+from image_processor_pkg.msg import ObjectLocation, PathAndSectors, LineSegment, Point2D
 from sensor_msgs.msg import CompressedImage
 
 # Perfil para QoS preconfigurado, tiene:
@@ -206,25 +206,29 @@ class ImageProcessor(Node):
         return result
 
     def enviar_path_and_sectors(self):
-        # Crear el mensaje principal
-        msg = SectionLines()
+        # Usamos el mensaje que ya tenemos instanciado
+        self.path_and_sectors_msg.node_id = self.node_id
+        
+        # Limpiamos los sectores previos por si acaso
+        self.path_and_sectors_msg.sectores = []
 
         for segment in self.sectors:
             line_msg = LineSegment()
             
             # Punto de inicio
-            line_msg.start.x = segment[0][0]
-            line_msg.start.y = segment[0][1]
+            line_msg.start.x = int(segment[0][0])
+            line_msg.start.y = int(segment[0][1])
             
             # Punto de fin
-            line_msg.end.x = segment[1][0]
-            line_msg.end.y = segment[1][1]
+            line_msg.end.x = int(segment[1][0])
+            line_msg.end.y = int(segment[1][1])
             
-            # Añadir a la lista del mensaje
-            msg.lines.append(line_msg)
+            # Añadir a la lista 'sectores' (según tu archivo .msg)
+            self.path_and_sectors_msg.sectores.append(line_msg)
         
+        # Publicar el mensaje correcto
         self.path_and_sectors_publisher.publish(self.path_and_sectors_msg)
-        
+
 
     def generar_mascara(self):
         # Crear lienzo negro
@@ -285,7 +289,7 @@ class ImageProcessor(Node):
                         back_point.x = p["cx"]
                         back_point.y = p["cy"]
                         
-                        self.path_and_sectors_msg.back.append(front_point)
+                        self.path_and_sectors_msg.back.append(back_point)
                 
             return
         
