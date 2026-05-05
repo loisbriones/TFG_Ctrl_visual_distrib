@@ -1,6 +1,5 @@
-string node_id
-string color
-int32 x
-int32 y
+string camara_id 
+Stiker front
+Stiker back
 builtin_interfaces/Time stamp
 float64 proc_time

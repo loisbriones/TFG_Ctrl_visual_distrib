@@ -46,8 +46,8 @@ class ImageProcessor(Node):
         self.debug_group = MutuallyExclusiveCallbackGroup()
         
         # ---- ID NODO ---- 
-        self.declare_parameter("node_id","rbiTemp")  
-        self.node_id =  self.get_parameter("node_id").value
+        self.declare_parameter("camara_id","rbiTemp")  
+        self.camara_id=  self.get_parameter("camara_id").value
 
         # ----- CAMARA -----
         self.declare_parameter("camera.mode", 2)
@@ -121,7 +121,6 @@ class ImageProcessor(Node):
 
         # ---- PUBLISHER ----
         # Posicion
-        self.msg = ObjectLocation()
         self.object_location_publisher = self.create_publisher(ObjectLocation, "/object_position", qos_profile_sensor_data)  
         #Debug
         self.debug_publisher = self.create_publisher(CompressedImage, "camara_debug", qos_profile_sensor_data)
@@ -218,7 +217,7 @@ class ImageProcessor(Node):
 
     def enviar_path_and_sectors(self):
         # Usamos el mensaje que ya tenemos instanciado
-        self.path_and_sectors_msg.node_id = self.node_id
+        self.path_and_sectors_msg.camara_id = self.camara_id
         
         # Limpiamos los sectores previos por si acaso
         self.path_and_sectors_msg.sectores = []
@@ -326,14 +325,14 @@ class ImageProcessor(Node):
         roi_frame = frame[y1:y2, x1:x2]
         frame_procesar = cv.bitwise_and(roi_frame, roi_frame, mask=self.mascara_trayectoria[y1:y2, x1:x2])
         
+        # Buscar coche en el frame
         start_proc = time.perf_counter()
-
-        # Detección con la nueva estructura
         detections = self.color_detector.find_object(
             frame_procesar, self.min_area, self.target_color_1, self.target_color_2
         )
-
         end_proc = time.perf_counter()
+
+        # Calculamos el tiempo de procesado
         proc_duration = (end_proc - start_proc) * 1000
         
         # Verificamos si se ha detectado al menos una parte del coche (frontal o trasera)
@@ -356,20 +355,31 @@ class ImageProcessor(Node):
             self.prev_cx = None
 
         # Publicar los puntos detectados
+        
         valid_points_for_debug = []
+        object_location_msg = ObjectLocation()
+
+        object_location_msg.camara_id = self.camara_id
+
         for key in ["front", "back"]:
             p = detections[key]
             if p is not None:
-                # Publicación del mensaje ObjectLocation
-                self.msg.node_id = self.node_id
-                self.msg.color = p["color"]
-                self.msg.x = p["cx"] + x1 
-                self.msg.y = p["cy"] + y1 
-                self.msg.proc_time = proc_duration
-                self.msg.stamp = self.get_clock().now().to_msg()
-                
-                self.object_location_publisher.publish(self.msg)
+                if key == "front":
+                    object_location_msg.front.center.x = p["cx"] + x1 
+                    object_location_msg.front.center.y = p["cy"] + y1 
+                    object_location_msg.front.color = self.target_color_1 
+                if key == "back":
+                    object_location_msg.back.center.x = p["cx"] + x1 
+                    object_location_msg.back.center.y = p["cy"] + y1 
+                    object_location_msg.back.color = self.target_color_1 
+
                 valid_points_for_debug.append(p)
+        
+        object_location_msg.proc_time = proc_duration
+
+        # Publicamos los puntos detectados
+        object_location_msg.stamp = self.get_clock().now().to_msg()
+        self.object_location_publisher.publish(object_location_msg)
     
         # Configuración de valores de debug
         if self.debug and not self.new_data_available:

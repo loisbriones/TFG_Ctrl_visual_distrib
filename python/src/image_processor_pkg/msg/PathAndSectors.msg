@@ -1,4 +1,4 @@
-string node_id
+string camara_id 
 
 # Sectores
 LineSegment[] sectores

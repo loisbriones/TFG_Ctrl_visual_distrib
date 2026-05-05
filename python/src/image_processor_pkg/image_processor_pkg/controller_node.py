@@ -23,38 +23,30 @@ class CarControllerNode(Node):
         self.algo = AlgoritmoVelocidad(self.car_name)
 
         # --- Estado de Referencia (Mapa) ---
-        self.sectores_geom = []  # Lista de segmentos ((x1,y1), (x2,y2))
+        self.sectores_geom = []  
         self.map_ready = False
         self.current_sec_idx = 0
         self.first_cross_done = False
 
         # --- Buffer de Marcadores ---
-        # Guardamos la última posición de cada color para procesarlos juntos
         self.last_positions = {"front": None, "back": None}
         self.last_cross_time = 0.0
-        self.debounce_time = 1.0  # Evita contar la misma línea varias veces
+        self.debounce_time = 1.0 
 
         map_qos = QoSProfile(
-            depth=1,  # Guardar solo el último mensaje
+            depth=1, 
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
 
-        # Recibe el mapa una sola vez al inicio
         self.create_subscription(
             PathAndSectors, "/rpi5/path_and_sectors", self._map_cb, map_qos
         )
-        # Recibe las detecciones constantes
+        
+        # Suscripción al ObjectLocation que ahora contiene Stiker y Point2D
         self.create_subscription(
             ObjectLocation, "/object_position", self._pos_cb, qos_profile_sensor_data
         )
 
-        self.declare_parameter("detection.target_color_1", "rojo")
-        self.declare_parameter("detection.target_color_2", "verde")
-
-        self.target_color_1 = self.get_parameter("detection.target_color_1").value
-        self.target_color_2 = self.get_parameter("detection.target_color_2").value
-
-        # Publica el PWM para los motores
         self.pwm_pub = self.create_publisher(Int32, "/car_pwm", 10)
 
         self.get_logger().info(
@@ -64,34 +56,31 @@ class CarControllerNode(Node):
     def _map_cb(self, msg: PathAndSectors):
         """Inicializa la trayectoria y los sectores en el algoritmo."""
         self.get_logger().info("Mapa recibido. Configurando geometría...")
-
-        # Convertimos la trayectoria frontal para el algoritmo
         trayectoria = [(0, (p.x, p.y)) for p in msg.front]
         self.algo.set_trayectoria(trayectoria)
 
-        # Guardamos los sectores como segmentos geométricos
         self.sectores_geom = [
             ((s.start.x, s.start.y), (s.end.x, s.end.y)) for s in msg.sectores
         ]
         self.map_ready = True
 
     def _pos_cb(self, msg: ObjectLocation):
-        """Sincroniza los dos marcadores y ejecuta un paso de control."""
+        """Extrae marcadores usando la jerarquía msg.stiker.center.x/y"""
         if not self.map_ready:
             return
 
-        # Determinamos si el color recibido es frontal o trasero basándonos en tu params.yaml
-        # Por ejemplo: Verde = Frontal, Azul = Trasero
-        if msg.color == self.target_color_1:
-            self.last_positions["front"] = (float(msg.x), float(msg.y))
-        elif msg.color == self.target_color_2:
-            self.last_positions["back"] = (float(msg.x), float(msg.y))
+        # Ajuste de acceso: msg.front/back (Stiker) -> center (Point2D) -> x/y (int32)
+        self.last_positions["front"] = (
+            float(msg.front.center.x), 
+            float(msg.front.center.y)
+        )
+        self.last_positions["back"] = (
+            float(msg.back.center.x), 
+            float(msg.back.center.y)
+        )
 
-        # Solo actuamos cuando tenemos ambos marcadores del mismo instante
-        if self.last_positions["front"] and self.last_positions["back"]:
-            self._execute_control_cycle()
-            # Limpiamos el buffer para el siguiente frame
-            self.last_positions = {"front": None, "back": None}
+        self._execute_control_cycle()
+        self.last_positions = {"front": None, "back": None}
 
     def _execute_control_cycle(self):
         """Lógica principal: detección de cruce y cálculo de PWM."""
@@ -99,7 +88,6 @@ class CarControllerNode(Node):
         p_front = self.last_positions["front"]
         p_back = self.last_positions["back"]
 
-        # 1. Comprobar cruce de líneas usando la lógica geométrica de camera.py
         if self.sectores_geom:
             target_idx = self.current_sec_idx % len(self.sectores_geom)
             linea = self.sectores_geom[target_idx]
@@ -108,7 +96,7 @@ class CarControllerNode(Node):
                 if (now - self.last_cross_time) > self.debounce_time:
                     self.last_cross_time = now
 
-                    if target_idx == 0:  # Asumimos que el sector 0 es la Meta
+                    if target_idx == 0: 
                         if not self.first_cross_done:
                             self.first_cross_done = True
                             self.get_logger().info("¡Carrera Iniciada!")
@@ -121,15 +109,13 @@ class CarControllerNode(Node):
 
                     self.current_sec_idx += 1
 
-        # 2. Calcular PWM usando el marcador trasero (back) como dicta tu race_controller
         pwm_val = self.algo.on_frame(
-            frame=0,  # El frame se puede trackear con un contador interno
+            frame=0,
             current_section=self.current_sec_idx % len(self.sectores_geom),
             cam_id=0,
             pos=p_back,
         )
 
-        # 3. Publicar el resultado
         self.pwm_pub.publish(Int32(data=int(pwm_val)))
 
     def _crosses_segment(self, p1, p2, A, B):
@@ -161,6 +147,8 @@ class CarControllerNode(Node):
         if o4 == 0 and on_seg(A, p2, B):
             return True
         return False
+
+
 
 
 def main(args=None):
