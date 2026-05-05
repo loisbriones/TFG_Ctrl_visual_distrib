@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
   ros-humble-rosidl-default-runtime \
   python3-opencv \
   python3-numpy \
+  python3-serial \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /ros2_ws

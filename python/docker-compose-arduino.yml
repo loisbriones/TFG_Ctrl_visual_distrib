@@ -1,9 +1,12 @@
+# --- BRIDGE ARDUINO ---
 services:
-  controller:
+  arduino_bridge:
     build: .
     network_mode: "host"
     privileged: true
     ipc: "host"
+    devices:
+      - "/dev/ttyACM0:/dev/ttyACM0"
     environment:
       - ROS_DOMAIN_ID=42
       - ROS_LOCALHOST_ONLY=0
@@ -14,5 +17,6 @@ services:
         source /opt/ros/humble/setup.bash &&
         colcon build --symlink-install --packages-select image_processor_pkg &&
         source install/setup.bash &&
-        ros2 run image_processor_pkg controller_node.py --ros-args --params-file /ros2_ws/src/image_processor_pkg/config/params.yaml
+        ros2 run image_processor_pkg arduino_bridge_node.py --ros-args --params-file /ros2_ws/src/image_processor_pkg/config/params.yaml
       "
+  

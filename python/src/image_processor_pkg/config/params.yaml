@@ -18,5 +18,5 @@
     # Parámetros para el Arduino
     arduino:
       port: "/dev/ttyACM0"
-      rail_id: 1
+      rail_id: 2
       baudrate: 115200

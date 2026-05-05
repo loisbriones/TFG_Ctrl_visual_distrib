@@ -1,7 +1,10 @@
+#!/usr/bin/python3
+
 import math
 from typing import Optional, Tuple, Dict, List
 import numpy as np
 from pathlib import Path
+
 
 class AlgoritmoVelocidad:
     """
@@ -9,6 +12,7 @@ class AlgoritmoVelocidad:
     Mantiene un perfil de PWM por sección, ajustándolo en tiempo real ante derrapes
     y mejorándolo al completar vueltas sin derrapes.
     """
+
     def __init__(self, car_name: str):
         # Carpeta de salida para logs (opcional)
         self.output_dir = Path(__file__).parent.parent / "data"
@@ -19,8 +23,8 @@ class AlgoritmoVelocidad:
         self.log_path.open("w").close()
 
         # Rango de PWM (mín, máx)
-        self.vel_min = 40
-        self.vel_max = 58
+        self.vel_min = 55
+        self.vel_max = 74
 
         # Trayectoria base: mapa cámara -> lista de posiciones
         self.trayectoria_por_camara: Dict[int, List[Tuple[int, int]]] = {}
@@ -43,7 +47,7 @@ class AlgoritmoVelocidad:
         with open(self.log_path, "a") as f:
             f.write(text + "")
 
-    def set_trayectoria(self, trayectoria: List[Tuple[int, Tuple[int,int]]]) -> None:
+    def set_trayectoria(self, trayectoria: List[Tuple[int, Tuple[int, int]]]) -> None:
         if self.trayectoria_usada is None:
             pts = []
             for cam_id, pos in trayectoria:
@@ -51,24 +55,24 @@ class AlgoritmoVelocidad:
                 pts.append(pos)
             self.trayectoria_usada = np.array(pts, dtype=float)
 
-    def detect_derrape(self, cam_id: int, pos: Tuple[float,float]) -> bool:
+    def detect_derrape(self, cam_id: int, pos: Tuple[float, float]) -> bool:
         """
         Detecta derrape comparando la distancia mínima de la posición actual
         a la trayectoria base contra un umbral mayor (más reactivo a desviaciones).
         """
-        umbral = getattr(self, 'drift_threshold', 130.0)
+        umbral = getattr(self, "drift_threshold", 130.0)
         pts = self.trayectoria_por_camara.get(cam_id, [])
         if not pts:
             return False
-        dist_min = min(math.hypot(pos[0]-x, pos[1]-y) for x,y in pts)
+        dist_min = min(math.hypot(pos[0] - x, pos[1] - y) for x, y in pts)
         return dist_min > umbral
 
     def on_frame(
-            self,
-            frame: int,
-            current_section: int,
-            cam_id: int,
-            pos: Optional[Tuple[float, float]]
+        self,
+        frame: int,
+        current_section: int,
+        cam_id: int,
+        pos: Optional[Tuple[float, float]],
     ) -> int:
         if current_section not in self.speed_profile:
             self.speed_profile[current_section] = []
@@ -104,8 +108,14 @@ class AlgoritmoVelocidad:
             orig = self.speed_profile[sec][idx]
             new_v = max(self.vel_min, orig - r)
             self.speed_profile[sec][idx] = new_v
-            self.save_log(f"[REDUCCIÓN] frame {f} sección {sec} idx {idx}: {orig}->{new_v}")
-        secs = {self.frame_sections[f][0] for f in range(start, frame) if f in self.frame_sections}
+            self.save_log(
+                f"[REDUCCIÓN] frame {f} sección {sec} idx {idx}: {orig}->{new_v}"
+            )
+        secs = {
+            self.frame_sections[f][0]
+            for f in range(start, frame)
+            if f in self.frame_sections
+        }
         if len(secs) > 2:
             self.last_drift = {"window": 20, "reduction": r + 1}
         else:
@@ -116,8 +126,7 @@ class AlgoritmoVelocidad:
             for sec, drifted in self.drift_flag_per_section.items():
                 if not drifted:
                     self.speed_profile[sec] = [
-                        min(self.vel_max, v + 1)
-                        for v in self.speed_profile[sec]
+                        min(self.vel_max, v + 1) for v in self.speed_profile[sec]
                     ]
 
         for sec in list(self.drift_flag_per_section.keys()):
@@ -129,16 +138,17 @@ class AlgoritmoVelocidad:
         self.lap_has_drift = False
 
     def on_section_end(self, section_idx: int) -> None:
-        finish_sec = getattr(self, 'finish_section_idx', None)
+        finish_sec = getattr(self, "finish_section_idx", None)
         if section_idx == finish_sec:
             self.drift_flag_per_section[section_idx] = False
             self.section_cursors[section_idx] = 0
             return
 
-        if not self.lap_has_drift and not self.drift_flag_per_section.get(section_idx, False):
+        if not self.lap_has_drift and not self.drift_flag_per_section.get(
+            section_idx, False
+        ):
             self.speed_profile[section_idx] = [
-                min(self.vel_max, v + 1)
-                for v in self.speed_profile[section_idx]
+                min(self.vel_max, v + 1) for v in self.speed_profile[section_idx]
             ]
 
         self.drift_flag_per_section[section_idx] = False

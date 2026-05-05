@@ -1,18 +1,20 @@
+#!/usr/bin/python3
+
 import serial
 import serial.tools.list_ports
 import time
 
+
 class ArduinoController:
-    def __init__(self,
-                 port: str = '/dev/ttyACM0',
-                 baudrate: int = 115200,
-                 timeout: float = 1.0):
+    def __init__(
+        self, port: str = "/dev/ttyACM0", baudrate: int = 115200, timeout: float = 1.0
+    ):
         """
-            Inicializa la conexión serie:
-              1) Lista puertos disponibles.
-              2) Selecciona un puerto válido (por defecto /dev/ttyACM0 o el primero que coincida con ACM/USB).
-              3) Abre el puerto, espera 2 s para reset del Arduino y se vacía buffers.
-              4) Detiene ambos raíles al arrancar.
+        Inicializa la conexión serie:
+          1) Lista puertos disponibles.
+          2) Selecciona un puerto válido (por defecto /dev/ttyACM0 o el primero que coincida con ACM/USB).
+          3) Abre el puerto, espera 2 s para reset del Arduino y se vacía buffers.
+          4) Detiene ambos raíles al arrancar.
         """
         # 1) Obtener lista de dispositivos serie
         ports = [p.device for p in serial.tools.list_ports.comports()]
@@ -21,7 +23,11 @@ class ArduinoController:
         # 2) Verificar que el puerto deseado esté en la lista
         if port not in ports:
             # Si no está, buscar uno que empiece por ACM o USB
-            cand = [p for p in ports if p.startswith('/dev/ttyACM') or p.startswith('/dev/ttyUSB')]
+            cand = [
+                p
+                for p in ports
+                if p.startswith("/dev/ttyACM") or p.startswith("/dev/ttyUSB")
+            ]
             if cand:
                 print(f"Puerto '{port}' no encontrado, usando '{cand[0]}'")
                 port = cand[0]
