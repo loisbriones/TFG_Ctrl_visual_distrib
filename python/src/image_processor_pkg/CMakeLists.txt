@@ -10,6 +10,9 @@ find_package(builtin_interfaces REQUIRED)
 # Genearar los mensajes
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ObjectLocation.msg"
+  "msg/LineSegment.msg"
+  "msg/PathAndSectors.msg"
+  "Point2D.msg"
   DEPENDENCIES builtin_interfaces
 )
 

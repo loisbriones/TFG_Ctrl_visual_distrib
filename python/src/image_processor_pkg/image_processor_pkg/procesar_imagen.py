@@ -90,21 +90,15 @@ class ColorDetector:
                 frame_hsv, self.target_color_2_lower, self.target_color_2_upper
             )
 
-        points_detected = []
 
         #Buscamos los objetos dentro de la mascara para target_color_1
-        p1 = self._detectar(mask_target_color_1, target_color_1, min_area) 
-        if p1 is not []:
-            points_detected.extend(p1)
+        front_color = self._detectar(mask_target_color_1, target_color_1, min_area) 
         #Buscamos los objetos dentro de la mascara para target_color_2
-        p2 = self._detectar(mask_target_color_2, target_color_2, min_area) 
-        if p2 is not []:
-            points_detected.extend(p2)
+        back_color = self._detectar(mask_target_color_2, target_color_2, min_area) 
 
-        return points_detected
+        return {"front": front_color, "back": back_color }
 
     def _detectar(self, mask, color_bgr, min_area):
-        puntos = []
          
         # Aplicamos un cierre morfologico para eliminar ruido o pequeñas imprecisiones
         #mask_limpia = cv.morphologyEx(mask, cv.MORPH_CLOSE, self.kernel)
@@ -113,7 +107,7 @@ class ColorDetector:
         contornos, _ = cv.findContours(mask_limpia, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE) 
 
         if not contornos:
-            return []
+            return None
 
         c = max(contornos, key=cv.contourArea)
 
@@ -123,6 +117,61 @@ class ColorDetector:
         cx = x + (w // 2)
         cy = y + (h // 2)
 
-        puntos.append({"color": color_bgr, "cx": cx, "cy": cy})
+        return {"color": color_bgr, "cx": cx, "cy": cy}
 
-        return puntos
+        
+
+    def find_sector(self, frame, sector_color):
+        frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+        
+        if sector_color == "rojo":
+            mask_sector_color = cv.add(
+                cv.inRange(
+                    frame_hsv,
+                    self.target_color_1_lower_red1,
+                    self.target_color_1_upper_red1,
+                ),
+                cv.inRange(
+                    frame_hsv,
+                    self.target_color_1_lower_red2,
+                    self.target_color_1_upper_red2,
+                ),
+            )
+        else:
+            mask_sector_color = cv.inRange(
+                frame_hsv, self.target_color_1_lower, self.target_color_1_upper
+            )
+
+        section_lines: list[tuple[tuple[int, int], tuple[int, int]]] = []
+
+        # kernel ancho para unir trozos de cada sección
+        kernel = np.ones((40, 40), np.uint8)
+        mask_sector_color_aplicada = cv.morphologyEx(mask_sector_color, cv.MORPH_CLOSE, kernel, iterations=1)
+        contours, _ = cv.findContours(mask_sector_color_aplicada, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+
+        def edge_len(a, b):
+            return np.hypot(b[0] - a[0], b[1] - a[1])
+
+        for cnt in contours:
+            if cv.contourArea(cnt) < 50:
+                continue
+            
+            # Busca el rectangulo con area minima que encierra los pixeles que se detectan, pudiendo estar rotado.
+            rect = cv.minAreaRect(cnt)
+            box = cv.boxPoints(rect).astype(int)
+            #Obtenemos las coordenadas.
+            p0, p1, p2, p3 = box
+
+            #Buscamos que puntos corresponden con los sectores más pequeños del rectangulo para luego unirlos con una linea recta
+            if edge_len(p0, p1) < edge_len(p1, p2):
+                m1 = ((p0[0] + p1[0]) // 2, (p0[1] + p1[1]) // 2)
+                m2 = ((p2[0] + p3[0]) // 2, (p2[1] + p3[1]) // 2)
+            else:
+                m1 = ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
+                m2 = ((p3[0] + p0[0]) // 2, (p3[1] + p0[1]) // 2)
+
+            section_lines.append((m1, m2))
+            
+        return section_lines
+
+
