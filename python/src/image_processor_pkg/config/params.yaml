@@ -20,3 +20,5 @@
       port: "/dev/ttyACM0"
       rail_id: 2
       baudrate: 115200
+      calib_speed: 55
+

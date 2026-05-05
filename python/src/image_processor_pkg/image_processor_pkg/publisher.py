@@ -196,12 +196,23 @@ class ImageProcessor(Node):
             elif param.name == "debug":
                 self.debug = param.value
                 self.get_logger().info(f"Parámetro actualizado: debug = {self.debug}")
-            
+
             elif param.name == "modo_calibracion":
-                self.mascara_trayectoria = self.generar_mascara()
-                self.modo_calibracion = param.value 
-                self.enviar_path_and_sectors()
-                self.get_logger().info(f"Parámetro actualizado: debug = {self.modo_calibracion}")
+
+                # Si pasamos de True a False (Fin de calibración)
+                if self.modo_calibracion == True and param.value == False:
+                    self.get_logger().info("Finalizando calibración: Generando máscara y enviando ruta...")
+                    self.mascara_trayectoria = self.generar_mascara()
+                    self.enviar_path_and_sectors()
+                
+                # Si pasamos de False a True (Reiniciar calibración)
+                elif param.value == True:
+                    self.get_logger().info("Reiniciando calibración: Limpiando datos previos")
+                    self.puntos_trayectoria = []
+                    self.path_and_sectors_msg.front = []
+                    self.path_and_sectors_msg.back = []
+
+                self.modo_calibracion = param.value            
                 
         return result
 
