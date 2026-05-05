@@ -12,7 +12,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ObjectLocation.msg"
   "msg/LineSegment.msg"
   "msg/PathAndSectors.msg"
-  "Point2D.msg"
+  "msg/Point2D.msg"
   DEPENDENCIES builtin_interfaces
 )
 
