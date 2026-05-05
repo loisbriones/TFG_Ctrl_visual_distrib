@@ -20,11 +20,15 @@ install(DIRECTORY config
   DESTINATION share/${PROJECT_NAME}
 )
 
-# Cargar los scripts de python: publisher y subscriber
+# Cargar los scripts de python
 install(PROGRAMS 
   image_processor_pkg/publisher.py
   image_processor_pkg/subscriber.py
-  image_processor_pkg/procesar_imagen.py
+  image_processor_pkg/procesar_imagen.py 
+  image_processor_pkg/algoritmo_velocidad.py
+  image_processor_pkg/rduino_bridge_node.py
+  image_processor_pkg/rduino_controller.py
+  image_processor_pkg/controller_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
