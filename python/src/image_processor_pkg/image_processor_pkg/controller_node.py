@@ -9,6 +9,7 @@ from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
 from image_processor_pkg.msg import ObjectLocation, PathAndSectors
 
 import time
+import math
 
 from algoritmo_velocidad import AlgoritmoVelocidad
 
@@ -32,16 +33,7 @@ class CarControllerNode(Node):
         self.last_positions = {"front": None, "back": None}
         self.last_cross_time = 0.0
         self.debounce_time = 1.0 
-
-        map_qos = QoSProfile(
-            depth=1, 
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
-        )
-
-        self.create_subscription(
-            PathAndSectors, "/rpi5/path_and_sectors", self._map_cb, map_qos
-        )
-        
+ 
         # Suscripción al ObjectLocation que ahora contiene Stiker y Point2D
         self.create_subscription(
             ObjectLocation, "/object_position", self._pos_cb, qos_profile_sensor_data
@@ -52,18 +44,73 @@ class CarControllerNode(Node):
         self.get_logger().info(
             f"Controlador de {self.car_name} iniciado y esperando mapa..."
         )
+        
+        # Diccionario que contiene las camaras que se usan en el circuito
+        self.camaras = {}
 
-    def _map_cb(self, msg: PathAndSectors):
-        """Inicializa la trayectoria y los sectores en el algoritmo."""
-        self.get_logger().info("Mapa recibido. Configurando geometría...")
-        trayectoria = [(0, (p.x, p.y)) for p in msg.front]
-        self.algo.set_trayectoria(trayectoria)
+    # --- DESCUBRIR CAMARAS ---
+    """ Funcion que permite buscar todos los nodoso que tiene camara y subscribirse a ellos""" 
+    def discover_cameras(self):
 
-        self.sectores_geom = [
-            ((s.start.x, s.start.y), (s.end.x, s.end.y)) for s in msg.sectores
+        map_qos = QoSProfile(
+            depth=1, 
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+
+        # 1. Obtener todos los tópicos y sus tipos
+        topic_info = self.get_topic_names_and_types()
+        
+        for topic_name, topic_types in topic_info:
+            # 2. Filtrar por nombre y tipo de mensaje
+            if '/camara' in topic_name and 'PathAndSectors' in topic_types:
+                
+                # 3. Si no estamos suscritos aún, lo hacemos
+                if topic_name not in self.subscribers:
+                    self.get_logger().info(f'Nueva cámara detectada: {topic_name}')
+                     
+                    # Creamos el suscriptor dinámicamente
+                    new_sub = self.create_subscription(
+                        PathAndSectors,
+                        topic_name,
+                        # Usamos una función lambda para saber de qué cámara viene el mensaje
+                        lambda msg, tn=topic_name: self.camera_callback(msg, tn),
+                        map_qos
+                    )
+                    self.subscribers[topic_name] = new_sub
+
+    # Funcion que se llama cuando las camaras a las que nos suscribimos publican: PathAndSectors.msg
+    def camera_callback(self, msg: PathAndSectors, topic_name: str):
+        self.get_logger().info(f'Procesando datos de: {topic_name} (ID: {msg.node_id})')
+        
+        
+        # 1. Extraer el ID de la cámara del mensaje
+        cam_id = msg.node_id 
+    
+        # 2. Convertir sectores (LineSegment -> Tuplas de coordenadas)
+        # Cada LineSegment tiene un 'start' y un 'end' 
+        # Cada punto tiene 'x' e 'y' 
+        sectores_formateados = [
+            ((s.start.x, s.start.y), (s.end.x, s.end.y)) 
+            for s in msg.sectores
         ]
-        self.map_ready = True
 
+        # 1. Simplificamos las trayectorias (ajusta el umbral según necesites)
+        # Un umbral de 2 a 5 suele ser ideal para mapas de este estilo
+        front_simplificado = self.simplificar_path(msg.front, umbral_distancia=3.0)
+        back_simplificado = self.simplificar_path(msg.back, umbral_distancia=3.0)
+     
+        # 4. Guardar en el diccionario con la estructura solicitada
+        self.camera_data[cam_id] = {
+            "sectores": sectores_formateados,
+            "front_path": front_simplificado,
+            "back_path" : back_simplificado
+        }
+    
+        # Opcional: Si quieres mantener la lógica de "map_ready" o pasar datos al algoritmo
+        # como hacías en _map_cb, puedes hacerlo aquí usando los datos procesados:
+        # self.algo.set_trayectoria(path_completo) 
+        self.map_ready = True
+        
     def _pos_cb(self, msg: ObjectLocation):
         """Extrae marcadores usando la jerarquía msg.stiker.center.x/y"""
         if not self.map_ready:
@@ -148,7 +195,28 @@ class CarControllerNode(Node):
             return True
         return False
 
-
+    def simplificar_path(self, path, umbral_distancia=2.0):
+        """
+        Reduce el número de puntos basándose en la distancia mínima.
+        """
+        if not path:
+            return []
+    
+        path_simplificado = [path[0]]  # Siempre empezamos con el primer punto
+        
+        for i in range(1, len(path)):
+            ultimo_punto = path_simplificado[-1]
+            punto_actual = path[i]
+            
+            # Calculamos distancia euclídea
+            dist = math.sqrt((punto_actual.x - ultimo_punto.x)**2 + 
+                             (punto_actual.y - ultimo_punto.y)**2)
+            
+            # Solo lo añadimos si se ha movido lo suficiente
+            if dist > umbral_distancia:
+                path_simplificado.append(punto_actual)
+                
+        return path_simplificado
 
 
 def main(args=None):
