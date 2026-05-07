@@ -2,8 +2,9 @@
 
 import rclpy
 from rclpy.node import Node
-from rclpy.parameter_event_handler import ParameterEventHandler
+from image_processor_pkg.msg import SpeedCarril
 from std_msgs.msg import Int32
+
 
 from arduino_controller import ArduinoController
 
@@ -11,85 +12,55 @@ from arduino_controller import ArduinoController
 class ArduinoBridgeNode(Node):
     def __init__(self):
         super().__init__("arduino_bridge")
+        
+        # --- Obtener numero de coches --- 
+        # Creamos tantos carriles como coches tengamos
+        self.declare_parameter("num_coches",1)
+        num_coches = self.get_parameter("num_coche").value
 
-        # --- Parámetros ---
-        # Permitimos configurar el puerto y el raíl desde el lanzamiento o parámetros
+        # Diccionario para matener controlado la velocidad que ponemos a cada carril
+        self.rails = {}
+        
+        for i in range(num_coches):
+            self.subscription = self.create_subscription(SpeedCarril, f"/carril_coche{i}", self.pwm_callback, 10)
+            self.rails[f"r{i}"] = 0
+
+        # --- PARAMETROS ---
         self.declare_parameter("port", "/dev/ttyACM0")
         self.declare_parameter("baudrate", 115200)
-        self.declare_parameter("rail_id", 2)
 
         port = self.get_parameter("port").value
         baud = self.get_parameter("baudrate").value
-        self.rail_id = self.get_parameter("rail_id").value
 
         #  --- CALIBRACION ---
-        self.declare_parameter("modo_calibracion", True)
-        self.modo_calibracion = True
-
-        self.declare_parameter("calib_speed", 55)
-        self.calib_speed = self.get_parameter("calib_speed").value
+        self.declare_parameter("calibration_speed", 55)
+        self.calibration_speed = self.get_parameter("calibration_speed").value
 
         # Nos conectamos al arduino
         self.arduino = ArduinoController(port=port, baudrate=baud)
 
-        self.get_logger().info(f"Conectando a Arduino en {port}...")
+        self.get_logger().info(f"Conectando a Arduino en {port}...") 
 
-        # --- Suscriptor ---
-        # Escuchamos el tópico de PWM que viene del controlador
-        self.subscription = self.create_subscription(
-            Int32, "/car_pwm", self.pwm_callback, 10
-        )
-
-        # --- MONITOR DE PARÁMETROS EXTERNOS ---
-        # Creamos un manejador para escuchar eventos de otros nodos
-        self.param_handler = ParameterEventHandler(self)
-
-        # Nos suscribimos específicamente al parámetro "modo_calibracion"
-        # del nodo "image_processor"
-        self.callback_handle = self.param_handler.add_parameter_callback(
-            parameter_name="modo_calibracion",
-            node_name="image_processor",
-            callback=self.on_calibration_mode_change,
-        )
-
-        self.get_logger().info(f"Nodo Bridge listo. Controlando Raíl: {self.rail_id}")
-
-        if self.modo_calibracion:
-            self.get_logger().info("Arrancando en MODO CALIBRACIÓN (Velocidad lenta)")
-            self.arduino.set_both_rails(self.calib_speed, self.calib_speed)
-
-    def on_calibration_mode_change(self, p):
-        """
-        Callback que se dispara cuando 'image_processor' cambia su parámetro.
-        """
-        # p.value -> Se corresponde con el valor por el que se cambia
-        is_calibrating = p.value
-
-        if is_calibrating:
-            self.get_logger().info(
-                f"Detectado MODO CALIBRACIÓN. Iniciando marcha lenta: {self.calib_speed}"
-            )
-            self.arduino.set_rail_speed(self.rail_id, self.calib_speed)
-        else:
-            self.get_logger().info(
-                "Calibración terminada. Deteniendo para esperar control dinámico."
-            )
-            self.arduino.stop_all_rails()
+        self.arduino.set_both_rails(self.calib_speed, self.calib_speed)
 
     def pwm_callback(self, msg: Int32):
         """
         Cada vez que llega un nuevo valor de PWM, lo enviamos al Arduino.
         """
-        pwm_value = msg.data
 
-        self.get_logger().info(f"Recibido en Bridge: {msg.data}")
+        pwm_value = msg.pwm
+        rail = msg.carril
+
+        # Si el valor no cambia del anterior recibido no lo enviamos al arduino para no saturar
+        if pwm_value == self.rails[rail]:
+            return
+
+        self.rails[rail] = pwm_value
 
         # Validacion de seguridad
         if 0 <= pwm_value <= 255:
-            self.arduino.set_rail_speed(self.rail_id, pwm_value)
-        else:
-            self.get_logger().warn(f"Valor de PWM fuera de rango recibido: {pwm_value}")
 
+            self.arduino.set_rail_speed(self.rail_id, pwm_value)
     def destroy_node(self):
         """
         Al cerrar el nodo, nos aseguramos de parar el coche por seguridad.

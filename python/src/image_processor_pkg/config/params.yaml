@@ -1,8 +1,13 @@
 /**:
   ros__parameters:
     debug: False
+    num_coches: 1
+    
+    #Parametros para la camara
     camera:
       mode: 2
+
+    # Parametros para el modulo de deteccion 
     detection:
       target_color_1: "verde"
       target_color_2: "azul"
@@ -12,13 +17,12 @@
       
     # Parámetros para el controlador
     controller:
-      car_name: "rbi_car_01"
-      finish_debounce: 1.0
+      minimum_speed: 50
+      maximum_speed: 75
 
     # Parámetros para el Arduino
     arduino:
       port: "/dev/ttyACM0"
-      rail_id: 2
       baudrate: 115200
-      calib_speed: 55
+      calibration_speed: 50 
 

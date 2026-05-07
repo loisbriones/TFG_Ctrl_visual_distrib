@@ -14,6 +14,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PathAndSectors.msg"
   "msg/Point2D.msg"
   "msg/Stiker.msg"
+  "msg/SpeedCarril.msg"
   DEPENDENCIES builtin_interfaces
 )
 
