@@ -3,7 +3,6 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter_event_handler import ParameterEventHandler
-
 from std_msgs.msg import Int32
 
 from arduino_controller import ArduinoController
