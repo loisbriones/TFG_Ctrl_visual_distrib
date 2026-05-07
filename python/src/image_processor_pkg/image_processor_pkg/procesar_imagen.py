@@ -7,10 +7,10 @@ COLOR_RANGES = {
         (np.array([160, 100, 100]), np.array([180, 255, 255])),
     ],
     "azul": [(np.array([95, 100, 40], dtype=np.uint8), np.array([130, 255, 255], dtype=np.uint8))],
-    "verde": [(np.array([35, 100, 100], dtype=np.uint8),np.array([85, 255, 255], dtype=np.uint8))],
+    "verde": [(np.array([40, 70, 70], dtype=np.uint8),np.array([70, 255, 255], dtype=np.uint8))],
     "naranja": [(np.array([11, 100, 100]), np.array([25, 255, 255]))],
     "amarillo":[(np.array([25, 100, 150], dtype=np.uint8),np.array([35, 255, 255], dtype=np.uint8))],
-    "cian": [(np.array([75, 40, 30]), np.array([105, 255, 255]))],
+    "cian": [(np.array([78,65,120]), np.array([120, 255, 255]))],
     "violeta": [(np.array([120, 50, 50]), np.array([150, 255, 255]))],
 }
 
@@ -101,8 +101,9 @@ class ColorDetector:
     def _detectar(self, mask, color_bgr, min_area):
          
         # Aplicamos un cierre morfologico para eliminar ruido o pequeñas imprecisiones
-        #mask_limpia = cv.morphologyEx(mask, cv.MORPH_CLOSE, self.kernel)
         mask_limpia = cv.morphologyEx(mask, cv.MORPH_OPEN, self.kernel)
+        mask_limpia = cv.morphologyEx(mask_limpia, cv.MORPH_CLOSE, self.kernel)
+
         # Lista de puntos que representa el contorno exterior del objeto que acabamos de detectar
         contornos, _ = cv.findContours(mask_limpia, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE) 
 
