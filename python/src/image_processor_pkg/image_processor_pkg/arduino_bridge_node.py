@@ -11,7 +11,7 @@ from arduino_controller import ArduinoController
 
 class ArduinoBridgeNode(Node):
     def __init__(self):
-        super().__init__("arduino_bridge")
+        super().__init__("Arduino")
         
         # --- Obtener numero de coches --- 
         # Creamos tantos carriles como coches tengamos
@@ -22,7 +22,7 @@ class ArduinoBridgeNode(Node):
         self.rails = {}
         
         for i in range(num_coches):
-            self.subscription = self.create_subscription(SpeedCarril, f"/carril_coche{i}", self.pwm_callback, 10)
+            self.subscription = self.create_subscription(SpeedCarril, f"/pwd/carril_coche{i}", self.pwm_callback, 10)
             self.rails[f"r{i}"] = 0
 
         # --- PARAMETROS ---
