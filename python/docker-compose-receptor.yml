@@ -9,7 +9,7 @@ services:
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
     command: >
       bash -c "
-        source /opt/ros/kilted/setup.bash &&
+        source /opt/ros/humble/setup.bash &&
         colcon build --symlink-install --packages-select image_processor_pkg &&
         source install/setup.bash &&
         ros2 run image_processor_pkg subscriber.py --ros-args --params-file /ros2_ws/src/image_processor_pkg/config/params.yaml
