@@ -2,6 +2,7 @@
   ros__parameters:
     debug: False
     num_coches: 1
+    coches: ["car1"]
     
     #Parametros para la camara
     camera:

@@ -5,7 +5,7 @@ from rclpy.node import Node
 import cv2 as cv
 import numpy as np
 from image_processor_pkg.msg import ObjectLocation, PathAndSectors, LineSegment, Point2D
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import CompressedImage, Bool
 
 # Perfil para QoS preconfigurado, tiene:
 #   History: Keep last,
@@ -18,13 +18,15 @@ from sensor_msgs.msg import CompressedImage
 #   Liveliness lease duration: default,
 #   avoid ros namespace conventions: false
 # Informacion sacada de: https://docs.ros2.org/latest/api/rclcpp/classrclcpp_1_1SensorDataQoS.html
-from rclpy.qos import qos_profile_sensor_data,QoSProfile,DurabilityPolicy
+from rclpy.qos import qos_profile_sensor_data
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
 from procesar_imagen import ColorDetector
+from concurrent.futures import ThreadPoolExecutor, wait
 import time
+
 
 CAMERA_MODES = {
     0: (160, 120),
@@ -47,7 +49,8 @@ class ImageProcessor(Node):
         
         # ---- ID NODO ---- 
         self.declare_parameter("camara_id","rbiTemp")  
-        self.camara_id=  self.get_parameter("camara_id").value
+        self.camara_id =  self.get_parameter("camara_id").value
+        # -----------------
 
         # ----- CAMARA -----
         self.declare_parameter("camera.mode", 2)
@@ -66,13 +69,17 @@ class ImageProcessor(Node):
         self.cam.set(cv.CAP_PROP_FRAME_HEIGHT, self.height)
         #Desactivamos el autoenfoque de la camara
         self.cam.set(cv.CAP_PROP_AUTOFOCUS, 0)
+        # ---------------------
     
         # ---- CALIBRACION ----
-        self.declare_parameter("modo_calibracion", True)
+        # TOPIC para controlar el modo de calibracion
+        self.modo_calibracion = True
+        self.sub_modo_calibracion = self.create_subscription(Bool,"/modo_calibracion", self.callback_control,10)
         #Trayectoria base que sigue el coche
         self.puntos_trayectoria = []
         #Mascara para calcular la trayectoria
         self.mascara_trayectoria = None
+        # --------------------
         
         # ----- DETECTION -----
         self.declare_parameter("detection.min_area", 50)
@@ -84,30 +91,12 @@ class ImageProcessor(Node):
         self.target_color_1 = self.get_parameter("detection.target_color_1").value
         self.target_color_2 = self.get_parameter("detection.target_color_2").value
         self.kernel_size = self.get_parameter("detection.kernel_size").value
+        # ---------------------
 
-        #Clase que tiene configurada la logica de deteccion
-        self.color_detector = ColorDetector(
-            self.target_color_1, self.target_color_2, self.kernel_size
-        )
+        # --- COLOR DETECTOR ---
+        self.color_detector = ColorDetector(self.target_color_1, self.target_color_2, self.kernel_size)
+        # ---------------------- 
         
-        #Posiciones para ir modificando el ROI
-        self.rx = 0
-        self.ry = 0 
-        self.rw = self.width
-        self.rh = self.height
-        #Tamaño del ROI
-        self.roi_size = 150
-        #Posicion en un momento concreto de la esquina
-        self.current_cx = None
-        self.current_cy = None
-        #Para que en el modo debug se dibuje bien el centro del objeto detectado
-        self.debug_x = 0
-        self.debug_y = 0 
-        self.modo_calibracion = True  # Empezar en modo grabación de ruta
-        #Puntos para hacer prediccion lineal para mover el ROI
-        self.prev_cx = None
-        self.prev_cy = None
-
         # ---- DEBUG ----
         self.declare_parameter("debug", False)
         self.debug = self.get_parameter("debug").value
@@ -119,19 +108,47 @@ class ImageProcessor(Node):
         # ---- ACTUALIZACION PARAMETROS ----
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        # ---- PUBLISHER ----
-        # Posicion
-        self.object_location_publisher = self.create_publisher(ObjectLocation, "/object_position", qos_profile_sensor_data)  
-        #Debug
-        self.debug_publisher = self.create_publisher(CompressedImage, "camara_debug", qos_profile_sensor_data)
+        # ----- PUBLISHER ------
 
-        # Secciones y ruta base
-        sector_and_path_qos_profile = QoSProfile(
-            depth=1, # Guardar solo el último mensaje
-            durability=DurabilityPolicy.TRANSIENT_LOCAL
-        )
-        self.path_and_sectors_msg = PathAndSectors()
-        self.path_and_sectors_publisher = self.create_publisher(PathAndSectors,"path_and_sectors",sector_and_path_qos_profile)
+        # - Posicion coche -
+        self.declare_parameter("lista_coches", rclpy.Parameter.Type.STRING_ARRAY)
+        coches = self.get_parameter("lista_coches").value
+
+        # Creamos un pool de hilos para el procesamiento
+        self.thread_pool = ThreadPoolExecutor(max_workers=len(coches))
+
+        self.publisher_coche = {}
+        self.info_coches = {}
+        self.puntos_for_debug = {}
+
+        for car_name in coches:
+            self.publisher_coche[car_name] = self.create_publisher(ObjectLocation, f"/{car_name}/position", qos_profile_sensor_data)   
+
+            self.info_coches[car_name] = {
+                "prev_cx": None, 
+                "prev_cy": None,
+                "current_cx": None, 
+                "current_cy": None,
+                "roi_size": 150, 
+                # Puntos usados para construir la mascara
+                "puntos_trayectoria": [],
+                # Mascara generada 
+                "mascara_trayectoria": None,
+            }
+            
+            self.puntos_for_debug[car_name] = {
+                "debug_x" : 0,
+                "debu_y" : 0,
+                "debug_points" : [] 
+            } 
+
+        # ---  
+
+        # - Debug -
+        self.debug_publisher = self.create_publisher(CompressedImage, "camara_debug", qos_profile_sensor_data)
+        # --- 
+
+        # ---------------------------------------
 
         # ---- TIMER ----
         #Posicion
@@ -139,22 +156,26 @@ class ImageProcessor(Node):
         #Debug
         self.debug_timer = self.create_timer(0.066, self._tarea_debug, callback_group=self.debug_group)
 
-        # --- SECCIONES ---
-        self.declare_parameter("detection.sector_color", "naranja")
-        self.sector_color = self.get_parameter("detection.sector_color").value
-        # Detectar las secciones
-        self.sectors = self.obtener_secciones()
-
-
         self.get_logger().info("Node ImageProcessor Ready")
 
-    def obtener_secciones(self):
-        ret, frame = self.cam.read()
 
-        if not ret:
-            return
-        
-        return self.color_detector.find_sector(frame,self.sector_color)
+    def callback_control(self, msg):
+        # Modo operacion
+        if msg.data == True and self.modo_calibracion:
+
+            for car_name, info in self.info_coches.items():
+                info["mascara_trayectoria"] = self.generar_mascara(info["puntos_trayectoria"])
+            self.modo_calibracion = False
+
+            self.get_logger().info("Calibracion Terminada")
+
+        # Modo calibracion
+        elif msg.data == False:
+            self.modo_calibracion = True
+            for car_name, info in self.info_coches.items():
+                info["mascara_trayectoria"] = None
+
+            self.get_logger().warn("Reiniciando Calibracion")
 
     def parameters_callback(self, params):
         result = SetParametersResult(successful=True)
@@ -195,65 +216,24 @@ class ImageProcessor(Node):
             elif param.name == "debug":
                 self.debug = param.value
                 self.get_logger().info(f"Parámetro actualizado: debug = {self.debug}")
-
-            elif param.name == "modo_calibracion":
-
-                # Si pasamos de True a False (Fin de calibración)
-                if self.modo_calibracion == True and param.value == False:
-                    self.get_logger().info("Finalizando calibración: Generando máscara y enviando ruta...")
-                    self.mascara_trayectoria = self.generar_mascara()
-                    self.enviar_path_and_sectors()
-                
-                # Si pasamos de False a True (Reiniciar calibración)
-                elif param.value == True:
-                    self.get_logger().info("Reiniciando calibración: Limpiando datos previos")
-                    self.puntos_trayectoria = []
-                    self.path_and_sectors_msg.front = []
-                    self.path_and_sectors_msg.back = []
-
-                self.modo_calibracion = param.value            
-                
+ 
         return result
 
-    def enviar_path_and_sectors(self):
-        # Usamos el mensaje que ya tenemos instanciado
-        self.path_and_sectors_msg.camara_id = self.camara_id
-        
-        # Limpiamos los sectores previos por si acaso
-        self.path_and_sectors_msg.sectores = []
 
-        for segment in self.sectors:
-            line_msg = LineSegment()
-            
-            # Punto de inicio
-            line_msg.start.x = int(segment[0][0])
-            line_msg.start.y = int(segment[0][1])
-            
-            # Punto de fin
-            line_msg.end.x = int(segment[1][0])
-            line_msg.end.y = int(segment[1][1])
-            
-            # Añadir a la lista 'sectores' (según tu archivo .msg)
-            self.path_and_sectors_msg.sectores.append(line_msg)
-        
-        # Publicar el mensaje correcto
-        self.path_and_sectors_publisher.publish(self.path_and_sectors_msg)
-
-
-    def generar_mascara(self):
+    def generar_mascara(self,puntos_trayectoria):
         # Crear lienzo negro
         mascara = np.zeros((self.height, self.width), dtype=np.uint8)
 
-        if len(self.puntos_trayectoria) < 2:
+        if len(puntos_trayectoria) < 2:
             return mascara
 
-        puntos = np.array(self.puntos_trayectoria, dtype=np.int32)
+        puntos = np.array(puntos_trayectoria, dtype=np.int32)
 
         # Dibujar la trayectoria uniendo los puntos con líneas blancas
         # isClosed=True para cerrar el circuito al final
         cv.polylines(mascara, [puntos], isClosed=True, color=255, thickness=15)
 
-        kernel = np.ones((25, 25), np.uint8)
+        kernel = np.ones((20, 20), np.uint8)
         # Cierre morfologico para eliminar pequeños puntos negros que puedan quedar fruto de no detectar nada 
         mascara_final = cv.morphologyEx(mascara, cv.MORPH_CLOSE, kernel)
         # Dilatiacion expandimos los bordes de la mascara hacia fuera aumenta el area de la mascara
@@ -267,152 +247,172 @@ class ImageProcessor(Node):
             self.target_color_1, self.target_color_2, self.kernel_size
         )
 
-    def process_frame(self):
-        # Capturar frame
-        ret, frame = self.cam.read()
+    def publish_car_position(self,detections, proc_duration, x, y, car_name):
 
-        if not ret:
-            return
-        
-        if self.modo_calibracion: 
-            # Buscamos en todo el frame para detectar el coche
-            # Ahora detections es un diccionario: {"front": ..., "back": ...}
-            detections = self.color_detector.find_object(
-                frame, self.min_area, self.target_color_1, self.target_color_2
-            ) 
-
-            # Guardamos la trayectoria usando cualquier punto detectado
-            for key in ["front", "back"]:
-                p = detections[key]
-                if p is not None:         
-                    front_point = Point2D()
-                    back_point = Point2D()
-
-                    self.puntos_trayectoria.append((p["cx"], p["cy"]))
-                    if key == "front":
-                        front_point.x = p["cx"]
-                        front_point.y = p["cy"]
-                        
-                        self.path_and_sectors_msg.front.append(front_point)
-
-                    if key == "back":
-                        back_point.x = p["cx"]
-                        back_point.y = p["cy"]
-                        
-                        self.path_and_sectors_msg.back.append(back_point)
-                
-            return
-        
-        # Calcular punto de predicción (Extrapolación lineal)
-        if self.prev_cx is not None and self.current_cx is not None:
-            pred_x = self.current_cx + (self.current_cx - self.prev_cx)
-            pred_y = self.current_cy + (self.current_cy - self.prev_cy)
-        elif self.current_cx is not None:
-            pred_x, pred_y = self.current_cx, self.current_cy
-        else:
-            pred_x, pred_y = self.width // 2, self.height // 2
-            self.roi_size = max(self.width, self.height)
-            
-        half_roi = self.roi_size // 2
-        
-        # Calcular ROI
-        x1 = int(np.clip(pred_x - half_roi, 0, self.width))
-        y1 = int(np.clip(pred_y - half_roi, 0, self.height))
-        x2 = int(np.clip(pred_x + half_roi, 0, self.width))
-        y2 = int(np.clip(pred_y + half_roi, 0, self.height))
-
-        # Aplicamos el ROI y la máscara de trayectoria
-        roi_frame = frame[y1:y2, x1:x2]
-        frame_procesar = cv.bitwise_and(roi_frame, roi_frame, mask=self.mascara_trayectoria[y1:y2, x1:x2])
-        
-        # Buscar coche en el frame
-        start_proc = time.perf_counter()
-        detections = self.color_detector.find_object(
-            frame_procesar, self.min_area, self.target_color_1, self.target_color_2
-        )
-        end_proc = time.perf_counter()
-
-        # Calculamos el tiempo de procesado
-        proc_duration = (end_proc - start_proc) * 1000
-        
-        # Verificamos si se ha detectado al menos una parte del coche (frontal o trasera)
-        found_any = detections["front"] is not None or detections["back"] is not None
-
-        if found_any:
-            # Usamos una de las detecciones para actualizar el seguimiento del ROI (preferiblemente el frontal)
-            p_ref = detections["front"] if detections["front"] is not None else detections["back"]
-            
-            global_cx = x1 + p_ref["cx"]
-            global_cy = y1 + p_ref["cy"]
-    
-            self.prev_cx, self.prev_cy = self.current_cx, self.current_cy
-            self.current_cx, self.current_cy = global_cx, global_cy
-            self.roi_size = 150 
-             
-        else:
-            self.roi_size = min(self.roi_size + 50, max(self.width, self.height))
-            self.current_cx = None
-            self.prev_cx = None
-
-        # Publicar los puntos detectados
-        
-        valid_points_for_debug = []
         object_location_msg = ObjectLocation()
 
         object_location_msg.camara_id = self.camara_id
+        object_location_msg.coche = car_name
 
         for key in ["front", "back"]:
             p = detections[key]
             if p is not None:
                 if key == "front":
-                    object_location_msg.front.center.x = p["cx"] + x1 
-                    object_location_msg.front.center.y = p["cy"] + y1 
+                    object_location_msg.front.center.x = p["cx"] + x 
+                    object_location_msg.front.center.y = p["cy"] + y 
                     object_location_msg.front.color = self.target_color_1 
                 if key == "back":
-                    object_location_msg.back.center.x = p["cx"] + x1 
-                    object_location_msg.back.center.y = p["cy"] + y1 
-                    object_location_msg.back.color = self.target_color_1 
+                    object_location_msg.back.center.x = p["cx"] + x 
+                    object_location_msg.back.center.y = p["cy"] + y 
+                    object_location_msg.back.color = self.target_color_2
 
-                valid_points_for_debug.append(p)
-        
+                self.puntos_for_debug["debug_points"].append(p)
+
         object_location_msg.proc_time = proc_duration
 
         # Publicamos los puntos detectados
         object_location_msg.stamp = self.get_clock().now().to_msg()
-        self.object_location_publisher.publish(object_location_msg)
-    
-        # Configuración de valores de debug
-        if self.debug and not self.new_data_available:
-            self.next_debug_frame = frame.copy()
-            self.debug_x, self.debug_y = x1, y1 
-            self.next_debug_points = valid_points_for_debug
-            self.new_data_available = True        
 
+        self.publisher_coche[car_name].publish(object_location_msg)
+            
+    def process_frame(self):
+        ret, frame = self.cam.read()
 
-    def _tarea_debug(self):
+        if not ret: 
+            return
         
-        if not self.new_data_available:
+        futures = []
+        for car_name, info in self.info_coches.items():
+            futures.append(self.thread_pool.submit(self.tarea_por_coche, frame, car_name, info))
+    
+        # Esperamos a que todos terminen para tener la "foto completa" del frame
+        wait(futures)
+    
+        # Solo si el debug está activo, actualizamos la imagen de debug
+        if self.debug:
+            self.next_debug_frame = frame.copy() # Una sola copia para todo el proceso de dibujo
+            self.new_data_available = True
+
+    """
+    Funcion para calcular la posicion del ROI 
+    """
+    def calcular_roi_bounds(self, info):
+        # Recuperamos el estado actual del coche desde su diccionario 'info'
+        prev_cx = info["prev_cx"]
+        prev_cy = info["prev_cy"]
+        curr_cx = info["current_cx"]
+        curr_cy = info["current_cy"]
+        roi_size = info["roi_size"]
+    
+        # Lógica de predicción lineal (Extrapolación)
+        if prev_cx is not None and curr_cx is not None:
+            pred_x = curr_cx + (curr_cx - prev_cx)
+            pred_y = curr_cy + (curr_cy - prev_cy)
+        elif curr_cx is not None:
+            pred_x, pred_y = curr_cx, curr_cy
+        else:
+            # Si se perdió el rastro, buscamos en el centro y ampliamos ROI
+            pred_x, pred_y = self.width // 2, self.height // 2
+            info["roi_size"] = max(self.width, self.height)
+            roi_size = info["roi_size"]
+    
+        half_roi = roi_size // 2
+        
+        # Ajustar a los límites de la imagen
+        x1 = int(np.clip(pred_x - half_roi, 0, self.width))
+        y1 = int(np.clip(pred_y - half_roi, 0, self.height))
+        x2 = int(np.clip(pred_x + half_roi, 0, self.width))
+        y2 = int(np.clip(pred_y + half_roi, 0, self.height))
+        
+        return x1, y1, x2, y2
+
+    """
+    Funcion que ejecutan los threads que se encargan de buscar los Stikers de los coches en el frame
+    """
+    def tarea_por_coche(self, frame, car_name, info):
+        # --- MODO CALIBRACIÓN ---
+        if self.modo_calibracion:
+            detections = self.color_detector.find_object(frame, self.min_area, self.target_color_1, self.target_color_2)
+            if detections["front"] is not None:
+                info["puntos_trayectoria"].append((detections["front"]["cx"], detections["front"]["cy"]))
+            # Usamos 0,0 como offset porque es el frame completo
+            self.publish_car_position(detections, 0.0, 0, 0, car_name)
+            return
+    
+        # --- MODO NORMAL ---
+        # 1. Obtener límites según predicción
+        x1, y1, x2, y2 = self.calcular_roi_bounds(info)
+    
+        # 2. Recortar y aplicar máscara específica del coche
+        roi_frame = frame[y1:y2, x1:x2]
+        if info["mascara_trayectoria"] is not None:
+            mask_roi = info["mascara_trayectoria"][y1:y2, x1:x2]
+            roi_frame = cv.bitwise_and(roi_frame, roi_frame, mask=mask_roi)
+    
+        # 3. Detectar
+        start = time.perf_counter()
+        detections = self.color_detector.find_object(roi_frame, self.min_area, self.target_color_1, self.target_color_2)
+        duration = (time.perf_counter() - start) * 1000
+    
+        # 4. ACTUALIZAR ESTADO (Crucial para que el hilo sepa dónde ir después)
+        found_any = detections["front"] is not None or detections["back"] is not None
+        
+        if found_any:
+            # Preferimos el frontal para el seguimiento
+            p_ref = detections["front"] if detections["front"] is not None else detections["back"]
+            
+            # Guardamos coordenadas globales
+            global_cx = x1 + p_ref["cx"]
+            global_cy = y1 + p_ref["cy"]
+    
+            info["prev_cx"], info["prev_cy"] = info["current_cx"], info["current_cy"]
+            info["current_cx"], info["current_cy"] = global_cx, global_cy
+            info["roi_size"] = 150 # Resetear tamaño de búsqueda
+            
+        else:
+            # Si no hay detección, ampliar zona de búsqueda para el próximo frame
+            info["roi_size"] = min(info["roi_size"] + 50, max(self.width, self.height))
+            info["current_cx"] = None
+            info["prev_cx"] = None
+            self.puntos_for_debug[car_name] = None
+    
+        # 5. Publicar
+        self.publish_car_position(detections, duration, x1, y1, car_name)    
+        
+        if self.debug and self.new_data_available:
+            # Guardar para el dibujo de debug
+            self.puntos_for_debug[car_name]["debug_x"] = x1
+            self.puntos_for_debug[car_name]["debug_y"] = y1
+        
+    def _tarea_debug(self):
+
+        if not self.new_data_available or self.next_debug_frame is None:
             return
         
         self.new_data_available = False
-
-        for p in self.next_debug_points:
-            cv.circle(self.next_debug_frame, (self.debug_x + p["cx"], self.debug_y + p["cy"]), 5, (0, 255, 255), -1) 
-
-        success, buffer = cv.imencode('.jpg', self.next_debug_frame, [cv.IMWRITE_JPEG_QUALITY, 70])
         
+        # Dibujamos los puntos de TODOS los coches que estén en el diccionario
+        for car_name, debug_info in self.puntos_for_debug.items():
+            if debug_info is not None:
+                for p in debug_info["debug_points"]:
+                    # Dibujamos en el frame de debug (que ya es una copia)
+                    cv.circle(self.next_debug_frame, (debug_info["x"] + p["cx"], debug_info["y"] + p["cy"]), 10, (0, 255, 255), -1)
+    
+        # Comprimir y publicar
+        success, buffer = cv.imencode('.jpg', self.next_debug_frame, [cv.IMWRITE_JPEG_QUALITY, 70])
         if success:
-            img_msg = CompressedImage()
-            img_msg.header.stamp = self.get_clock().now().to_msg()
-            img_msg.format = "jpeg"
-            img_msg.data = buffer.tobytes()
-            self.debug_publisher.publish(img_msg) 
+            msg = CompressedImage()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.format = "jpeg"
+            msg.data = buffer.tobytes()
+            self.debug_publisher.publish(msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
     image_processor = ImageProcessor()
     
-    executor = MultiThreadedExecutor(num_threads=4) 
+    executor = MultiThreadedExecutor(num_threads=3) 
     executor.add_node(image_processor)
 
     try:

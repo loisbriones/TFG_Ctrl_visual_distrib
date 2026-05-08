@@ -3,11 +3,21 @@
 import rclpy
 from rclpy.node import Node
 from image_processor_pkg.msg import SpeedCarril
-from std_msgs.msg import Int32
+# Perfil para QoS preconfigurado, tiene:
+#   History: Keep last,
+#   Depth: 5,
+#   Reliability: Best effort,
+#   Durability: Volatile,
+#   Deadline: Default,
+#   Lifespan: Default,
+#   Liveliness: System default,
+#   Liveliness lease duration: default,
+#   avoid ros namespace conventions: false
+# Informacion sacada de: https://docs.ros2.org/latest/api/rclcpp/classrclcpp_1_1SensorDataQoS.html
+from rclpy.qos import qos_profile_sensor_data
 
 
 from arduino_controller import ArduinoController
-
 
 class ArduinoBridgeNode(Node):
     def __init__(self):
@@ -22,7 +32,7 @@ class ArduinoBridgeNode(Node):
         self.rails = {}
         
         for i in range(num_coches):
-            self.subscription = self.create_subscription(SpeedCarril, f"/pwd/carril_coche{i}", self.pwm_callback, 10)
+            self.subscription = self.create_subscription(SpeedCarril,"pwd", self.pwm_callback, qos_profile_sensor_data)
             self.rails[f"r{i}"] = 0
 
         # --- PARAMETROS ---
@@ -43,7 +53,7 @@ class ArduinoBridgeNode(Node):
 
         self.arduino.set_both_rails(self.calib_speed, self.calib_speed)
 
-    def pwm_callback(self, msg: Int32):
+    def pwm_callback(self, msg: SpeedCarril):
         """
         Cada vez que llega un nuevo valor de PWM, lo enviamos al Arduino.
         """
