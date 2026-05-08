@@ -5,7 +5,8 @@ from rclpy.node import Node
 import cv2 as cv
 import numpy as np
 from image_processor_pkg.msg import ObjectLocation, PathAndSectors, LineSegment, Point2D
-from sensor_msgs.msg import CompressedImage, Bool
+from sensor_msgs.msg import CompressedImage
+from std_msgs.msg import Bool
 
 # Perfil para QoS preconfigurado, tiene:
 #   History: Keep last,
