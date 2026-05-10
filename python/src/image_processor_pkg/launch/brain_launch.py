@@ -8,25 +8,34 @@ def generate_launch_description():
     pkg_share = get_package_share_directory('image_processor_pkg')
     params_file = os.path.join(pkg_share, 'config', 'params.yaml')
 
-    # Cargamos la lista de coches desde el YAML para iterar sobre ella
+    # 1. Cargamos la lista de coches desde el YAML
     with open(params_file, 'r') as f:
         config = yaml.safe_load(f)
-        # Accedemos a la lista definida en /**: ros__parameters
-        coches = config['/**']['ros__parameters']['coches_activos']
+        # CORRECCIÓN: Cambiado 'coches_activos' a 'coches' para que coincida con params.yaml
+        coches = config['/**']['ros__parameters']['coches']
 
     ld = LaunchDescription()
 
-    # 1. Lanzamos un controlador por cada coche
-    for car_name in coches:
+    # 2. Lanzamos un controlador por cada coche
+    for indice, car_name in enumerate(coches):
+        # Asignamos dinámicamente el carril (car1 -> "r1", car2 -> "r2", etc.)
+        carril_id = f"r{indice + 1}" 
+        
         ld.add_action(Node(
             package='image_processor_pkg',
             executable='controller_node.py',
             name='controller',
-            namespace=car_name, # Crea /coche_01/..., /coche_02/...
-            parameters=[params_file, {'car_name': car_name}]
+            namespace=car_name, 
+            parameters=[
+                params_file, 
+                {
+                    'car_name': car_name,
+                    'carril_asignado': carril_id # Pasamos el carril directamente por parámetro
+                }
+            ]
         ))
 
-    # 2. Lanzamos el único nodo de Arduino
+    # 3. Lanzamos el único nodo de Arduino
     ld.add_action(Node(
         package='image_processor_pkg',
         executable='arduino_bridge_node.py',
