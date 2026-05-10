@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 import cv2 as cv
 import numpy as np
-from image_processor_pkg.msg import ObjectLocation, PathAndSectors, LineSegment, Point2D
+from image_processor_pkg.msg import CarLocation,Point2D
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
 
@@ -49,7 +49,7 @@ class ImageProcessor(Node):
         self.debug_group = MutuallyExclusiveCallbackGroup()
         
         # ---- ID NODO ---- 
-        self.declare_parameter("camara_id","rbiTemp")  
+        self.declare_parameter("camara_id","camara")  
         self.camara_id =  self.get_parameter("camara_id").value
         # -----------------
 
@@ -73,8 +73,9 @@ class ImageProcessor(Node):
         # ---------------------
     
         # ---- CALIBRACION ----
+        self.declare_parameter("modo_calibracion",True)
+        self.modo_calibracion = self.get_parameter("modo_calibracion").value
         # TOPIC para controlar el modo de calibracion
-        self.modo_calibracion = True
         self.sub_modo_calibracion = self.create_subscription(Bool,"/modo_calibracion", self.callback_control,10)
         #Trayectoria base que sigue el coche
         self.puntos_trayectoria = []
@@ -84,18 +85,18 @@ class ImageProcessor(Node):
         
         # ----- DETECTION -----
         self.declare_parameter("detection.min_area", 50)
-        self.declare_parameter("detection.target_color_1", "rojo")
-        self.declare_parameter("detection.target_color_2", "verde")
+        self.declare_parameter("detection.stiker_front", "rojo")
+        self.declare_parameter("detection.stiker_back", "verde")
         self.declare_parameter("detection.kernel_size", 5)
 
         self.min_area = self.get_parameter("detection.min_area").value
-        self.target_color_1 = self.get_parameter("detection.target_color_1").value
-        self.target_color_2 = self.get_parameter("detection.target_color_2").value
+        self.stiker_front = self.get_parameter("detection.stiker_front").value
+        self.stiker_back = self.get_parameter("detection.stiker_back").value
         self.kernel_size = self.get_parameter("detection.kernel_size").value
         # ---------------------
 
         # --- COLOR DETECTOR ---
-        self.color_detector = ColorDetector(self.target_color_1, self.target_color_2, self.kernel_size)
+        self.color_detector = ColorDetector(self.stiker_front, self.stiker_back, self.kernel_size)
         # ---------------------- 
         
         # ---- DEBUG ----
@@ -112,18 +113,18 @@ class ImageProcessor(Node):
         # ----- PUBLISHER ------
 
         # - Posicion coche -
-        self.declare_parameter("lista_coches", rclpy.Parameter.Type.STRING_ARRAY)
-        coches = self.get_parameter("lista_coches").value
+        self.declare_parameter("coches", ["car"])
+        self.coches = self.get_parameter("coches").value
 
         # Creamos un pool de hilos para el procesamiento
-        self.thread_pool = ThreadPoolExecutor(max_workers=len(coches))
+        self.thread_pool = ThreadPoolExecutor(max_workers=len(self.coches))
 
         self.publisher_coche = {}
         self.info_coches = {}
         self.puntos_for_debug = {}
 
-        for car_name in coches:
-            self.publisher_coche[car_name] = self.create_publisher(ObjectLocation, f"/{car_name}/position", qos_profile_sensor_data)   
+        for car_name in self.coches:
+            self.publisher_coche[car_name] = self.create_publisher(CarLocation, f"/{car_name}/position", qos_profile_sensor_data)   
 
             self.info_coches[car_name] = {
                 "prev_cx": None, 
@@ -164,17 +165,19 @@ class ImageProcessor(Node):
         # Modo operacion
         if msg.data == True and self.modo_calibracion:
 
-            for car_name, info in self.info_coches.items():
-                info["mascara_trayectoria"] = self.generar_mascara(info["puntos_trayectoria"])
+            for car_name in self.coches:
+                self.info_coches[car_name]["mascara_trayectoria"] = self.generar_mascara(self.info_coches[car_name]["puntos_trayectoria"])
+
             self.modo_calibracion = False
 
             self.get_logger().info("Calibracion Terminada")
 
         # Modo calibracion
         elif msg.data == False:
+            for car_name in self.coches:
+                self.info_coches[car_name]["mascara_trayectoria"] = None
+
             self.modo_calibracion = True
-            for car_name, info in self.info_coches.items():
-                info["mascara_trayectoria"] = None
 
             self.get_logger().warn("Reiniciando Calibracion")
 
@@ -192,18 +195,18 @@ class ImageProcessor(Node):
                         f"Parámetro actualizado: min_area = {self.min_area}"
                     )
 
-            elif param.name == "detection.target_color_1":
-                self.target_color_1 = param.value
+            elif param.name == "detection.stiker_front":
+                self.stiker_front = param.value
                 self.actualizar_detector()
                 self.get_logger().info(
-                    f"Parámetro actualizado: color_1 = {self.target_color_1}"
+                    f"Parámetro actualizado: color_1 = {self.stiker_front}"
                 )
 
-            elif param.name == "detection.target_color_2":
-                self.target_color_2 = param.value
+            elif param.name == "detection.stiker_back":
+                self.stiker_back = param.value
                 self.actualizar_detector()
                 self.get_logger().info(
-                    f"Parámetro actualizado: color_2 = {self.target_color_2}"
+                    f"Parámetro actualizado: color_2 = {self.stiker_back}"
                 )
 
             elif param.name == "detection.kernel_size":
@@ -245,12 +248,12 @@ class ImageProcessor(Node):
     def actualizar_detector(self):
         """Función auxiliar para re-instanciar el detector con los nuevos valores."""
         self.color_detector = ColorDetector(
-            self.target_color_1, self.target_color_2, self.kernel_size
+            self.stiker_front, self.stiker_back, self.kernel_size
         )
 
     def publish_car_position(self,detections, proc_duration, x, y, car_name):
 
-        object_location_msg = ObjectLocation()
+        object_location_msg = CarLocation()
 
         object_location_msg.camara_id = self.camara_id
         object_location_msg.coche = car_name
@@ -261,11 +264,11 @@ class ImageProcessor(Node):
                 if key == "front":
                     object_location_msg.front.center.x = p["cx"] + x 
                     object_location_msg.front.center.y = p["cy"] + y 
-                    object_location_msg.front.color = self.target_color_1 
+                    object_location_msg.front.color = self.stiker_front
                 if key == "back":
                     object_location_msg.back.center.x = p["cx"] + x 
                     object_location_msg.back.center.y = p["cy"] + y 
-                    object_location_msg.back.color = self.target_color_2
+                    object_location_msg.back.color = self.stiker_back
 
                 self.puntos_for_debug["debug_points"].append(p)
 
@@ -333,7 +336,7 @@ class ImageProcessor(Node):
     def tarea_por_coche(self, frame, car_name, info):
         # --- MODO CALIBRACIÓN ---
         if self.modo_calibracion:
-            detections = self.color_detector.find_object(frame, self.min_area, self.target_color_1, self.target_color_2)
+            detections = self.color_detector.find_object(frame, self.min_area, self.stiker_front, self.stiker_back)
             if detections["front"] is not None:
                 info["puntos_trayectoria"].append((detections["front"]["cx"], detections["front"]["cy"]))
             # Usamos 0,0 como offset porque es el frame completo
@@ -352,7 +355,7 @@ class ImageProcessor(Node):
     
         # 3. Detectar
         start = time.perf_counter()
-        detections = self.color_detector.find_object(roi_frame, self.min_area, self.target_color_1, self.target_color_2)
+        detections = self.color_detector.find_object(roi_frame, self.min_area, self.stiker_front, self.stiker_back)
         duration = (time.perf_counter() - start) * 1000
     
         # 4. ACTUALIZAR ESTADO (Crucial para que el hilo sepa dónde ir después)

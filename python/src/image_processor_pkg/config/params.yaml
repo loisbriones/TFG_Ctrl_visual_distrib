@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
     debug: False
-    num_coches: 1
+    modo_calibracion: True
     coches: ["car1"]
     
     #Parametros para la camara
@@ -10,8 +10,8 @@
 
     # Parametros para el modulo de deteccion 
     detection:
-      target_color_1: "verde"
-      target_color_2: "azul"
+      stiker_front: "verde"
+      stiker_back: "azul"
       sector_color: "naranja"
       kernel_size: 5
       min_area: 70 

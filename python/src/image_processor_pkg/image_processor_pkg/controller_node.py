@@ -18,7 +18,7 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from std_msgs.msg import Bool
 
-from image_processor_pkg.msg import ObjectLocation, SpeedCarril 
+from image_processor_pkg.msg import CarLocation, SpeedCarril 
 
 import time
 import math
@@ -31,7 +31,7 @@ class CarControllerNode(Node):
         super().__init__("car_controller")
  
         # Subscriber para recibir la posicion del coche_i
-        self.sub_car_position = self.create_subscription(ObjectLocation, "position" ,self.control ,qos_profile_sensor_data)
+        self.sub_car_position = self.create_subscription(CarLocation, "position" ,self.control ,qos_profile_sensor_data)
         # Publisher para enviar el pwd del coche_i
         self.rail = self.create_publisher(SpeedCarril, "pwd" ,qos_profile_sensor_data)
                 
@@ -62,10 +62,10 @@ class CarControllerNode(Node):
             self.get_logger().warn("Reiniciando calibración...")
 
     # Funcion donde se realiza el control de los coches
-    def control(self, msg:ObjectLocation):
+    def control(self, msg:CarLocation):
         return
 
-    def _pos_cb(self, msg: ObjectLocation):
+    def _pos_cb(self, msg: CarLocation):
         """Extrae marcadores usando la jerarquía msg.stiker.center.x/y"""
         if not self.map_ready:
             return

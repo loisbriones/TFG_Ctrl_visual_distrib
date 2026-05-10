@@ -16,85 +16,85 @@ COLOR_RANGES = {
 
 
 class ColorDetector:
-    def __init__(self, target_color_1, target_color_2, kernel_size):
+    def __init__(self, stiker_front, stiker_back, kernel_size):
         # Configuramos el kernel que vamos a usar para detectar los colores
         self.kernel = cv.getStructuringElement(
             cv.MORPH_RECT, (kernel_size, kernel_size)
         )
 
         # Establecemos el primer color que queremos buscar
-        if target_color_1 == "rojo":
-            self.target_color_1_lower_red1, self.target_color_1_upper_red1 = (
+        if stiker_front == "rojo":
+            self.stiker_front_lower_red1, self.stiker_front_upper_red1 = (
                 COLOR_RANGES["rojo"][0]
             )
-            self.target_color_1_lower_red2, self.target_color_1_upper_red2 = (
+            self.stiker_front_lower_red2, self.stiker_front_upper_red2 = (
                 COLOR_RANGES["rojo"][1]
             )
         else:
-            self.target_color_1_lower, self.target_color_1_upper = COLOR_RANGES[
-                target_color_1
+            self.stiker_front_lower, self.stiker_front_upper = COLOR_RANGES[
+                stiker_front
             ][0]
 
         # Establecemos el segundo color que queremos buscar
-        if target_color_2 == "rojo":
-            self.target_color_2_lower_red1, self.target_color_2_upper_red1 = (
+        if stiker_back == "rojo":
+            self.stiker_back_lower_red1, self.stiker_back_upper_red1 = (
                 COLOR_RANGES["rojo"][0]
             )
-            self.target_color_2_lower_red2, self.target_color_2_upper_red2 = (
+            self.stiker_back_lower_red2, self.stiker_back_upper_red2 = (
                 COLOR_RANGES["rojo"][1]
             )
         else:
-            self.target_color_2_lower, self.target_color_2_upper = COLOR_RANGES[
-                target_color_2
+            self.stiker_back_lower, self.stiker_back_upper = COLOR_RANGES[
+                stiker_back
             ][0]
 
-    def find_object(self, frame, min_area, target_color_1, target_color_2):
+    def find_object(self, frame, min_area, stiker_front, stiker_back):
         # Convertimos el frame que tenemos que procesar a HSV
         frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
         
-        # Generamos una mascara donde solo van los pixeles que tiene target_color_1
-        if target_color_1 == "rojo":
-            mask_target_color_1 = cv.add(
+        # Generamos una mascara donde solo van los pixeles que tiene stiker_front
+        if stiker_front == "rojo":
+            mask_stiker_front = cv.add(
                 cv.inRange(
                     frame_hsv,
-                    self.target_color_1_lower_red1,
-                    self.target_color_1_upper_red1,
+                    self.stiker_front_lower_red1,
+                    self.stiker_front_upper_red1,
                 ),
                 cv.inRange(
                     frame_hsv,
-                    self.target_color_1_lower_red2,
-                    self.target_color_1_upper_red2,
+                    self.stiker_front_lower_red2,
+                    self.stiker_front_upper_red2,
                 ),
             )
         else:
-            mask_target_color_1 = cv.inRange(
-                frame_hsv, self.target_color_1_lower, self.target_color_1_upper
+            mask_stiker_front = cv.inRange(
+                frame_hsv, self.stiker_front_lower, self.stiker_front_upper
             )
 
         # Generamos una mascara donde solo van los pixeles que tienen traget_color_2 
-        if target_color_2 == "rojo":
-            mask_target_color_2 = cv.add(
+        if stiker_back == "rojo":
+            mask_stiker_back = cv.add(
                 cv.inRange(
                     frame_hsv,
-                    self.target_color_2_lower_red1,
-                    self.target_color_2_upper_red1,
+                    self.stiker_back_lower_red1,
+                    self.stiker_back_upper_red1,
                 ),
                 cv.inRange(
                     frame_hsv,
-                    self.target_color_2_lower_red2,
-                    self.target_color_2_upper_red2,
+                    self.stiker_back_lower_red2,
+                    self.stiker_back_upper_red2,
                 ),
             )
         else:
-            mask_target_color_2 = cv.inRange(
-                frame_hsv, self.target_color_2_lower, self.target_color_2_upper
+            mask_stiker_back = cv.inRange(
+                frame_hsv, self.stiker_back_lower, self.stiker_back_upper
             )
 
 
-        #Buscamos los objetos dentro de la mascara para target_color_1
-        front_color = self._detectar(mask_target_color_1, target_color_1, min_area) 
-        #Buscamos los objetos dentro de la mascara para target_color_2
-        back_color = self._detectar(mask_target_color_2, target_color_2, min_area) 
+        #Buscamos los objetos dentro de la mascara para stiker_front
+        front_color = self._detectar(mask_stiker_front, stiker_front, min_area) 
+        #Buscamos los objetos dentro de la mascara para stiker_back
+        back_color = self._detectar(mask_stiker_back, stiker_back, min_area) 
 
         return {"front": front_color, "back": back_color }
 
@@ -129,18 +129,18 @@ class ColorDetector:
             mask_sector_color = cv.add(
                 cv.inRange(
                     frame_hsv,
-                    self.target_color_1_lower_red1,
-                    self.target_color_1_upper_red1,
+                    self.stiker_front_lower_red1,
+                    self.stiker_front_upper_red1,
                 ),
                 cv.inRange(
                     frame_hsv,
-                    self.target_color_1_lower_red2,
-                    self.target_color_1_upper_red2,
+                    self.stiker_front_lower_red2,
+                    self.stiker_front_upper_red2,
                 ),
             )
         else:
             mask_sector_color = cv.inRange(
-                frame_hsv, self.target_color_1_lower, self.target_color_1_upper
+                frame_hsv, self.stiker_front_lower, self.stiker_front_upper
             )
 
         section_lines: list[tuple[tuple[int, int], tuple[int, int]]] = []
