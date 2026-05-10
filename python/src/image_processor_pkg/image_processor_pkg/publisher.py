@@ -185,7 +185,7 @@ class ImageProcessor(Node):
 
     def callback_control(self, msg):
         # Modo operacion
-        if msg.data == True and self.modo_calibracion:
+        if msg.data == False and self.modo_calibracion:
 
             for car_name in self.coches:
                 self.info_coches[car_name]["mascara_trayectoria"] = self.generar_mascara(self.info_coches[car_name]["puntos_trayectoria"])
@@ -195,7 +195,7 @@ class ImageProcessor(Node):
             self.get_logger().info("Calibracion Terminada")
 
         # Modo calibracion
-        elif msg.data == False:
+        elif msg.data == True:
             for car_name in self.coches:
                 self.info_coches[car_name]["mascara_trayectoria"] = None
 
