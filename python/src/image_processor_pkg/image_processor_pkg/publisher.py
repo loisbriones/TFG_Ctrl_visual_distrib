@@ -24,6 +24,8 @@ from rcl_interfaces.msg import SetParametersResult
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
+from threading import Thread,Lock
+
 from procesar_imagen import ColorDetector
 from concurrent.futures import ThreadPoolExecutor, wait
 import time
@@ -50,6 +52,7 @@ class ImageProcessor(Node):
         
         # ---- ID NODO ---- 
         self.declare_parameter("camara_id","camara")  
+        # Lo recibimos como parametro pero se envia desde el launchfile
         self.camara_id =  self.get_parameter("camara_id").value
         # -----------------
 
@@ -81,18 +84,21 @@ class ImageProcessor(Node):
         self.puntos_trayectoria = []
         #Mascara para calcular la trayectoria
         self.mascara_trayectoria = None
+        #Tamaño kernel para generar la imagen
+        self.declare_parameter("camera.mascara_kernel_size",25) 
+        self.mascara_kernel_size =  self.get_parameter("camera.mascara_kernel_size").value
         # --------------------
         
         # ----- DETECTION -----
-        self.declare_parameter("detection.min_area", 50)
-        self.declare_parameter("detection.stiker_front", "rojo")
-        self.declare_parameter("detection.stiker_back", "verde")
-        self.declare_parameter("detection.kernel_size", 5)
+        self.declare_parameter("camera.detection.min_area", 50)
+        self.declare_parameter("camera.detection.stiker_front", "rojo")
+        self.declare_parameter("camera.detection.stiker_back", "verde")
+        self.declare_parameter("camera.detection.kernel_size", 5)
 
-        self.min_area = self.get_parameter("detection.min_area").value
-        self.stiker_front = self.get_parameter("detection.stiker_front").value
-        self.stiker_back = self.get_parameter("detection.stiker_back").value
-        self.kernel_size = self.get_parameter("detection.kernel_size").value
+        self.min_area = self.get_parameter("camera.detection.min_area").value
+        self.stiker_front = self.get_parameter("camera.detection.stiker_front").value
+        self.stiker_back = self.get_parameter("camera.detection.stiker_back").value
+        self.kernel_size = self.get_parameter("camera.detection.kernel_size").value
         # ---------------------
 
         # --- COLOR DETECTOR ---
@@ -100,12 +106,12 @@ class ImageProcessor(Node):
         # ---------------------- 
         
         # ---- DEBUG ----
-        self.declare_parameter("debug", False)
-        self.debug = self.get_parameter("debug").value
+        self.declare_parameter("camera.debug", False)
+        self.debug = self.get_parameter("camera.debug").value
         self.next_debug_frame = None
-        self.next_debug_points = None
+        self.puntos_for_debug = {}
         #Para controlar el cuando hay datos de debug y cuando no
-        self.new_data_available = False
+        self.save_data  = False
 
         # ---- ACTUALIZACION PARAMETROS ----
         self.add_on_set_parameters_callback(self.parameters_callback)
@@ -118,10 +124,11 @@ class ImageProcessor(Node):
 
         # Creamos un pool de hilos para el procesamiento
         self.thread_pool = ThreadPoolExecutor(max_workers=len(self.coches))
+        # Flag de control para saber si todos los hilos acabaron de ejecutarse
+        self.is_processing = False
 
         self.publisher_coche = {}
         self.info_coches = {}
-        self.puntos_for_debug = {}
 
         for car_name in self.coches:
             self.publisher_coche[car_name] = self.create_publisher(CarLocation, f"/{car_name}/position", qos_profile_sensor_data)   
@@ -140,7 +147,7 @@ class ImageProcessor(Node):
             
             self.puntos_for_debug[car_name] = {
                 "debug_x" : 0,
-                "debu_y" : 0,
+                "debug_y" : 0,
                 "debug_points" : [] 
             } 
 
@@ -157,9 +164,24 @@ class ImageProcessor(Node):
         self.timer = self.create_timer(0.033, self.process_frame, callback_group=self.image_processor_group)
         #Debug
         self.debug_timer = self.create_timer(0.066, self._tarea_debug, callback_group=self.debug_group)
+        
+        # --- THREAD CAPTURA ---
+        self.latest_frame = None
+        self.frame_lock = Lock()
+        self.running = True
+        # Iniciamos el hilo de captura inmediatamente
+        self.capture_thread = Thread(target=self._capture_loop, daemon=True)
+        self.capture_thread.start()
 
         self.get_logger().info("Node ImageProcessor Ready")
 
+    def _capture_loop(self):
+        """Hilo dedicado a vaciar el hardware. Ritmo dictado por la cámara."""
+        while self.running and rclpy.ok():
+            ret, frame = self.cam.read()
+            if ret:
+                with self.frame_lock:
+                    self.latest_frame = frame
 
     def callback_control(self, msg):
         # Modo operacion
@@ -185,7 +207,7 @@ class ImageProcessor(Node):
         result = SetParametersResult(successful=True)
 
         for param in params:
-            if param.name == "detection.min_area":
+            if param.name == "camera.detection.min_area":
                 if param.value < 0:
                     result.successful = False
                     result.reason = "El área mínima no puede ser negativa"
@@ -195,21 +217,29 @@ class ImageProcessor(Node):
                         f"Parámetro actualizado: min_area = {self.min_area}"
                     )
 
-            elif param.name == "detection.stiker_front":
+            elif param.name == "camera.detection.stiker_front":
                 self.stiker_front = param.value
                 self.actualizar_detector()
                 self.get_logger().info(
                     f"Parámetro actualizado: color_1 = {self.stiker_front}"
                 )
 
-            elif param.name == "detection.stiker_back":
+            elif param.name == "camera.detection.stiker_back":
                 self.stiker_back = param.value
                 self.actualizar_detector()
                 self.get_logger().info(
                     f"Parámetro actualizado: color_2 = {self.stiker_back}"
                 )
 
-            elif param.name == "detection.kernel_size":
+            elif param.name == "camera.detection.kernel_size":
+                if param.value % 2 == 0:
+                    result.successful = False
+                    result.reason = "El kernel_size debe ser un número impar"
+                else:
+                    # Para que tenga efecto es necesario poner el modo calibracion por seguridad
+                    self.mascara_kernel_size = param.value
+
+            elif param.name == "camera.mascara_kernel_size":
                 if param.value % 2 == 0:
                     result.successful = False
                     result.reason = "El kernel_size debe ser un número impar"
@@ -219,6 +249,8 @@ class ImageProcessor(Node):
 
             elif param.name == "debug":
                 self.debug = param.value
+                self.save_data = param.value 
+                     
                 self.get_logger().info(f"Parámetro actualizado: debug = {self.debug}")
  
         return result
@@ -237,7 +269,8 @@ class ImageProcessor(Node):
         # isClosed=True para cerrar el circuito al final
         cv.polylines(mascara, [puntos], isClosed=True, color=255, thickness=15)
 
-        kernel = np.ones((20, 20), np.uint8)
+        kernel = np.ones((self.mascara_kernel_size, self.mascara_kernel_size), np.uint8)
+
         # Cierre morfologico para eliminar pequeños puntos negros que puedan quedar fruto de no detectar nada 
         mascara_final = cv.morphologyEx(mascara, cv.MORPH_CLOSE, kernel)
         # Dilatiacion expandimos los bordes de la mascara hacia fuera aumenta el area de la mascara
@@ -270,33 +303,47 @@ class ImageProcessor(Node):
                     object_location_msg.back.center.y = p["cy"] + y 
                     object_location_msg.back.color = self.stiker_back
 
-                self.puntos_for_debug["debug_points"].append(p)
-
         object_location_msg.proc_time = proc_duration
 
         # Publicamos los puntos detectados
         object_location_msg.stamp = self.get_clock().now().to_msg()
 
         self.publisher_coche[car_name].publish(object_location_msg)
-            
-    def process_frame(self):
-        ret, frame = self.cam.read()
-
-        if not ret: 
-            return
         
-        futures = []
-        for car_name, info in self.info_coches.items():
-            futures.append(self.thread_pool.submit(self.tarea_por_coche, frame, car_name, info))
-    
-        # Esperamos a que todos terminen para tener la "foto completa" del frame
-        wait(futures)
-    
-        # Solo si el debug está activo, actualizamos la imagen de debug
-        if self.debug:
-            self.next_debug_frame = frame.copy() # Una sola copia para todo el proceso de dibujo
-            self.new_data_available = True
+        
+    def process_frame(self):
 
+        """Timer de ROS que consume el último frame disponible."""
+        if self.is_processing:
+            return
+
+        current_frame = None
+        with self.frame_lock:
+            if self.latest_frame is not None:
+                current_frame = self.latest_frame
+                self.latest_frame = None # Consumimos el frame para no repetir procesado
+
+        if current_frame is None:
+            return
+
+        self.is_processing = True
+        try:
+
+            futures = []
+            for car_name in self.coches:                
+                futures.append(self.thread_pool.submit(self.tarea_por_coche, current_frame, car_name, self.info_coches[car_name]))
+            
+            # Esperamos a que todos los hilos terminen
+            wait(futures)
+    
+            if self.debug and self.save_data:
+                    self.next_debug_frame = current_frame.copy()
+                    self.save_data = False 
+    
+        finally:
+            # Marcamos que terminamos de procesar
+            self.is_processing = False
+            
     """
     Funcion para calcular la posicion del ROI 
     """
@@ -343,11 +390,11 @@ class ImageProcessor(Node):
             self.publish_car_position(detections, 0.0, 0, 0, car_name)
             return
     
-        # --- MODO NORMAL ---
+        # --- MODO OPERACION---
         # 1. Obtener límites según predicción
         x1, y1, x2, y2 = self.calcular_roi_bounds(info)
     
-        # 2. Recortar y aplicar máscara específica del coche
+        # 2. Calculamos el ROI y aplicamos la mascara
         roi_frame = frame[y1:y2, x1:x2]
         if info["mascara_trayectoria"] is not None:
             mask_roi = info["mascara_trayectoria"][y1:y2, x1:x2]
@@ -358,7 +405,6 @@ class ImageProcessor(Node):
         detections = self.color_detector.find_object(roi_frame, self.min_area, self.stiker_front, self.stiker_back)
         duration = (time.perf_counter() - start) * 1000
     
-        # 4. ACTUALIZAR ESTADO (Crucial para que el hilo sepa dónde ir después)
         found_any = detections["front"] is not None or detections["back"] is not None
         
         if found_any:
@@ -383,25 +429,25 @@ class ImageProcessor(Node):
         # 5. Publicar
         self.publish_car_position(detections, duration, x1, y1, car_name)    
         
-        if self.debug and self.new_data_available:
+        if self.debug and self.save_data:
             # Guardar para el dibujo de debug
             self.puntos_for_debug[car_name]["debug_x"] = x1
             self.puntos_for_debug[car_name]["debug_y"] = y1
         
     def _tarea_debug(self):
 
-        if not self.new_data_available or self.next_debug_frame is None:
+        if self.save_data:
             return
-        
-        self.new_data_available = False
-        
+         
         # Dibujamos los puntos de TODOS los coches que estén en el diccionario
-        for car_name, debug_info in self.puntos_for_debug.items():
-            if debug_info is not None:
-                for p in debug_info["debug_points"]:
+        for car_name in self.coches:
+            if self.puntos_for_debug[car_name] is not None:
+                debug_x = self.puntos_for_debug[car_name]["debug_x"]
+                debug_y = self.puntos_for_debug[car_name]["debug_y"]
+                for p in self.puntos_for_debug[car_name]["debug_points"]:
                     # Dibujamos en el frame de debug (que ya es una copia)
-                    cv.circle(self.next_debug_frame, (debug_info["x"] + p["cx"], debug_info["y"] + p["cy"]), 10, (0, 255, 255), -1)
-    
+                    cv.circle(self.next_debug_frame, ( debug_x + p["cx"], debug_y + p["cy"]), 10, (0, 255, 255), -1) 
+
         # Comprimir y publicar
         success, buffer = cv.imencode('.jpg', self.next_debug_frame, [cv.IMWRITE_JPEG_QUALITY, 70])
         if success:
@@ -410,6 +456,8 @@ class ImageProcessor(Node):
             msg.format = "jpeg"
             msg.data = buffer.tobytes()
             self.debug_publisher.publish(msg)
+             
+        self.save_data = True
 
 
 def main(args=None):
