@@ -3,81 +3,90 @@
 import rclpy
 from rclpy.node import Node
 from image_processor_pkg.msg import SpeedCarril
-# Perfil para QoS preconfigurado, tiene:
-#   History: Keep last,
-#   Depth: 5,
-#   Reliability: Best effort,
-#   Durability: Volatile,
-#   Deadline: Default,
-#   Lifespan: Default,
-#   Liveliness: System default,
-#   Liveliness lease duration: default,
-#   avoid ros namespace conventions: false
-# Informacion sacada de: https://docs.ros2.org/latest/api/rclcpp/classrclcpp_1_1SensorDataQoS.html
 from rclpy.qos import qos_profile_sensor_data
-
 
 from arduino_controller import ArduinoController
 
 class ArduinoBridgeNode(Node):
     def __init__(self):
-        super().__init__("Arduino")
+        super().__init__("arduino_bridge")
         
-        # --- Obtener numero de coches --- 
-        # Creamos tantos carriles como coches tengamos
-        self.declare_parameter("num_coches",1)
-        num_coches = self.get_parameter("num_coche").value
+        # --- Obtener la lista de coches desde el YAML --- 
+        self.declare_parameter("coches", ["car1"])
+        coches = self.get_parameter("coches").value
 
-        # Diccionario para matener controlado la velocidad que ponemos a cada carril
+        # Diccionario para mantener controlada la velocidad actual de cada carril
         self.rails = {}
+        # Lista para no perder la referencia de las suscripciones
+        self.subs = [] 
         
-        for i in range(num_coches):
-            self.subscription = self.create_subscription(SpeedCarril,"pwd", self.pwm_callback, qos_profile_sensor_data)
-            self.rails[f"r{i}"] = 0
+        # Nos suscribimos al topic "pwd" de CADA coche (ej. /car1/pwd, /car2/pwd)
+        for i, coche in enumerate(coches):
+            topic_name = f"/{coche}/pwd"
+            sub = self.create_subscription(
+                SpeedCarril, 
+                topic_name, 
+                self.pwm_callback, 
+                qos_profile_sensor_data
+            )
+            self.subs.append(sub)
+            
+            # Inicializamos el diccionario con r1, r2, etc. (igual que en el Launch File)
+            carril_id = f"r{i+1}"
+            self.rails[carril_id] = 0
+            self.get_logger().info(f"Escuchando comandos PWM en: {topic_name} (Carril {carril_id})")
 
         # --- PARAMETROS ---
-        self.declare_parameter("port", "/dev/ttyACM0")
-        self.declare_parameter("baudrate", 115200)
+        self.declare_parameter("arduino.port", "/dev/ttyACM0")
+        self.declare_parameter("arduino.baudrate", 115200)
+        self.declare_parameter("arduino.calibration_speed", 55)
 
-        port = self.get_parameter("port").value
-        baud = self.get_parameter("baudrate").value
-
-        #  --- CALIBRACION ---
-        self.declare_parameter("calibration_speed", 55)
-        self.calibration_speed = self.get_parameter("calibration_speed").value
+        port = self.get_parameter("arduino.port").value
+        baud = self.get_parameter("arduino.baudrate").value
+        self.calibration_speed = self.get_parameter("arduino.calibration_speed").value
 
         # Nos conectamos al arduino
         self.arduino = ArduinoController(port=port, baudrate=baud)
 
         self.get_logger().info(f"Conectando a Arduino en {port}...") 
 
-        self.arduino.set_both_rails(self.calib_speed, self.calib_speed)
+        # BUG FIX: variable corregida
+        self.arduino.set_both_rails(self.calibration_speed, self.calibration_speed)
 
     def pwm_callback(self, msg: SpeedCarril):
         """
         Cada vez que llega un nuevo valor de PWM, lo enviamos al Arduino.
         """
-
         pwm_value = msg.pwm
-        rail = msg.carril
+        rail_str = msg.carril # Llega como "r1", "r2", etc.
 
-        # Si el valor no cambia del anterior recibido no lo enviamos al arduino para no saturar
-        if pwm_value == self.rails[rail]:
+        # Ignoramos si llega un carril que no tenemos registrado
+        if rail_str not in self.rails:
             return
 
-        self.rails[rail] = pwm_value
+        # Si el valor no cambia del anterior recibido no lo enviamos para no saturar
+        if pwm_value == self.rails[rail_str]:
+            return
+
+        self.rails[rail_str] = pwm_value
 
         # Validacion de seguridad
         if 0 <= pwm_value <= 255:
+            try:
+                # Extraemos el número del carril (de "r1" sacamos el 1)
+                rail_num = int(rail_str.replace("r", ""))
+                self.arduino.set_rail_speed(rail_num, pwm_value)
+            except ValueError:
+                self.get_logger().error(f"Formato de carril inválido: {rail_str}")
 
-            self.arduino.set_rail_speed(self.rail_id, pwm_value)
     def destroy_node(self):
         """
         Al cerrar el nodo, nos aseguramos de parar el coche por seguridad.
         """
         self.get_logger().info("Cerrando conexión. Deteniendo motores...")
-        self.arduino.stop_all_rails()
-        self.arduino.close()
+        if hasattr(self, 'arduino') and self.arduino:
+            self.arduino.stop_all_rails()
+            self.arduino.close()
         super().destroy_node()
 
 
