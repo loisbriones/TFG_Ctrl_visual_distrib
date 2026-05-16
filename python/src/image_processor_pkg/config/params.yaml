@@ -20,10 +20,10 @@
       
     # Parámetros para el controlador
     controller:
-      minimum_speed: 50
-      maximum_speed: 75
-      distancia_nodos_trayectoria: 15.0
-      umbral_derrape: 8.0
+      minimum_speed: 55
+      maximum_speed: 80
+      distancia_nodos_trayectoria: 20.0
+      umbral_derrape: 40.0
 
     # Parámetros para el Arduino
     arduino:
