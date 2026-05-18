@@ -43,6 +43,7 @@ class CarControllerNode(Node):
         self.puntos_crudos = {}
         self.trayectoria_base = {}
         self.perfil_velocidad = {}
+        self.limite_velocidad = {}
         self.ultima_camara_confiable = None
 
         # --- SUSCRIPTORES Y PUBLICADORES ---
@@ -68,6 +69,7 @@ class CarControllerNode(Node):
             self.puntos_crudos.clear()
             self.trayectoria_base.clear()
             self.perfil_velocidad.clear()
+            self.limite_velocidad.clear()
             self.v_actual = 0.0
             self.publicar_velocidad(0)
             self.get_logger().warn("⚠️ Reiniciando calibración.")
@@ -115,6 +117,10 @@ class CarControllerNode(Node):
             # Perfil de velocidad como array unidimensional de NumPy
             self.perfil_velocidad[camara] = np.full(
                 len(ruta_limpia), self.v_min, dtype=np.float32
+            )
+
+            self.limite_velocidad[camara] = np.full(
+                len(ruta_limpia), self.v_max, dtype=np.float32
             )
 
             self.get_logger().info(
@@ -176,6 +182,7 @@ class CarControllerNode(Node):
 
             # Referencia directa al array de NumPy para mayor velocidad
             perfil = self.perfil_velocidad[camara]
+            limite = self.limite_velocidad[camara]
 
             # =========================================================
             # 🧠 FASE 1: APRENDIZAJE Y DIBUJO DEL MAPA (Vectorizado)
@@ -184,9 +191,10 @@ class CarControllerNode(Node):
                 # Derrape detectado
                 velocidad_actual_mapa = perfil[idx_actual]
                 # Reducimos la velocidad para el punto donde estamos
-                nueva_vel_apice = max(self.v_min, velocidad_actual_mapa - 5.0)
+                nueva_vel_apice = max(self.v_min, velocidad_actual_mapa - 2.0)
                 # Actualizamos la velocidad en el punto donde detectamos el derrape
                 perfil[idx_actual] = nueva_vel_apice
+                limite[idx_actual] = np.minimum(limite[idx_actual], nueva_vel_apice)
 
                 # Modificamos las zonas cercanas para:
                 # 1º Antes de llegar al punto critico reducir la velocidad
@@ -205,9 +213,16 @@ class CarControllerNode(Node):
                 perfil[idx_atras_1_5] = np.minimum(
                     perfil[idx_atras_1_5], nueva_vel_apice
                 )
+                limite[idx_atras_1_5] = np.minimum(
+                    limite[idx_atras_1_5], nueva_vel_apice
+                )
+
                 # Hacemos el minimo entre todos los elementos del array
                 perfil[idx_atras_6_10] = np.minimum(
-                    perfil[idx_atras_6_10], nueva_vel_apice + 2.0
+                    perfil[idx_atras_6_10], nueva_vel_apice + 1.0
+                )
+                limite[idx_atras_6_10] = np.minimum(
+                    limite[idx_atras_6_10], nueva_vel_apice + 1.0
                 )
 
                 # Tracción escalonada hacia ADELANTE
@@ -216,21 +231,30 @@ class CarControllerNode(Node):
                 perfil[idx_adelante_1_5] = np.minimum(
                     perfil[idx_adelante_1_5], nueva_vel_apice
                 )
+                limite[idx_adelante_1_5] = np.minimum(
+                    limite[idx_adelante_1_5], nueva_vel_apice
+                )
+
                 # Hacemos el minimo entre los elementos del array
                 perfil[idx_adelante_6_10] = np.minimum(
-                    perfil[idx_adelante_6_10], nueva_vel_apice + 2.0
+                    perfil[idx_adelante_6_10], nueva_vel_apice + 1.0
+                )
+                limite[idx_adelante_6_10] = np.minimum(
+                    limite[idx_adelante_6_10], nueva_vel_apice + 1.0
                 )
 
             elif dist_derrape < self.umbral_derrape_seguro:
                 # Aplicamos un incremento el las 16 siguientes posiciones
                 idx_seguros = (idx_actual + np.arange(0, 16)) % num_nodos
                 # Hacemos el minimo de todos los elementos del array
-                perfil[idx_seguros] = np.minimum(self.v_max, perfil[idx_seguros] + 1.0)
+                perfil[idx_seguros] = np.minimum(
+                    limite[idx_seguros], perfil[idx_seguros] + 1.0
+                )
 
         # =========================================================
         # 🏎️ FASE 2: LECTURA DIRECTA DEL MAPA
         # =========================================================
-        nodos_latencia = 2
+        nodos_latencia = 1
         v_objetivo = self.perfil_velocidad[camara][
             (idx_actual + nodos_latencia) % num_nodos
         ]
@@ -239,15 +263,19 @@ class CarControllerNode(Node):
         # =========================================================
         # 📡 FASE 3: FILTRO ANTISPAM Y PUBLICACIÓN
         # =========================================================
-        if (
-            abs(self.v_actual - self.ultimo_pwm_enviado) >= 3.0
-            or self.v_actual == self.v_min
-            or self.v_actual == self.v_max
-        ):
-            self.publicar_velocidad(int(self.v_actual))
-            self.ultimo_pwm_enviado = self.v_actual
+        #
+        self.publicar_velocidad(int(self.v_actual))
+        self.ultimo_pwm_enviado = self.v_actual
 
-        # LOGS DE DEPURACIÓN
+        # if (
+        #    abs(self.v_actual - self.ultimo_pwm_enviado) >= 3.0
+        #    or self.v_actual == self.v_min
+        #    or self.v_actual == self.v_max
+        # ):
+        #    self.publicar_velocidad(int(self.v_actual))
+        #    self.ultimo_pwm_enviado = self.v_actual
+        ## LOGS DE DEPURACIÓN
+
         if not hasattr(self, "debug_counter"):
             self.debug_counter = 0
         self.debug_counter += 1

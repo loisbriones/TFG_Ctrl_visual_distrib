@@ -20,14 +20,14 @@
       
     # Parámetros para el controlador
     controller:
-      minimum_speed: 55
+      minimum_speed: 60 
       maximum_speed: 80
-      distancia_nodos_trayectoria: 20.0
-      umbral_derrape: 40.0
+      distancia_nodos_trayectoria: 15.0
+      umbral_derrape: 15.0
 
     # Parámetros para el Arduino
     arduino:
       port: "/dev/ttyACM0"
       baudrate: 115200
-      calibration_speed: 50 
+      calibration_speed: 60 
 

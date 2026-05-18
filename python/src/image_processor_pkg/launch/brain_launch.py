@@ -39,12 +39,13 @@ def generate_launch_description():
         )
 
     # 3. Lanzamos el único nodo de Arduino
-    # ld.add_action(Node(
-    #    package='image_processor_pkg',
-    #    executable='arduino_bridge_node.py',
-    #    name='arduino_bridge',
-    #    parameters=[params_file]
-    # ))
+    ld.add_action(
+        Node(
+            package="image_processor_pkg",
+            executable="arduino_bridge_node.py",
+            name="arduino_bridge",
+            parameters=[params_file],
+        )
+    )
 
     return ld
-
