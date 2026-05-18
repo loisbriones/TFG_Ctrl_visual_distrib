@@ -16,7 +16,7 @@
         stiker_back: "azul"
         sector_color: "naranja"
         kernel_size: 5
-        min_area: 70 
+        min_area: 40 
       
     # Parámetros para el controlador
     controller:

@@ -111,6 +111,9 @@ class ColorDetector:
             return None
 
         c = max(contornos, key=cv.contourArea)
+        
+        if cv.contourArea(c) < min_area:
+            return None
 
         # Devuelve 4 puntos que representan un rectangulo que envuelve el contorno detectado
         x, y, w, h = cv.boundingRect(c)

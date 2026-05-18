@@ -388,8 +388,11 @@ class ImageProcessor(Node):
             detections = self.color_detector.find_object(frame, self.min_area, self.stiker_front, self.stiker_back)
             if detections["front"] is not None:
                 info["puntos_trayectoria"].append((detections["front"]["cx"], detections["front"]["cy"]))
+            
             # Usamos 0,0 como offset porque es el frame completo
-            self.publish_car_position(detections, 0.0, 0, 0, car_name)
+            # Solo publicamos en calibración si hemos detectado algo
+            if detections["front"] is not None or detections["back"] is not None:
+                self.publish_car_position(detections, 0.0, 0, 0, car_name)
             return
     
         # --- MODO OPERACION---
@@ -421,25 +424,30 @@ class ImageProcessor(Node):
             info["current_cx"], info["current_cy"] = global_cx, global_cy
             info["roi_size"] = 150 # Resetear tamaño de búsqueda
             
+            # 5. Publicar (Solo lo hacemos si hemos encontrado el coche)
+            self.publish_car_position(detections, duration, x1, y1, car_name)    
+            
+            if self.debug and self.save_data:
+                # Restauramos la estructura del diccionario si venimos de perder el coche
+                if self.puntos_for_debug[car_name] is None:
+                    self.puntos_for_debug[car_name] = {}
+                    
+                # Guardar para el dibujo de debug
+                self.puntos_for_debug[car_name]["debug_x"] = x1
+                self.puntos_for_debug[car_name]["debug_y"] = y1
+                # Guardamos los puntos detectados (front y back) en la lista de debug
+                self.puntos_for_debug[car_name]["debug_points"] = [
+                    v for v in detections.values() if v is not None
+                ]
+            
         else:
             # Si no hay detección, ampliar zona de búsqueda para el próximo frame
             info["roi_size"] = min(info["roi_size"] + 50, max(self.width, self.height))
             info["current_cx"] = None
             info["prev_cx"] = None
+            # Evitamos que la información de debug se quede dibujando "fantasmas"
             self.puntos_for_debug[car_name] = None
-    
-        # 5. Publicar
-        self.publish_car_position(detections, duration, x1, y1, car_name)    
-        
-        if self.debug and self.save_data:
-            # Guardar para el dibujo de debug
-            self.puntos_for_debug[car_name]["debug_x"] = x1
-            self.puntos_for_debug[car_name]["debug_y"] = y1
-            # Guardamos los puntos detectados (front y back) en la lista de debug
-            self.puntos_for_debug[car_name]["debug_points"] = [
-                v for v in detections.values() if v is not None
-            ]
-        
+
     def _tarea_debug(self):
 
         if not self.debug or self.save_data or self.next_debug_frame is None:
