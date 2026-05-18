@@ -7,7 +7,7 @@ from std_msgs.msg import Bool
 from image_processor_pkg.msg import CarLocation, SpeedCarril
 
 import math
-import time
+import numpy as np
 
 
 class CarControllerNode(Node):
@@ -37,7 +37,7 @@ class CarControllerNode(Node):
         # --- ESTADO DEL SISTEMA ---
         self.en_calibracion = True
         self.v_actual = self.v_min
-        self.ultimo_pwm_enviado = 0.0  # <-- CLAVE PARA EL FILTRO ANTISPAM
+        self.ultimo_pwm_enviado = 0.0
 
         # --- MAPA MENTAL Y APRENDIZAJE ---
         self.puntos_crudos = {}
@@ -79,7 +79,7 @@ class CarControllerNode(Node):
             self.ejecutar_control_carrera(msg)
 
     # ---------------------------------------------------------
-    # FASE 1: CALIBRACIÓN
+    # MODO CALIBRACION
     # ---------------------------------------------------------
     def recolectar_datos_calibracion(self, msg: CarLocation):
         camara = msg.camara_id
@@ -90,6 +90,7 @@ class CarControllerNode(Node):
 
         if camara not in self.puntos_crudos:
             self.puntos_crudos[camara] = []
+
         self.puntos_crudos[camara].append((x, y))
 
     def procesar_trayectorias(self):
@@ -98,6 +99,7 @@ class CarControllerNode(Node):
                 continue
 
             ruta_limpia = [puntos[0]]
+
             for i in range(1, len(puntos)):
                 ult_p = ruta_limpia[-1]
                 p_act = puntos[i]
@@ -107,28 +109,21 @@ class CarControllerNode(Node):
                 ):
                     ruta_limpia.append(p_act)
 
-            self.trayectoria_base[camara] = ruta_limpia
+            # Pasamos la lista a numpy, de manera que almacenamos las rutas como matrices (N, 2)
+            self.trayectoria_base[camara] = np.array(ruta_limpia, dtype=np.float32)
 
-            # MAGIA: Cada nodo nace con la velocidad mínima (aseguramos no salirnos en la primera vuelta)
-            self.perfil_velocidad[camara] = [self.v_min] * len(ruta_limpia)
+            # Perfil de velocidad como array unidimensional de NumPy
+            self.perfil_velocidad[camara] = np.full(
+                len(ruta_limpia), self.v_min, dtype=np.float32
+            )
 
             self.get_logger().info(
-                f"✅ {camara}: Ruta base con {len(ruta_limpia)} nodos."
+                f"✅ {camara}: Ruta base con {len(ruta_limpia)} nodos vectorizados."
             )
         self.get_logger().info("🚗 ¡Mapa mental listo! Pasando a MODO CARRERA.")
 
     # ---------------------------------------------------------
-    # FASE 2: MODO OPERACIÓN Y APRENDIZAJE
-    # ---------------------------------------------------------
-    # ---------------------------------------------------------
-    # FASE 2: MODO OPERACIÓN Y APRENDIZAJE
-    # ---------------------------------------------------------
-    # ---------------------------------------------------------
-    # FASE 2: MODO OPERACIÓN Y APRENDIZAJE
-    # ---------------------------------------------------------
-
-    # ---------------------------------------------------------
-    # FASE 2: MODO OPERACIÓN Y APRENDIZAJE
+    # MODO OPERACION Y APRENDIZAJE
     # ---------------------------------------------------------
     def ejecutar_control_carrera(self, msg: CarLocation):
         camara = msg.camara_id
@@ -140,15 +135,20 @@ class CarControllerNode(Node):
             return
 
         fx, fy = float(msg.front.center.x), float(msg.front.center.y)
-        bx, by = float(msg.back.center.x), float(msg.back.center.y)
 
         if fx == 0 and fy == 0:
             return
 
+        bx, by = float(msg.back.center.x), float(msg.back.center.y)
+
         trayectoria = self.trayectoria_base[camara]
         num_nodos = len(trayectoria)
 
-        idx_actual, dist_a_ruta = self.obtener_nodo_mas_cercano((fx, fy), trayectoria)
+        # Usar arrays de numpy para cálculos matemáticos
+        punto_front = np.array([fx, fy], dtype=np.float32)
+        idx_actual, dist_a_ruta = self.obtener_nodo_mas_cercano(
+            punto_front, trayectoria
+        )
 
         if dist_a_ruta > 60.0:
             return
@@ -157,47 +157,88 @@ class CarControllerNode(Node):
         dist_derrape = 0.0
 
         if bx != 0 and by != 0:
-            idx_trasero, _ = self.obtener_nodo_mas_cercano((bx, by), trayectoria)
+            punto_back = np.array([bx, by], dtype=np.float32)
+            idx_trasero, _ = self.obtener_nodo_mas_cercano(punto_back, trayectoria)
 
+            # Punto actual del path donde nos encontramos
             p_centro = trayectoria[idx_trasero]
+            # Punto siguiente del path hacia donde vamos
             p_siguiente = trayectoria[(idx_trasero + 1) % num_nodos]
+            # Punto anterior en el path de donde venimos
             p_anterior = trayectoria[(idx_trasero - 1) % num_nodos]
 
-            d1 = self.distancia_punto_segmento((bx, by), p_anterior, p_centro)
-            d2 = self.distancia_punto_segmento((bx, by), p_centro, p_siguiente)
+            # Para los 3 puntos que tenemos del path base tenemos que comprobar donde se encuentra stiker
+            # con respecto a estos puntos para poder luego saber donde esta la posicion del coche
+
+            d1 = self.distancia_punto_segmento(punto_back, p_anterior, p_centro)
+            d2 = self.distancia_punto_segmento(punto_back, p_centro, p_siguiente)
             dist_derrape = min(d1, d2)
 
-            # --- APRENDIZAJE: REESCRITURA SUAVE ---
+            # Referencia directa al array de NumPy para mayor velocidad
+            perfil = self.perfil_velocidad[camara]
+
+            # =========================================================
+            # 🧠 FASE 1: APRENDIZAJE Y DIBUJO DEL MAPA (Vectorizado)
+            # =========================================================
             if dist_derrape > self.umbral_derrape_peligro:
-                # DERRAPE REAL: Marcamos el nodo actual y los 15 anteriores como peligrosos (velocidad mínima)
-                for i in range(idx_actual - 15, idx_actual + 2):
-                    self.perfil_velocidad[camara][i % num_nodos] = self.v_min
+                # Derrape detectado
+                velocidad_actual_mapa = perfil[idx_actual]
+                # Reducimos la velocidad para el punto donde estamos
+                nueva_vel_apice = max(self.v_min, velocidad_actual_mapa - 5.0)
+                # Actualizamos la velocidad en el punto donde detectamos el derrape
+                perfil[idx_actual] = nueva_vel_apice
+
+                # Modificamos las zonas cercanas para:
+                # 1º Antes de llegar al punto critico reducir la velocidad
+                # 2º Al salir de la curva aumentar la velocidad
+
+                # Generamos los indices que vamos a usar para actualizar los valores de velocidad
+                idx_atras_1_5 = (idx_actual - np.arange(1, 6)) % num_nodos
+                idx_atras_6_10 = (idx_actual - np.arange(6, 11)) % num_nodos
+
+                idx_adelante_1_5 = (idx_actual + np.arange(1, 6)) % num_nodos
+                idx_adelante_6_10 = (idx_actual + np.arange(6, 11)) % num_nodos
+
+                # Frenada escalonada hacia ATRÁS
+
+                # Hacemos el minimo entre todos los elementos del array
+                perfil[idx_atras_1_5] = np.minimum(
+                    perfil[idx_atras_1_5], nueva_vel_apice
+                )
+                # Hacemos el minimo entre todos los elementos del array
+                perfil[idx_atras_6_10] = np.minimum(
+                    perfil[idx_atras_6_10], nueva_vel_apice + 2.0
+                )
+
+                # Tracción escalonada hacia ADELANTE
+
+                # Hacemos el minimo entre todos los elementos del array
+                perfil[idx_adelante_1_5] = np.minimum(
+                    perfil[idx_adelante_1_5], nueva_vel_apice
+                )
+                # Hacemos el minimo entre los elementos del array
+                perfil[idx_adelante_6_10] = np.minimum(
+                    perfil[idx_adelante_6_10], nueva_vel_apice + 2.0
+                )
 
             elif dist_derrape < self.umbral_derrape_seguro:
-                # ZONA ESTABLE: Aceleramos el bloque de 15 nodos que tenemos por delante
-                for i in range(idx_actual, idx_actual + 15):
-                    idx_mod = i % num_nodos
-                    self.perfil_velocidad[camara][idx_mod] = min(
-                        self.v_max, self.perfil_velocidad[camara][idx_mod] + 1.0
-                    )
+                # Aplicamos un incremento el las 16 siguientes posiciones
+                idx_seguros = (idx_actual + np.arange(0, 16)) % num_nodos
+                # Hacemos el minimo de todos los elementos del array
+                perfil[idx_seguros] = np.minimum(self.v_max, perfil[idx_seguros] + 1.0)
 
-        # PASO 3: ANTICIPACIÓN INTELIGENTE
-        # Escaneamos los próximos 15 nodos y cogemos la velocidad MÁS BAJA de ese tramo.
-        # Así, si a 10 nodos de distancia hay una curva peligrosa, frena ya. Si todo es recta, sube.
-        v_objetivo = self.v_max
-        for i in range(1, 16):
-            v_nodo = self.perfil_velocidad[camara][(idx_actual + i) % num_nodos]
-            if v_nodo < v_objetivo:
-                v_objetivo = v_nodo
+        # =========================================================
+        # 🏎️ FASE 2: LECTURA DIRECTA DEL MAPA
+        # =========================================================
+        nodos_latencia = 2
+        v_objetivo = self.perfil_velocidad[camara][
+            (idx_actual + nodos_latencia) % num_nodos
+        ]
+        self.v_actual = v_objetivo
 
-        # RAMPA SUAVE
-        if v_objetivo > self.v_actual:
-            self.v_actual = min(v_objetivo, self.v_actual + 1.5)
-        elif v_objetivo < self.v_actual:
-            self.v_actual = max(v_objetivo, self.v_actual - 4.0)
-
-        # --- PROTECCIÓN DEL ARDUINO (ANTISPAM) ---
-        # Solo publicamos al topic si hay un cambio de al menos 3.0 puntos en el PWM
+        # =========================================================
+        # 📡 FASE 3: FILTRO ANTISPAM Y PUBLICACIÓN
+        # =========================================================
         if (
             abs(self.v_actual - self.ultimo_pwm_enviado) >= 3.0
             or self.v_actual == self.v_min
@@ -206,6 +247,7 @@ class CarControllerNode(Node):
             self.publicar_velocidad(int(self.v_actual))
             self.ultimo_pwm_enviado = self.v_actual
 
+        # LOGS DE DEPURACIÓN
         if not hasattr(self, "debug_counter"):
             self.debug_counter = 0
         self.debug_counter += 1
@@ -213,37 +255,37 @@ class CarControllerNode(Node):
         if self.debug_counter % 15 == 0:
             estado = "ZONA MUERTA"
             if dist_derrape > self.umbral_derrape_peligro:
-                estado = "PELIGRO (Frenando)"
+                estado = "PELIGRO (Restando vel mapa)"
             elif dist_derrape < self.umbral_derrape_seguro:
-                estado = "SEGURO (Acelerando)"
+                estado = "SEGURO (Sumando vel mapa)"
 
             self.get_logger().info(
-                f"Dist. Trasera: {dist_derrape:.2f}px | {estado} | Vel. Obj (Tramo): {v_objetivo:.1f} | Vel. Real: {self.v_actual:.1f}"
+                f"Dist. Trasera: {dist_derrape:.2f}px | {estado} | Vel. Obj: {v_objetivo:.1f} | Vel. Real: {self.v_actual:.1f}"
             )
 
-    # ---------------------------------------------------------
-    # FUNCIONES MATEMÁTICAS
-    # ---------------------------------------------------------
     def obtener_nodo_mas_cercano(self, punto, trayectoria):
-        """Devuelve el índice del nodo y su distancia al punto"""
-        distancias = [
-            (idx, math.hypot(px - punto[0], py - punto[1]))
-            for idx, (px, py) in enumerate(trayectoria)
-        ]
-        mejor_nodo = min(distancias, key=lambda t: t[1])
-        return mejor_nodo[0], mejor_nodo[1]
+        """Calcula la distancia de 'punto' a toda la matriz 'trayectoria' de golpe"""
+        # Restamos el punto a todos los nodos a la vez, elevamos al cuadrado y sumamos.
+        # Esto es equivalente a pitágoras pero miles de veces más rápido en C.
+        distancias_sq = np.sum((trayectoria - punto) ** 2, axis=1)
+        mejor_idx = np.argmin(
+            distancias_sq
+        )  # Encuentra el índice del valor más pequeño
+        return int(mejor_idx), math.sqrt(distancias_sq[mejor_idx])
 
     def distancia_punto_segmento(self, P, A, B):
-        vx, vy = B[0] - A[0], B[1] - A[1]
-        wx, wy = P[0] - A[0], P[1] - A[1]
-        l2 = vx**2 + vy**2
+        """Cálculo vectorial de la distancia (operaciones numpy directas)"""
+        AB = B - A
+        AP = P - A
+
+        l2 = np.sum(AB**2)
         if l2 == 0:
-            return math.hypot(P[0] - A[0], P[1] - A[1])
+            return np.linalg.norm(AP)
 
-        t = max(0, min(1, (wx * vx + wy * vy) / l2))
-        px_cercano, py_cercano = A[0] + t * vx, A[1] + t * vy
+        t = max(0.0, min(1.0, np.dot(AP, AB) / l2))
+        proyeccion = A + t * AB
 
-        return math.hypot(P[0] - px_cercano, P[1] - py_cercano)
+        return np.linalg.norm(P - proyeccion)
 
     def publicar_velocidad(self, pwm):
         msg_vel = SpeedCarril()

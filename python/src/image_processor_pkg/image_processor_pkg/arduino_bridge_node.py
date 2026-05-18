@@ -32,7 +32,7 @@ class ArduinoBridgeNode(Node):
         # --- PARAMETROS ---
         self.declare_parameter("arduino.port", "/dev/ttyACM0")
         self.declare_parameter("arduino.baudrate", 115200)
-        self.declare_parameter("arduino.calibration_speed", 57)
+        self.declare_parameter("arduino.calibration_speed", 60)
 
         port = self.get_parameter("arduino.port").value
         baud = self.get_parameter("arduino.baudrate").value
