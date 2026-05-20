@@ -11,7 +11,7 @@ find_package(builtin_interfaces REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CarLocation.msg"
   "msg/LineSegment.msg"
-  "msg/PathAndSectors.msg"
+  "msg/FinishLine.msg"
   "msg/Point2D.msg"
   "msg/Stiker.msg"
   "msg/SpeedCarril.msg"

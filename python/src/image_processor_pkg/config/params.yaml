@@ -18,7 +18,7 @@
       detection:
         stiker_front: "verde"
         stiker_back: "azul"
-        sector_color: "naranja"
+        finish_line_color: "naranja"
         kernel_size: 5
         min_area: 40 
       
@@ -27,7 +27,10 @@
       minimum_speed: 60 
       maximum_speed: 80
       distancia_nodos_trayectoria: 15.0
-      umbral_derrape: 15.0
+      umbral_control_trayectoria_correcta: 60.0 
+      umbral_derrape_peligro: 15.0
+      umbral_derrape_seguro: 12.0
+      debounce_meta: 2.0
 
     # Parámetros para el Arduino
     arduino:

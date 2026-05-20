@@ -2,13 +2,19 @@
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import qos_profile_sensor_data, QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_msgs.msg import Bool
-from image_processor_pkg.msg import CarLocation, SpeedCarril
+from image_processor_pkg.msg import CarLocation, SpeedCarril,FinishLine
 
 import math
 import numpy as np
 
+QOS_FINISH_LINE = QoSProfile(
+    depth=1,
+    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+    reliability=QoSReliabilityPolicy.RELIABLE,
+    history=QoSHistoryPolicy.KEEP_LAST
+)
 
 class CarControllerNode(Node):
     def __init__(self):
@@ -21,17 +27,23 @@ class CarControllerNode(Node):
         ).value
 
         # --- PARÁMETROS DE CONTROL ---
-        self.declare_parameter("controller.minimum_speed", 55)
-        self.declare_parameter("controller.maximum_speed", 85)
-        self.declare_parameter("controller.umbral_derrape", 25.0)
-        self.declare_parameter("carril_asignado", "1")
 
+        self.declare_parameter("controller.minimum_speed", 55)
         self.v_min = float(self.get_parameter("controller.minimum_speed").value)
+
+        self.declare_parameter("controller.maximum_speed", 85)
         self.v_max = float(self.get_parameter("controller.maximum_speed").value)
-        self.umbral_derrape_peligro = float(
-            self.get_parameter("controller.umbral_derrape").value
-        )
-        self.umbral_derrape_seguro = 12.0
+
+        self.declare_parameter("controller.umbral_derrape_peligro", 25.0)
+        self.umbral_derrape_peligro = float(self.get_parameter("controller.umbral_derrape_peligro").value)
+        
+        self.declare_parameter("controller.umbral_derrape_seguro",12.0)
+        self.umbral_derrape_seguro = float(self.get_parameter("controller.umbral_derrape_seguro").value)
+
+        self.declare_parameter("controller.umbral_control_trayectoria_correcta",60.0)
+        self.umbral_control_trayectoria_correcta = float(self.get_parameter("controller.umbral_control_trayectoria_correcta ").value)
+
+        self.declare_parameter("carril_asignado", "1")
         self.carril = self.get_parameter("carril_asignado").value
 
         # --- ESTADO DEL SISTEMA ---
@@ -44,20 +56,47 @@ class CarControllerNode(Node):
         self.trayectoria_base = {}
         self.perfil_velocidad = {}
         self.limite_velocidad = {}
-        self.ultima_camara_confiable = None
+        self.ultima_camara_confiable = None 
+
+        # --- FINISH LINE ---
+        # Va a ser diccionario donde vas a tener de que camara viene y que posicion tiene le objeto
+        self.finish_line = {"camara_id" : None, "coordenadas" : None} 
+
+        # --- CONTROL DE TIEMPOS (VUELTAS) ---
+        self.tiempo_ultima_vuelta = None
+
+        self.declare_parameter("controller.debounce_meta", 2.0)
+        self.debounce_meta = self.get_parameter("controller.debounce_meta").value  
 
         # --- SUSCRIPTORES Y PUBLICADORES ---
         self.sub_car_position = self.create_subscription(
             CarLocation, "position", self.callback_posicion, qos_profile_sensor_data
         )
+
         self.sub_modo_calibracion = self.create_subscription(
             Bool, "/modo_calibracion", self.callback_control_calibracion, 10
         )
+        
+        self.sub_finish_line_position = self.create_subscription(
+            FinishLine, "/finish_line_position", self.callback_get_finish_line_position, QOS_FINISH_LINE
+        )
+        
         self.pub_pwm = self.create_publisher(
             SpeedCarril, "pwd", qos_profile_sensor_data
         )
-
+        
         self.get_logger().info("🏁 Controlador iniciado. MODO CALIBRACIÓN ACTIVO.")
+
+    def callback_get_finish_line_position(self,msg):      
+
+        self.finish_line["camara_id"] = msg.camara_id
+        f_s_x = msg.finish_line.start.x 
+        f_s_y = msg.finish_line.start.y
+        
+        f_e_x = msg.finish_line.end.x 
+        f_e_y = msg.finish_line.end.y 
+
+        self.finish_line["coordenadas"] = ((f_s_x,f_s_y),(f_e_x,f_e_y))
 
     def callback_control_calibracion(self, msg):
         if msg.data == False and self.en_calibracion:
@@ -142,21 +181,23 @@ class CarControllerNode(Node):
 
         fx, fy = float(msg.front.center.x), float(msg.front.center.y)
 
-        if fx == 0 and fy == 0:
-            return
-
         bx, by = float(msg.back.center.x), float(msg.back.center.y)
+
+        if (fx == 0 and fy == 0) or (bx == 0 and by == 0):
+            return
 
         trayectoria = self.trayectoria_base[camara]
         num_nodos = len(trayectoria)
 
-        # Usar arrays de numpy para cálculos matemáticos
         punto_front = np.array([fx, fy], dtype=np.float32)
-        idx_actual, dist_a_ruta = self.obtener_nodo_mas_cercano(
-            punto_front, trayectoria
-        )
+        punto_back = np.array([bx,by], dtype=np.float32)
 
-        if dist_a_ruta > 60.0:
+        # Comprobamos que no hayamos cruzado la linea de meta
+        self.verificar_linea_meta(camara, punto_front, punto_back)
+
+        idx_actual, dist_a_ruta = self.obtener_nodo_mas_cercano(punto_front, trayectoria)
+
+        if dist_a_ruta > self.umbral_control_trayectoria_correcta :
             return
 
         self.ultima_camara_confiable = camara
@@ -320,7 +361,80 @@ class CarControllerNode(Node):
         msg_vel.pwm = pwm
         msg_vel.carril = "2"
         self.pub_pwm.publish(msg_vel)
+        
+    def crosses_segment(self,p1, p2, A, B):
+        """
+        Devuelve True si el segmento p1→p2 “cruza” al segmento A→B,
+        usando un umbral fijo de distancia perpendicular y test de intersección.
+        """
 
+        thr = 30.0
+
+        # calcular distancias desde ambos puntos del coche hasta la línea
+        d1 = self.distancia_punto_segmento(p1, A, B)
+        d2 = self.distancia_punto_segmento(p2, A, B)
+
+        # descartamos si ambos están muy lejos
+        if d1 > thr and d2 > thr:
+            return False
+
+        # 3) test clásico de intersección de segmentos
+        def orientation(a, b, c):
+            val = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1])
+            if abs(val) < 1e-6:
+                return 0  # colineal
+            return 1 if val > 0 else 2  # 1=izquierda, 2=derecha
+
+        def on_segment(a, b, c):
+            return (min(a[0], c[0]) <= b[0] <= max(a[0], c[0]) and
+                    min(a[1], c[1]) <= b[1] <= max(a[1], c[1]))
+
+        o1 = orientation(p1, p2, A)
+        o2 = orientation(p1, p2, B)
+        o3 = orientation(A, B, p1)
+        o4 = orientation(A, B, p2)
+
+        # caso general
+        if o1 != o2 and o3 != o4:
+            return True
+
+        # casos colineales en los extremos
+        if o1 == 0 and on_segment(p1, A, p2): return True
+        if o2 == 0 and on_segment(p1, B, p2): return True
+        if o3 == 0 and on_segment(A, p1, B): return True
+        if o4 == 0 and on_segment(A, p2, B): return True
+
+        return False 
+
+    def verificar_linea_meta(self, camara_id , p_front, p_back):
+        # 1. Si no hay línea definida o no estamos en la cámara correcta, ignorar
+        if self.finish_line["camara_id"] is None or camara_id != self.finish_line["camara_id"]:
+            return
+
+        # 2. Extraer puntos de la meta
+        A, B = self.finish_line["coordenadas"]
+        A_np = np.array(A, dtype=np.float32)
+        B_np = np.array(B, dtype=np.float32)
+
+        # 3. Comprobar si el coche cruza la línea
+        esta_cruzando = self.crosses_segment(p_front, p_back, A_np, B_np)
+
+        if esta_cruzando:
+            ahora = self.get_clock().now()
+
+            # 4a. Si es la primera vez que pasa por meta, solo iniciamos el reloj
+            if self.tiempo_ultima_vuelta is None:
+                self.tiempo_ultima_vuelta = ahora
+                self.get_logger().info("🏁 Primera pasada por meta. Iniciando cronómetro...")
+                return
+
+            # 4b. Si ya estaba corriendo el tiempo, miramos cuánto ha pasado
+            diferencia_segundos = (ahora - self.tiempo_ultima_vuelta).nanoseconds / 1e9
+
+            # Solo cuenta si ha superado el tiempo de "ceguera" (debounce)
+            if diferencia_segundos > self.debounce_meta:
+                self.get_logger().info(f"⏱️ ¡VUELTA COMPLETADA! Tiempo: {diferencia_segundos:.3f} s")
+                self.tiempo_ultima_vuelta = ahora
 
 def main(args=None):
     rclpy.init(args=args)

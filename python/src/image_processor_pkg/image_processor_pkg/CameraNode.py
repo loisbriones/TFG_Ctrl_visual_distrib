@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 import cv2 as cv
 import numpy as np
-from image_processor_pkg.msg import CarLocation,Point2D
+from image_processor_pkg.msg import CarLocation, FinishLine 
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
 
@@ -19,7 +19,7 @@ from std_msgs.msg import Bool
 #   Liveliness lease duration: default,
 #   avoid ros namespace conventions: false
 # Informacion sacada de: https://docs.ros2.org/latest/api/rclcpp/classrclcpp_1_1SensorDataQoS.html
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import qos_profile_sensor_data, QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy, QoSHistoryPolicy
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -30,7 +30,6 @@ from ProcessImage import ColorDetector
 from concurrent.futures import ThreadPoolExecutor, wait
 import time
 
-
 CAMERA_MODES = {
     0: (160, 120),
     1: (320, 240),
@@ -39,6 +38,12 @@ CAMERA_MODES = {
     4: (1280, 720),
 }
 
+QOS_FINISH_LINE = QoSProfile(
+    depth=1,
+    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+    reliability=QoSReliabilityPolicy.RELIABLE,
+    history=QoSHistoryPolicy.KEEP_LAST
+)
 
 class ImageProcessor(Node):
     def __init__(self):
@@ -164,7 +169,29 @@ class ImageProcessor(Node):
         self.timer = self.create_timer(0.033, self.process_frame, callback_group=self.image_processor_group)
         #Debug
         self.debug_timer = self.create_timer(0.066, self._tarea_debug, callback_group=self.debug_group)
+         
+        # --- BUSCAR LINEA DE META ---        
+        self.declare_parameter("finish_line_color","naranja")
+        self.finish_line_color = self.get_parameter("finish_line_color").value
         
+        frame_for_find_sectors = self.cam.read()
+        self.finish_line_position = self.color_detector.find_finish_line(frame_for_find_sectors,self.finish_line_color) 
+ 
+        if self.finish_line_position is not None: 
+
+            self.finish_line_publisher = self.create_publisher(FinishLine, "/finish_line_position", QOS_FINISH_LINE)
+
+            finish_line_msg = FinishLine() 
+            finish_line_msg.camara_id = self.camara_id
+
+            finish_line_msg.finish_line.start.x = self.finish_line_position[0][0]
+            finish_line_msg.finish_line.start.y = self.finish_line_position[0][1]
+
+            finish_line_msg.finish_line.end.x = self.finish_line_position[1][0]
+            finish_line_msg.finish_line.end.y = self.finish_line_position[1][1]
+ 
+            self.finish_line_publisher.publish(finish_line_msg)
+                
         # --- THREAD CAPTURA ---
         self.latest_frame = None
         self.frame_lock = Lock()
@@ -172,7 +199,7 @@ class ImageProcessor(Node):
         # Iniciamos el hilo de captura inmediatamente
         self.capture_thread = Thread(target=self._capture_loop, daemon=True)
         self.capture_thread.start()
-
+        
         self.get_logger().info("Node ImageProcessor Ready")
 
     def _capture_loop(self):
