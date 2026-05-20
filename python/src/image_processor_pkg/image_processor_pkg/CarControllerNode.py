@@ -43,6 +43,12 @@ class CarControllerNode(Node):
         self.declare_parameter("controller.umbral_control_trayectoria_correcta",60.0)
         self.umbral_control_trayectoria_correcta = float(self.get_parameter("controller.umbral_control_trayectoria_correcta ").value)
 
+        self.declare_parameter("controller.latencia_min_nodos", 1)
+        self.declare_parameter("controller.latencia_max_nodos", 4)
+
+        self.latencia_min = self.get_parameter("controller.latencia_min_nodos").value
+        self.latencia_max = self.get_parameter("controller.latencia_max_nodos").value
+            
         self.declare_parameter("carril_asignado", "1")
         self.carril = self.get_parameter("carril_asignado").value
 
@@ -295,10 +301,20 @@ class CarControllerNode(Node):
         # =========================================================
         # 🏎️ FASE 2: LECTURA DIRECTA DEL MAPA
         # =========================================================
-        nodos_latencia = 1
-        v_objetivo = self.perfil_velocidad[camara][
-            (idx_actual + nodos_latencia) % num_nodos
-        ]
+        # 1. Normalizamos la velocidad actual para obtener un porcentaje (0.0 a 1.0)
+        velocidad_norm = (self.v_actual - self.v_min) / (self.v_max - self.v_min)
+        # Evitamos que el valor se salga de los márgenes por si hay picos
+        velocidad_norm = max(0.0, min(1.0, velocidad_norm))
+
+        # 2. Calculamos los nodos flotantes con interpolación lineal
+        nodos_latencia_float = self.latencia_min + (velocidad_norm * (self.latencia_max - self.latencia_min))
+
+        # 3. Redondeamos para obtener un índice entero válido para el array
+        nodos_latencia = int(round(nodos_latencia_float))
+
+        # 4. Obtenemos la velocidad objetivo mirando 'nodos_latencia' pasos por delante
+        v_objetivo = self.perfil_velocidad[camara][(idx_actual + nodos_latencia) % num_nodos]
+
         self.v_actual = v_objetivo
 
         # =========================================================

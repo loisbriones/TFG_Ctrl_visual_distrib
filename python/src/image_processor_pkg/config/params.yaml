@@ -25,11 +25,13 @@
     # Parámetros para el controlador
     controller:
       minimum_speed: 60 
-      maximum_speed: 80
+      maximum_speed: 90 
       distancia_nodos_trayectoria: 15.0
       umbral_control_trayectoria_correcta: 60.0 
-      umbral_derrape_peligro: 15.0
-      umbral_derrape_seguro: 12.0
+      umbral_derrape_peligro: 16.0
+      umbral_derrape_seguro: 15.0
+      latencia_min_nodos: 1
+      latencia_max_nodos: 10
       debounce_meta: 2.0
 
     # Parámetros para el Arduino
