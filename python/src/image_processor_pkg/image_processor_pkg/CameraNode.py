@@ -26,7 +26,7 @@ from rclpy.executors import MultiThreadedExecutor
 
 from threading import Thread,Lock
 
-from procesar_imagen import ColorDetector
+from ProcessImage import ColorDetector
 from concurrent.futures import ThreadPoolExecutor, wait
 import time
 

@@ -13,12 +13,12 @@ def generate_launch_description():
     ])
 
     # Optenemos el nombre del nodo
-    node_id = EnvironmentVariable('NODE_ID', default_value='camara_generica')
+    node_id = EnvironmentVariable('NODE_ID', default_value='camera_00')
 
     return LaunchDescription([
         Node(
             package='image_processor_pkg',
-            executable='publisher.py', 
+            executable='camera_node.py', 
             namespace=node_id,
             parameters=[
                 params_file,

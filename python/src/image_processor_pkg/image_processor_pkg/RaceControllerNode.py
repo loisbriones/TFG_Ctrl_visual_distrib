@@ -5,7 +5,7 @@ from rclpy.node import Node
 from image_processor_pkg.msg import SpeedCarril
 from rclpy.qos import qos_profile_sensor_data
 
-from arduino_controller import ArduinoController
+from ArduinoController import ArduinoController
 
 
 class ArduinoBridgeNode(Node):
@@ -44,6 +44,18 @@ class ArduinoBridgeNode(Node):
 
         # Arrancamos con la velocidad de calibración
         self.arduino.set_both_rails(self.calibration_speed, self.calibration_speed)
+
+        # TIMER
+        # Cada cierto tiempo se levanta el timer y se encarga de comprobar cuando hace que recibimos el ultimo mensaje, en caso de superar un limite entonces se encarga de parar el coche porque no estamos recibiendo informacion del controlador y signifca que esta caido por tanto no tiene sentido seguir controlando el coche 
+        
+        # Cada cuanto tiempo comprobamos si el nodo Controlador esta caido
+        self.declare_parameter("hearthbear_timer",10)
+        self.hearthbear_timer = self.get_parameter("hearthbear_timer").value        
+        
+        # Delta t: periodo que dejamos que pase desde que recibimos un paquete
+        self.declare_parameter("delta_t",1)
+        self.delta_t = self.get_parameter("delta_t").value
+
 
     def pwm_callback(self, msg: SpeedCarril):
         """

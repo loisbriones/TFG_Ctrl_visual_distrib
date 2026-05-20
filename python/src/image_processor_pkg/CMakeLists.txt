@@ -24,12 +24,12 @@ install(DIRECTORY config launch
 
 # Cargar los scripts de python
 install(PROGRAMS 
-  image_processor_pkg/publisher.py
+  image_processor_pkg/CameraNode.py
   image_processor_pkg/subscriber.py
-  image_processor_pkg/procesar_imagen.py 
-  image_processor_pkg/arduino_bridge_node.py
-  image_processor_pkg/arduino_controller.py
-  image_processor_pkg/controller_node.py
+  image_processor_pkg/ProcessImage.py 
+  image_processor_pkg/RaceControllerNode.py
+  image_processor_pkg/ArduinoController.py
+  image_processor_pkg/CarControllerNode.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
