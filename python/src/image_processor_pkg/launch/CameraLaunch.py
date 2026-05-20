@@ -24,5 +24,7 @@ def generate_launch_description():
                 params_file,
                 {'camara_id': node_id}
             ],
+            respawn=True,
+            respawn_delay=2.0
         )
     ])

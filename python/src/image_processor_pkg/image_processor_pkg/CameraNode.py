@@ -29,6 +29,8 @@ from threading import Thread,Lock
 from ProcessImage import ColorDetector
 from concurrent.futures import ThreadPoolExecutor, wait
 import time
+import json
+import os
 
 CAMERA_MODES = {
     0: (160, 120),
@@ -191,7 +193,29 @@ class ImageProcessor(Node):
             finish_line_msg.finish_line.end.y = self.finish_line_position[1][1]
  
             self.finish_line_publisher.publish(finish_line_msg)
+            
+
+        # --- CARGAR RUTA DE CACHE ---
+        self.cache_file = f"cache_trayectoria_{self.camara_id}.json"
+        if os.path.exists(self.cache_file):
+            try:
+                with open(self.cache_file, "r") as f:
+                    datos_cache = json.load(f)
+                    
+                for car_name in self.coches:
+                    if car_name in datos_cache:
+                        self.info_coches[car_name]["puntos_trayectoria"] = datos_cache[car_name]
+                        # Generamos la mascara para cada coche con la info almacenada
+                        self.info_coches[car_name]["mascara_trayectoria"] = self.generar_mascara(datos_cache[car_name])
                 
+                # Si cargamos la caché, saltamos la calibración
+                self.modo_calibracion = False
+                self.get_logger().info(f"🟢 Caché cargada desde {self.cache_file}. Modo calibración omitido.")
+
+            except Exception as e:
+                self.get_logger().error(f"Error cargando caché: {e}. Se forzará calibración.")
+                self.modo_calibracion = True
+
         # --- THREAD CAPTURA ---
         self.latest_frame = None
         self.frame_lock = Lock()
@@ -214,8 +238,19 @@ class ImageProcessor(Node):
         # Modo operacion
         if msg.data == False and self.modo_calibracion:
 
+            datos_a_guardar = {} 
+
             for car_name in self.coches:
+                datos_a_guardar[car_name ] = self.info_coches[car_name]["puntos_trayectoria"]
                 self.info_coches[car_name]["mascara_trayectoria"] = self.generar_mascara(self.info_coches[car_name]["puntos_trayectoria"])
+
+            # Guardamos en disco la trayectoria de puntos
+            try:
+                with open(self.cache_file, "w") as f:
+                    json.dump(datos_a_guardar, f)
+                self.get_logger().info(f"💾 Trayectoria guardada en {self.cache_file}")
+            except Exception as e:
+                self.get_logger().error(f"Error guardando caché: {e}")
 
             self.modo_calibracion = False
 

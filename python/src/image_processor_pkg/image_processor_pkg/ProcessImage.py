@@ -121,9 +121,7 @@ class ColorDetector:
         cx = x + (w // 2)
         cy = y + (h // 2)
 
-        return {"color": color_bgr, "cx": cx, "cy": cy}
-
-        
+        return {"color": color_bgr, "cx": cx, "cy": cy} 
 
     def find_finish_line(self, frame, sector_color):
         frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)

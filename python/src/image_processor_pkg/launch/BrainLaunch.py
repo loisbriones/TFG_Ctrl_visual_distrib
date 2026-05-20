@@ -25,16 +25,38 @@ def generate_launch_description():
         ld.add_action(
             Node(
                 package="image_processor_pkg",
-                executable="controller_node.py",
-                name="controller",
+                executable="CarControllerNode.py",
+                name="CarControllerNode",
                 namespace=car_name,
                 parameters=[
                     params_file,
                     {
+                        "is_primary": True,
                         "car_name": car_name,
                         "carril_asignado": carril_id,  # Pasamos el carril directamente por parámetro
                     },
                 ],
+                respawn=True,
+                respawn_delay=2.0
+            )
+        )
+        
+        ld.add_action(
+            Node(
+                package="image_processor_pkg",
+                executable="CarControllerNode.py",
+                name="SpareCarControllerNode",
+                namespace=car_name,
+                parameters=[
+                    params_file,
+                    {
+                        "is_primary": False, 
+                        "car_name": car_name,
+                        "carril_asignado": carril_id,  # Pasamos el carril directamente por parámetro
+                    },
+                ],
+                respawn=True,
+                respawn_delay=2.0
             )
         )
 
@@ -42,7 +64,7 @@ def generate_launch_description():
     ld.add_action(
         Node(
             package="image_processor_pkg",
-            executable="arduino_bridge_node.py",
+            executable="RaceControllerNode.py",
             name="arduino_bridge",
             parameters=[params_file],
         )

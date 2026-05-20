@@ -3,11 +3,12 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy, QoSHistoryPolicy
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool,Empty
 from image_processor_pkg.msg import CarLocation, SpeedCarril,FinishLine
 
 import math
 import numpy as np
+import time
 
 QOS_FINISH_LINE = QoSProfile(
     depth=1,
@@ -20,14 +21,42 @@ class CarControllerNode(Node):
     def __init__(self):
         super().__init__("car_controller")
 
+        # --- CONFIGURACION HA ---
+        self.declare_parameter("is_primary",True)
+        self.is_primary = self.get_parameter("is_primary").value  
+        
+        self.respawned_node = False 
+        self.ultimo_latido_recibido = self.get_clock().now() 
+
+        if self.is_primary:
+            # Comprobar si el nodo primary no hice respawn
+            self.sub_heartbeat = self.create_subscription(Empty, "heartbeat", self.callback_heartbeat, qos_profile_sensor_data)
+            time.sleep(1)
+            # Si hizo respawn entonces tiene que ser el subscriptor
+            if self.respawned_node:
+                self.get_logger().info(f"OJO -> NO DETECTA A NADIE Y AUN ASI SE PONE OPERATIVO: {self.respawned_node}")
+                self.is_primary = False
+            # No hay nadie publicando nada entonces no hicimos respawn somos los primary
+            else:     
+                self.destroy_subscription(self.sub_heartbeat)
+                self.sub_heartbeat = None
+                self.pub_heartbeat = self.create_publisher(Empty, "heartbeat", qos_profile_sensor_data) 
+        else:
+            time.sleep(1)
+            # El nodo pasivo siempre que arranque por respawn o no significa que tiene que ser pasivo
+            self.sub_heartbeat = self.create_subscription(Empty,"heartbeat", self.callback_heartbeat ,qos_profile_sensor_data)
+            
+        # TIMERS PARA EL CONTROL DEL HEARTHBEAT
+        if self.is_primary:
+            self.timer_publicar_latido = self.create_timer(0.1, self.publicar_heartbeat)
+        else:
+            self.timer_comprobar_failover = self.create_timer(0.5, self.comprobar_failover)
+
         # --- PARÁMETROS DEL MAPA BASE ---
         self.declare_parameter("controller.distancia_nodos_trayectoria", 15.0)
-        self.umbral_distancia = self.get_parameter(
-            "controller.distancia_nodos_trayectoria"
-        ).value
+        self.umbral_distancia = self.get_parameter("controller.distancia_nodos_trayectoria").value
 
         # --- PARÁMETROS DE CONTROL ---
-
         self.declare_parameter("controller.minimum_speed", 55)
         self.v_min = float(self.get_parameter("controller.minimum_speed").value)
 
@@ -41,7 +70,7 @@ class CarControllerNode(Node):
         self.umbral_derrape_seguro = float(self.get_parameter("controller.umbral_derrape_seguro").value)
 
         self.declare_parameter("controller.umbral_control_trayectoria_correcta",60.0)
-        self.umbral_control_trayectoria_correcta = float(self.get_parameter("controller.umbral_control_trayectoria_correcta ").value)
+        self.umbral_control_trayectoria_correcta = float(self.get_parameter("controller.umbral_control_trayectoria_correcta").value)
 
         self.declare_parameter("controller.latencia_min_nodos", 1)
         self.declare_parameter("controller.latencia_max_nodos", 4)
@@ -93,6 +122,33 @@ class CarControllerNode(Node):
         
         self.get_logger().info("🏁 Controlador iniciado. MODO CALIBRACIÓN ACTIVO.")
 
+    def callback_heartbeat(self, msg):
+        """Si soy el sombra, reseteo el cronómetro al escuchar al líder."""
+        if not self.is_primary:
+            self.ultimo_latido_recibido = self.get_clock().now()
+        else:
+            self.respawned_node = True
+
+    # Si eres el lider entonces publicas el heartbeat
+    def publicar_heartbeat(self):
+        self.pub_heartbeat.publish(Empty())
+
+    # Pasivo compruba que sigue recibiendo los latidos 
+    def comprobar_failover(self):
+        tiempo_sin_latido = (self.get_clock().now() - self.ultimo_latido_recibido).nanoseconds / 1e9
+        
+        self.get_logger().info(f"Tiempo sin latido: {tiempo_sin_latido}")
+        
+        if tiempo_sin_latido > 5.0:
+            self.get_logger().error("¡Líder caído! Asumiendo el control como PRIMARY 👑")
+            self.is_primary = True
+
+            self.destroy_timer(self.timer_comprobar_failover)
+            self.destroy_subscription(self.sub_heartbeat)
+            self.pub_heartbeat = self.create_publisher(Empty, "heartbeat", qos_profile_sensor_data)
+
+            self.timer_publicar_latido = self.create_timer(0.1, self.publicar_heartbeat)
+    
     def callback_get_finish_line_position(self,msg):      
 
         self.finish_line["camara_id"] = msg.camara_id
@@ -123,7 +179,8 @@ class CarControllerNode(Node):
         if self.en_calibracion:
             self.recolectar_datos_calibracion(msg)
         else:
-            self.ejecutar_control_carrera(msg)
+            if self.is_primary:
+                self.ejecutar_control_carrera(msg)
 
     # ---------------------------------------------------------
     # MODO CALIBRACION
