@@ -440,6 +440,8 @@ class CarControllerNode(Node):
         msg_vel = SpeedCarril()
         msg_vel.pwm = pwm
         msg_vel.carril = "2"
+        msg_vel.stamp = self.get_clock().now().to_msg()
+
         self.pub_pwm.publish(msg_vel)
         
     def crosses_segment(self,p1, p2, A, B):

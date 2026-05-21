@@ -5,7 +5,7 @@
     # Tiempo que puede pasar desde que nos envian un paquete hasta que consideramos que el nodo se callo
     delta_t: 1
     # Tiempo que tiene que pasar para que se ejecute el timer de comprobacion de estado
-    hearthbear_timer: 60 
+    hearthbear_timer: 0.066 
     
     #Parametros para la camara 
     camera:
