@@ -18,7 +18,7 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='image_processor_pkg',
-            executable='camera_node.py', 
+            executable='CameraNode.py', 
             namespace=node_id,
             parameters=[
                 params_file,

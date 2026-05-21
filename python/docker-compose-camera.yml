@@ -6,10 +6,9 @@ services:
     devices:
       - "/dev/video0:/dev/video0"
     environment:
-      - ROS_DOMAIN_ID = 42
-      - ROS_LOCALHOST_ONLY = 0
-      # Cambia esto en cada Raspberry (camara_01, camara_02...)
-      - NODE_ID = ${NODE_ID}
+      - ROS_DOMAIN_ID=42
+      - ROS_LOCALHOST_ONLY=0
+      - NODE_ID=${NODE_ID}
     volumes:
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
     command: >

@@ -176,27 +176,27 @@ class ImageProcessor(Node):
         self.declare_parameter("finish_line_color","naranja")
         self.finish_line_color = self.get_parameter("finish_line_color").value
         
-        frame_for_find_sectors = self.cam.read()
+        ret,frame_for_find_sectors = self.cam.read()
         self.finish_line_position = self.color_detector.find_finish_line(frame_for_find_sectors,self.finish_line_color) 
  
-        if self.finish_line_position is not None: 
+        if self.finish_line_position is not None and ret: 
 
             self.finish_line_publisher = self.create_publisher(FinishLine, "/finish_line_position", QOS_FINISH_LINE)
 
             finish_line_msg = FinishLine() 
             finish_line_msg.camara_id = self.camara_id
 
-            finish_line_msg.finish_line.start.x = self.finish_line_position[0][0]
-            finish_line_msg.finish_line.start.y = self.finish_line_position[0][1]
+            finish_line_msg.finish_line.start.x = int(self.finish_line_position[0][0])
+            finish_line_msg.finish_line.start.y = int(self.finish_line_position[0][1])
 
-            finish_line_msg.finish_line.end.x = self.finish_line_position[1][0]
-            finish_line_msg.finish_line.end.y = self.finish_line_position[1][1]
+            finish_line_msg.finish_line.end.x = int(self.finish_line_position[1][0])
+            finish_line_msg.finish_line.end.y = int(self.finish_line_position[1][1])
  
             self.finish_line_publisher.publish(finish_line_msg)
             
 
         # --- CARGAR RUTA DE CACHE ---
-        self.cache_file = f"cache_trayectoria_{self.camara_id}.json"
+        self.cache_file = f"/ros2_ws/src/image_processor_pkg/cache_trayectoria_{self.camara_id}.json"
         if os.path.exists(self.cache_file):
             try:
                 with open(self.cache_file, "r") as f:
