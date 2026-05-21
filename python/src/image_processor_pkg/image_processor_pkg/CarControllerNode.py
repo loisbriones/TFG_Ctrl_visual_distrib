@@ -6,6 +6,9 @@ from rclpy.qos import qos_profile_sensor_data, QoSProfile, QoSDurabilityPolicy, 
 from std_msgs.msg import Bool,Empty
 from image_processor_pkg.msg import CarLocation, SpeedCarril,FinishLine
 
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
+
 import math
 import numpy as np
 import time
@@ -20,6 +23,13 @@ QOS_FINISH_LINE = QoSProfile(
 class CarControllerNode(Node):
     def __init__(self):
         super().__init__("car_controller")
+        
+        # --- CALLBACK GROUPS ---
+        # Poner un hilo a procesar las posiciones de las camaras y poner otro hilo a procesar la red de heartbeat  
+        # Procesar las posiciones de los coches
+        self.car_position_group = MutuallyExclusiveCallbackGroup()
+        # Controlar la red de heartbeat
+        self.heartbeat_car_controller_group = MutuallyExclusiveCallbackGroup()
 
         # --- CONFIGURACION HA ---
         self.declare_parameter("is_primary",True)
@@ -30,7 +40,7 @@ class CarControllerNode(Node):
 
         if self.is_primary:
             # Comprobar si el nodo primary no hice respawn
-            self.sub_heartbeat = self.create_subscription(Empty, "heartbeat", self.callback_heartbeat, qos_profile_sensor_data)
+            self.sub_heartbeat = self.create_subscription(Empty, "heartbeat", self.callback_heartbeat, qos_profile_sensor_data,callback_group=self.heartbeat_car_controller_group)
             time.sleep(1)
             # Si hizo respawn entonces tiene que ser el subscriptor
             if self.respawned_node:
@@ -40,17 +50,17 @@ class CarControllerNode(Node):
             else:     
                 self.destroy_subscription(self.sub_heartbeat)
                 self.sub_heartbeat = None
-                self.pub_heartbeat = self.create_publisher(Empty, "heartbeat", qos_profile_sensor_data) 
+                self.pub_heartbeat = self.create_publisher(Empty, "heartbeat", qos_profile_sensor_data,callback_group=self.heartbeat_car_controller_group) 
         else:
             time.sleep(1)
             # El nodo pasivo siempre que arranque por respawn o no significa que tiene que ser pasivo
-            self.sub_heartbeat = self.create_subscription(Empty,"heartbeat", self.callback_heartbeat ,qos_profile_sensor_data)
+            self.sub_heartbeat = self.create_subscription(Empty,"heartbeat", self.callback_heartbeat ,qos_profile_sensor_data, callback_group=self.heartbeat_car_controller_group)
             
         # TIMERS PARA EL CONTROL DEL HEARTHBEAT
         if self.is_primary:
-            self.timer_publicar_latido = self.create_timer(0.1, self.publicar_heartbeat)
+            self.timer_publicar_latido = self.create_timer(0.1, self.publicar_heartbeat,callback_group=self.heartbeat_car_controller_group)
         else:
-            self.timer_comprobar_failover = self.create_timer(0.5, self.comprobar_failover)
+            self.timer_comprobar_failover = self.create_timer(0.5, self.comprobar_failover,callback_group=self.heartbeat_car_controller_group)
 
         # --- PARÁMETROS DEL MAPA BASE ---
         self.declare_parameter("controller.distancia_nodos_trayectoria", 15.0)
@@ -95,7 +105,7 @@ class CarControllerNode(Node):
 
         # --- FINISH LINE ---
         # Va a ser diccionario donde vas a tener de que camara viene y que posicion tiene le objeto
-        self.finish_line = {"camara_id" : None, "coordenadas" : None} 
+        self.finish_line = {} 
 
         # --- CONTROL DE TIEMPOS (VUELTAS) ---
         self.tiempo_ultima_vuelta = None
@@ -104,21 +114,18 @@ class CarControllerNode(Node):
         self.debounce_meta = self.get_parameter("controller.debounce_meta").value  
 
         # --- SUSCRIPTORES Y PUBLICADORES ---
-        self.sub_car_position = self.create_subscription(
-            CarLocation, "position", self.callback_posicion, qos_profile_sensor_data
-        )
 
-        self.sub_modo_calibracion = self.create_subscription(
-            Bool, "/modo_calibracion", self.callback_control_calibracion, 10
-        )
+        # Procesar la peticion del coche
+        self.sub_car_position = self.create_subscription(CarLocation, "position", self.callback_posicion, qos_profile_sensor_data, callback_group=self.car_position_group)
+
+        # Estar pendiente de si hay que cambiar a modo operacion o a modo calibracion
+        self.sub_modo_calibracion = self.create_subscription(Bool, "/modo_calibracion", self.callback_control_calibracion, 10, callback_group=self.car_position_group)
         
-        self.sub_finish_line_position = self.create_subscription(
-            FinishLine, "/finish_line_position", self.callback_get_finish_line_position, QOS_FINISH_LINE
-        )
-        
-        self.pub_pwm = self.create_publisher(
-            SpeedCarril, "pwd", qos_profile_sensor_data
-        )
+        # Recibir la posicion de la linea de meta
+        self.sub_finish_line_position = self.create_subscription(FinishLine, "/finish_line_position", self.callback_get_finish_line_position, QOS_FINISH_LINE, callback_group=self.car_position_group)
+
+        # Enviar el PWD al nodo RaceController 
+        self.pub_pwm = self.create_publisher(SpeedCarril, "pwd", qos_profile_sensor_data, callback_group=self.car_position_group)
         
         self.get_logger().info("🏁 Controlador iniciado. MODO CALIBRACIÓN ACTIVO.")
 
@@ -508,12 +515,16 @@ class CarControllerNode(Node):
             if diferencia_segundos > self.debounce_meta:
                 self.get_logger().info(f"⏱️ ¡VUELTA COMPLETADA! Tiempo: {diferencia_segundos:.3f} s")
                 self.tiempo_ultima_vuelta = ahora
-
+                
 def main(args=None):
     rclpy.init(args=args)
     node = CarControllerNode()
+    
+    executor = MultiThreadedExecutor(num_threads=3)
+    executor.add_node(node)
+
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
