@@ -84,10 +84,10 @@ class ArduinoBridgeNode(Node):
     
     def callback_control_calibracion(self,msg):
         
-        if msg.data == False and self.en_calibracion:
-            self.en_calibracion = False
-        elif msg.data == True and not self.en_calibracion:
-            self.en_calibracion = True      
+        if msg.data == False and self.modo_calibracion:
+            self.modo_calibracion= False
+        elif msg.data == True and not self.modo_calibracion:
+            self.modo_calibracion= True      
             # Arrancamos con la velocidad de calibración
             self.arduino.set_both_rails(self.calibration_speed, self.calibration_speed)
 
