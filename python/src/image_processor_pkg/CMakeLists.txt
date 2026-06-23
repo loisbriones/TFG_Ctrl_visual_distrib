@@ -30,6 +30,7 @@ install(PROGRAMS
   image_processor_pkg/RaceControllerNode.py
   image_processor_pkg/ArduinoController.py
   image_processor_pkg/CarControllerNode.py
+  image_processor_pkg/AlgoritmoVelocidad.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
