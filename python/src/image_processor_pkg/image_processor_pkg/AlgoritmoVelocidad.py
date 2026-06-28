@@ -6,8 +6,7 @@ import os
 
 
 class MarioAlgorithm:
-    def __init__(self, v_max, v_min):
-        # Mapeamos la velocidad máxima y mínima que recibimos del controlador
+    def __init__(self, v_max, v_min, node_name="node", camara_id="cam"):
         self.velocidad = [v_max, v_min]
         self.derrapes = []
         self.derrapeEvitado = []
@@ -17,34 +16,25 @@ class MarioAlgorithm:
         self.indiceDerrape = None
         self.indiceSegundo = None
         self.enDerrape = False
-        self.lastDistance = 0
+
+        # INICIALIZACIÓN CORREGIDA: Evitamos el bug del frame 1
+        self.lastDistance = float("inf")
+
         self.changedVelocity = False
         self.tamanoDerrape = []
         self.data = []
 
-        # Archivo de log temporal
-        self.log_file = "/tmp/derrapesLog.txt"
-        if os.path.exists(self.log_file):
-            os.remove(self.log_file)
+        directorio_logs = "/ros2_ws/src/image_processor_pkg/logs_carrera"
+        os.makedirs(directorio_logs, exist_ok=True)
 
-    def saveData(self, vueltas):
-        with open("/tmp/datosDerrapes.csv", "w", newline="") as archivoCSV:
-            columnas = ["vueltas"]
-            for point in self.derrapes:
-                columnas.append(str(point))
+        self.log_file = f"{directorio_logs}/derrapesLog_{node_name}_{camara_id}.txt"
+        self.csv_file = f"{directorio_logs}/datosDerrapes_{node_name}_{camara_id}.csv"
 
-            fichero = csv.writer(archivoCSV)
-            fichero.writerow(columnas)
-            for i in range(0, len(self.data)):
-                if len(self.data[i]) < vueltas + 1:
-                    for j in range(len(self.data[i]), vueltas + 1):
-                        self.data[i].append(None)
-
-            for i in range(0, vueltas + 1):
-                fila = [i]
-                for j in range(0, len(self.derrapes)):
-                    fila.append(self.data[j][i])
-                fichero.writerow(fila)
+        try:
+            with open(self.log_file, "w") as f:
+                f.write("=== LOG INICIADO ===\n")
+        except IOError as e:
+            print(f"Error inicializando log: {e}")
 
     def saveLogFile(self, data):
         try:
@@ -52,6 +42,28 @@ class MarioAlgorithm:
                 log_file.write(data + "\n")
         except IOError as e:
             print(f"Error escribiendo log: {e}")
+
+    def saveData(self, vueltas):
+        try:
+            with open(self.csv_file, "w", newline="") as archivoCSV:
+                columnas = ["vueltas"]
+                for point in self.derrapes:
+                    columnas.append(str(point))
+
+                fichero = csv.writer(archivoCSV)
+                fichero.writerow(columnas)
+                for i in range(0, len(self.data)):
+                    if len(self.data[i]) < vueltas + 1:
+                        for j in range(len(self.data[i]), vueltas + 1):
+                            self.data[i].append(None)
+
+                for i in range(0, vueltas + 1):
+                    fila = [i]
+                    for j in range(0, len(self.derrapes)):
+                        fila.append(self.data[j][i])
+                    fichero.writerow(fila)
+        except IOError as e:
+            print(f"Error guardando CSV: {e}")
 
     def derrapeDetected(self, pos, vuelta, frame):
         self.saveLogFile(f"\n\nDerrape detectado en fotograma número: {frame}")
@@ -229,19 +241,26 @@ class MarioAlgorithm:
                         ),
                     )
 
-                    if dist > self.lastDistance:
+                    # LÓGICA CORREGIDA: Filtramos el ruido de cámara exigiendo un salto de >15 píxeles
+                    # para dar la curva por finalizada.
+                    if dist > self.lastDistance + 15.0:
                         self.indiceDerrape += 1
                         self.enDerrape = True
                         self.indiceDerrape = self.indiceDerrape % len(self.derrapes)
-                        self.lastDistance = dist
+                        self.lastDistance = float(
+                            "inf"
+                        )  # Reset de distancia para la salida de curva
                         if self.changedVelocity:
                             self.changedVelocity = False
                     else:
+                        # Solo actualizamos "lastDistance" si la distancia disminuye (nos estamos acercando)
+                        if dist < self.lastDistance:
+                            self.lastDistance = dist
+
                         if dist < self.distanceForDerrape[self.indiceDerrape]:
                             if not self.changedVelocity:
                                 self.changedVelocity = True
                                 velocidad = self.velocidad[1]  # FRENAR
-                        self.lastDistance = dist
                 else:
                     dist = self.distanceToDerrape(
                         pos,
@@ -250,12 +269,18 @@ class MarioAlgorithm:
                             self.derrapes[self.indiceSegundo][3],
                         ),
                     )
-                    if dist > self.lastDistance:
+
+                    if dist > self.lastDistance + 15.0:
                         self.indiceSegundo += 1
                         self.enDerrape = False
                         self.indiceSegundo = self.indiceSegundo % len(self.derrapes)
+                        self.lastDistance = float(
+                            "inf"
+                        )  # Reset de distancia para la próxima curva
                         velocidad = self.velocidad[0]  # ACELERAR
-                    self.lastDistance = dist
+                    else:
+                        if dist < self.lastDistance:
+                            self.lastDistance = dist
 
         if self.enDerrape or not self.distanceForDerrape:
             return None, velocidad

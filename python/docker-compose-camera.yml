@@ -3,6 +3,7 @@ services:
     build: .
     network_mode: "host" 
     privileged: true
+    ipc: "host"
     devices:
       - "/dev/video0:/dev/video0"
     environment:
