@@ -10,7 +10,7 @@ from rclpy.qos import (
     QoSHistoryPolicy,
 )
 from std_msgs.msg import Bool, Empty
-from image_processor_pkg.msg import CarLocation, SpeedCarril, FinishLine
+from image_processor_pkg.msg import CarLocation, SpeedCarril, FinishLine, TimePerLap
 
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -139,6 +139,13 @@ class CarControllerNode(Node):
         self.pub_pwm = self.create_publisher(
             SpeedCarril,
             "pwd",
+            qos_profile_sensor_data,
+            callback_group=self.car_position_group,
+        )
+
+        self.pub_time_per_lap = self.create_publisher(
+            TimePerLap,
+            "time_per_lap",
             qos_profile_sensor_data,
             callback_group=self.car_position_group,
         )
@@ -297,6 +304,13 @@ class CarControllerNode(Node):
         msg_vel.carril = "2"
         msg_vel.stamp = self.get_clock().now().to_msg()
         self.pub_pwm.publish(msg_vel)
+    
+    def publicar_time_lap(self, lap_time, lap_number):
+        msg_time_per_lap = TimePerLap()
+        msg_time_per_lap.lap_time = lap_time
+        msg_time_per_lap.lap_number = lap_number
+        msg_time_per_lap.stamp = self.get_clock().now().to_msg()
+        self.pub_time_per_lap.publish(msg_time_per_lap)
 
     def crosses_segment(self, p1, p2, A, B):
         thr = 30.0
@@ -361,6 +375,7 @@ class CarControllerNode(Node):
 
             if diferencia_segundos > self.debounce_meta:
                 self.vueltas += 1
+                self.publicar_time_lap(diferencia_segundos,self.vueltas)
                 self.get_logger().info(
                     f"⏱️ ¡VUELTA {self.vueltas} COMPLETADA! Tiempo: {diferencia_segundos:.3f} s"
                 )
