@@ -17,12 +17,14 @@ class MarioAlgorithm:
         self.indiceSegundo = None
         self.enDerrape = False
 
-        # INICIALIZACIÓN CORREGIDA: Evitamos el bug del frame 1
-        self.lastDistance = float("inf")
-
+        self.lastDistance = 0
         self.changedVelocity = False
         self.tamanoDerrape = []
         self.data = []
+
+        self.umbral_derrape = 15.0
+        self.estado_derrapando = False
+        self.ultimo_derrape = [0, 0, 0, 0]
 
         directorio_logs = "/ros2_ws/src/image_processor_pkg/logs_carrera"
         os.makedirs(directorio_logs, exist_ok=True)
@@ -35,6 +37,63 @@ class MarioAlgorithm:
                 f.write("=== LOG INICIADO ===\n")
         except IOError as e:
             print(f"Error inicializando log: {e}")
+
+    # --- NUEVA LÓGICA CENTRALIZADA ---
+    def actualizar_estado(self, p_front, p_back, frame_count, vuelta):
+        # 1. Filtro de ruido y obtención del nodo más cercano (pegatina frontal)
+        _, dist_a_ruta = self.obtener_nodo_mas_cercano(p_front)
+
+        # Tolerancia aumentada por si derrapa mucho a gran velocidad
+        if dist_a_ruta > 80.0:
+            return None
+
+        # 2. Cálculos para detectar el derrape (pegatina trasera)
+        idx_trasero, _ = self.obtener_nodo_mas_cercano(p_back)
+        num_nodos = len(self.trayectoriaUsada)
+
+        p_centro = self.trayectoriaUsada[idx_trasero]
+        p_siguiente = self.trayectoriaUsada[(idx_trasero + 1) % num_nodos]
+        p_anterior = self.trayectoriaUsada[(idx_trasero - 1) % num_nodos]
+
+        d1 = self.distancia_punto_segmento(p_back, p_anterior, p_centro)
+        d2 = self.distancia_punto_segmento(p_back, p_centro, p_siguiente)
+        dist_derrape = min(d1, d2)
+
+        # 3. Máquina de estados del Derrape
+        if dist_derrape > self.umbral_derrape:
+            if not self.estado_derrapando:
+                self.estado_derrapando = True
+                self.ultimo_derrape[0] = int(p_back[0])
+                self.ultimo_derrape[1] = int(p_back[1])
+
+            self.ultimo_derrape[2] = int(p_back[0])
+            self.ultimo_derrape[3] = int(p_back[1])
+        else:
+            if self.estado_derrapando:
+                self.estado_derrapando = False
+                self.derrapeDetected(self.ultimo_derrape.copy(), vuelta, frame_count)
+                self.ultimo_derrape = [0, 0, 0, 0]
+
+        # 4. Calcular velocidad ideal basada en la pegatina frontal
+        _, nueva_vel = self.setVelocidad((p_front[0], p_front[1]), frame_count)
+
+        return nueva_vel
+
+    # --- HELPERS GEOMÉTRICOS ---
+    def obtener_nodo_mas_cercano(self, punto):
+        distancias_sq = np.sum((self.trayectoriaUsada - punto) ** 2, axis=1)
+        mejor_idx = np.argmin(distancias_sq)
+        return int(mejor_idx), math.sqrt(distancias_sq[mejor_idx])
+
+    def distancia_punto_segmento(self, P, A, B):
+        AB = B - A
+        AP = P - A
+        l2 = np.sum(AB**2)
+        if l2 == 0:
+            return np.linalg.norm(AP)
+        t = max(0.0, min(1.0, np.dot(AP, AB) / l2))
+        proyeccion = A + t * AB
+        return np.linalg.norm(P - proyeccion)
 
     def saveLogFile(self, data):
         try:

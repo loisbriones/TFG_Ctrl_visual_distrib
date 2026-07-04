@@ -19,7 +19,7 @@ import math
 import numpy as np
 import time
 
-# Importamos la clase de Mario con tu nombre de archivo
+# Importamos la clase de Mario
 from AlgoritmoVelocidad import MarioAlgorithm
 
 QOS_FINISH_LINE = QoSProfile(
@@ -107,11 +107,8 @@ class CarControllerNode(Node):
         self.puntos_crudos = {}
         self.trayectoria_base = {}
         self.algoritmos = {}
-        self.estado_derrape = {}
         self.vueltas = 0
         self.frame_count = 0
-
-        self.umbral_derrape_mario = 8.0
 
         self.finish_line = {"camara_id": None, "coordenadas": None}
         self.tiempo_ultima_vuelta = None
@@ -190,7 +187,6 @@ class CarControllerNode(Node):
             self.puntos_crudos.clear()
             self.trayectoria_base.clear()
             self.algoritmos.clear()
-            self.estado_derrape.clear()
             self.vueltas = 0
             self.v_actual = 0.0
             self.publicar_velocidad(0)
@@ -240,11 +236,6 @@ class CarControllerNode(Node):
             )
             self.algoritmos[camara].setTrayectoria(self.trayectoria_base[camara])
 
-            self.estado_derrape[camara] = {
-                "derrapando": False,
-                "ultimo_derrape": [0, 0, 0, 0],
-            }
-
             self.get_logger().info(
                 f"✅ {camara}: Ruta base con {len(ruta_limpia)} nodos. Algoritmo Mario inyectado."
             )
@@ -263,57 +254,21 @@ class CarControllerNode(Node):
         if (fx == 0 and fy == 0) or (bx == 0 and by == 0):
             return
 
-        trayectoria = self.trayectoria_base[camara]
-        num_nodos = len(trayectoria)
-
         punto_front = np.array([fx, fy], dtype=np.float32)
         punto_back = np.array([bx, by], dtype=np.float32)
 
         self.verificar_linea_meta(camara, punto_front, punto_back)
 
-        idx_actual, dist_a_ruta = self.obtener_nodo_mas_cercano(
-            punto_front, trayectoria
+        # 🏎️ MAGIA: MarioAlgorithm se encarga ahora de detectar el derrape y pedir la velocidad
+        nueva_vel = self.algoritmos[camara].actualizar_estado(
+            punto_front, punto_back, self.frame_count, self.vueltas
         )
 
-        # Tolerancia aumentada por si derrapa mucho a gran velocidad
-        if dist_a_ruta > 80.0:
-            return
-
-        estado = self.estado_derrape[camara]
-        dist_derrape = 0.0
-
-        idx_trasero, _ = self.obtener_nodo_mas_cercano(punto_back, trayectoria)
-        p_centro = trayectoria[idx_trasero]
-        p_siguiente = trayectoria[(idx_trasero + 1) % num_nodos]
-        p_anterior = trayectoria[(idx_trasero - 1) % num_nodos]
-
-        d1 = self.distancia_punto_segmento(punto_back, p_anterior, p_centro)
-        d2 = self.distancia_punto_segmento(punto_back, p_centro, p_siguiente)
-        dist_derrape = min(d1, d2)
-
-        if dist_derrape > self.umbral_derrape_mario:
-            if not estado["derrapando"]:
-                estado["derrapando"] = True
-                estado["ultimo_derrape"][0] = int(bx)
-                estado["ultimo_derrape"][1] = int(by)
-
-            estado["ultimo_derrape"][2] = int(bx)
-            estado["ultimo_derrape"][3] = int(by)
-        else:
-            if estado["derrapando"]:
-                estado["derrapando"] = False
-                self.algoritmos[camara].derrapeDetected(
-                    estado["ultimo_derrape"].copy(), self.vueltas, self.frame_count
-                )
-                estado["ultimo_derrape"] = [0, 0, 0, 0]
-
-        # 3. Solicitud de Velocidad (Predicción de Mario)
-        _, nueva_vel = self.algoritmos[camara].setVelocidad((fx, fy), self.frame_count)
-
+        # Si el algoritmo nos dice que ignoremos el frame por ruido, nueva_vel será None
         if nueva_vel is not None:
             self.v_actual = nueva_vel
 
-        # AQUÍ ESTÁ EL ARREGLO CRÍTICO: Publicamos siempre para mantener el Heartbeat vivo
+        # Publicamos siempre para mantener el Heartbeat vivo
         self.publicar_velocidad(int(self.v_actual))
 
         # Log solo si cambia para no saturar la terminal
@@ -325,11 +280,6 @@ class CarControllerNode(Node):
                 f"🚦 MARIO ACTUANDO: {estado_str} | PWM: {self.v_actual}"
             )
             self.ultimo_pwm_enviado = self.v_actual
-
-    def obtener_nodo_mas_cercano(self, punto, trayectoria):
-        distancias_sq = np.sum((trayectoria - punto) ** 2, axis=1)
-        mejor_idx = np.argmin(distancias_sq)
-        return int(mejor_idx), math.sqrt(distancias_sq[mejor_idx])
 
     def distancia_punto_segmento(self, P, A, B):
         AB = B - A
@@ -349,7 +299,7 @@ class CarControllerNode(Node):
         self.pub_pwm.publish(msg_vel)
 
     def crosses_segment(self, p1, p2, A, B):
-        thr = 50.0
+        thr = 30.0
         d1 = self.distancia_punto_segmento(p1, A, B)
         d2 = self.distancia_punto_segmento(p2, A, B)
         if d1 > thr and d2 > thr:
