@@ -37,6 +37,9 @@ class CarControllerNode(Node):
         self.car_position_group = MutuallyExclusiveCallbackGroup()
         self.heartbeat_car_controller_group = MutuallyExclusiveCallbackGroup()
 
+        self.declare_parameter("car_name", "carPruebas")
+        self.car_name = self.get_parameter("car_name").value
+
         self.declare_parameter("is_primary", True)
         self.is_primary = self.get_parameter("is_primary").value
 
@@ -143,9 +146,10 @@ class CarControllerNode(Node):
             callback_group=self.car_position_group,
         )
 
+        url_publiser_time_per_lap = f"/telemetria/{self.car_name}/time_per_lap"
         self.pub_time_per_lap = self.create_publisher(
             TimePerLap,
-            "time_per_lap",
+            url_publiser_time_per_lap,
             qos_profile_sensor_data,
             callback_group=self.car_position_group,
         )
@@ -304,7 +308,7 @@ class CarControllerNode(Node):
         msg_vel.carril = "2"
         msg_vel.stamp = self.get_clock().now().to_msg()
         self.pub_pwm.publish(msg_vel)
-    
+
     def publicar_time_lap(self, lap_time, lap_number):
         msg_time_per_lap = TimePerLap()
         msg_time_per_lap.lap_time = lap_time
@@ -375,7 +379,7 @@ class CarControllerNode(Node):
 
             if diferencia_segundos > self.debounce_meta:
                 self.vueltas += 1
-                self.publicar_time_lap(diferencia_segundos,self.vueltas)
+                self.publicar_time_lap(diferencia_segundos, self.vueltas)
                 self.get_logger().info(
                     f"⏱️ ¡VUELTA {self.vueltas} COMPLETADA! Tiempo: {diferencia_segundos:.3f} s"
                 )
