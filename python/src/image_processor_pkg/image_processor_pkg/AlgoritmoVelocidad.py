@@ -16,6 +16,7 @@ class MarioAlgorithm:
         self.indiceDerrape = None
         self.indiceSegundo = None
         self.enDerrape = False
+        self._dist_derrape = 0
 
         self.lastDistance = 0
         self.changedVelocity = False
@@ -23,7 +24,7 @@ class MarioAlgorithm:
         self.data = []
 
         self.umbral_derrape = 15.0
-        self.estado_derrapando = False
+        self._estado_derrapando = False
         self.ultimo_derrape = [0, 0, 0, 0]
 
         directorio_logs = "/ros2_ws/src/image_processor_pkg/logs_carrera"
@@ -38,6 +39,14 @@ class MarioAlgorithm:
         except IOError as e:
             print(f"Error inicializando log: {e}")
 
+    @property     
+    def dist_derrape(self):
+        return self._dist_derrape
+    
+    @property
+    def estado_derrapando(self):
+        return self._estado_derrapando
+    
     # --- NUEVA LÓGICA CENTRALIZADA ---
     def actualizar_estado(self, p_front, p_back, frame_count, vuelta):
         # 1. Filtro de ruido y obtención del nodo más cercano (pegatina frontal)
@@ -57,20 +66,20 @@ class MarioAlgorithm:
 
         d1 = self.distancia_punto_segmento(p_back, p_anterior, p_centro)
         d2 = self.distancia_punto_segmento(p_back, p_centro, p_siguiente)
-        dist_derrape = min(d1, d2)
+        self._dist_derrape = min(d1, d2)
 
         # 3. Máquina de estados del Derrape
-        if dist_derrape > self.umbral_derrape:
-            if not self.estado_derrapando:
-                self.estado_derrapando = True
+        if self._dist_derrape > self.umbral_derrape:
+            if not self._estado_derrapando:
+                self._estado_derrapando = True
                 self.ultimo_derrape[0] = int(p_back[0])
                 self.ultimo_derrape[1] = int(p_back[1])
 
             self.ultimo_derrape[2] = int(p_back[0])
             self.ultimo_derrape[3] = int(p_back[1])
         else:
-            if self.estado_derrapando:
-                self.estado_derrapando = False
+            if self._estado_derrapando:
+                self._estado_derrapando = False
                 self.derrapeDetected(self.ultimo_derrape.copy(), vuelta, frame_count)
                 self.ultimo_derrape = [0, 0, 0, 0]
 
