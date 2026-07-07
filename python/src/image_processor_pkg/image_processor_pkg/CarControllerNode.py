@@ -10,7 +10,13 @@ from rclpy.qos import (
     QoSHistoryPolicy,
 )
 from std_msgs.msg import Bool, Empty
-from image_processor_pkg.msg import CarLocation, SpeedCarril, FinishLine, TimePerLap, CarControlTelemetry
+from image_processor_pkg.msg import (
+    CarLocation,
+    SpeedCarril,
+    FinishLine,
+    TimePerLap,
+    CarControlTelemetry,
+)
 
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -161,7 +167,7 @@ class CarControllerNode(Node):
             10,
             callback_group=self.car_position_group,
         )
-        
+
         url_publiser_car_control_telemetry = f"/telemetria/{self.car_name}/car_control"
         self.pub_car_control_telemetry = self.create_publisher(
             CarControlTelemetry,
@@ -169,7 +175,6 @@ class CarControllerNode(Node):
             qos_profile_sensor_data,
             callback_group=self.car_position_group,
         )
-        
 
         self.get_logger().info("🏁 Controlador iniciado. MODO CALIBRACIÓN ACTIVO.")
 
@@ -239,7 +244,7 @@ class CarControllerNode(Node):
         bx, by = float(msg.back.center.x), float(msg.back.center.y)
 
         punto_front = np.array([fx, fy], dtype=np.float32)
-        
+
         if camara not in self.puntos_crudos:
             self.puntos_crudos[camara] = []
 
@@ -247,12 +252,14 @@ class CarControllerNode(Node):
 
         punto_back = np.array([bx, by], dtype=np.float32)
         # Como ya dimos una vuelta podemos terminar la calibración
-        if(self.verificar_linea_meta(camara, punto_front, punto_back)):
-            msg = Bool()  
-            msg.data = True 
-            self.pub_modo_calibracion.publish(msg)            
-            self.get_logger().info('¡Flag activado! Se ha publicado: True en /modo_calibracion')
-            
+        if self.verificar_linea_meta(camara, punto_front, punto_back):
+            msg = Bool()
+            msg.data = False
+            self.pub_modo_calibracion.publish(msg)
+            self.get_logger().info(
+                "¡Flag activado! Se ha publicado: True en /modo_calibracion"
+            )
+
     def procesar_trayectorias(self):
         for camara, puntos in self.puntos_crudos.items():
             if not puntos:
@@ -284,11 +291,10 @@ class CarControllerNode(Node):
         self.get_logger().info("🚗 ¡Mapa mental listo! Pasando a MODO CARRERA.")
 
     def ejecutar_control_carrera(self, msg: CarLocation):
-
         time_received_from_camera = self.get_clock().now().to_msg()
 
         camara = msg.camara_id
-        
+
         if camara not in self.algoritmos:
             return
 
@@ -314,16 +320,20 @@ class CarControllerNode(Node):
 
         # Publicamos siempre para mantener el Heartbeat vivo
         self.publicar_velocidad(int(self.v_actual))
-        
+
         time_pipeline_finish = self.get_clock().now()
-        
+
         # Crear mensaje para la telemetria
-        msg_car_control_telemetry = CarControlTelemetry() 
+        msg_car_control_telemetry = CarControlTelemetry()
         msg_car_control_telemetry.receive_msg_stamp = time_received_from_camera
-        msg_car_control_telemetry.pipeline_time = (time_pipeline_finish - time_received_from_camera).nanoseconds / 1e9
+        msg_car_control_telemetry.pipeline_time = (
+            time_pipeline_finish - time_received_from_camera
+        ).nanoseconds / 1e9
         msg_car_control_telemetry.dist_derrape = self.algoritmos[camara].dist_derrape
-        msg_car_control_telemetry.estado_derrapando = self.algoritmos[camara].estado_derrapando
-        
+        msg_car_control_telemetry.estado_derrapando = self.algoritmos[
+            camara
+        ].estado_derrapando
+
         self.pub_car_control_telemetry.publish(msg_car_control_telemetry)
 
         # Log solo si cambia para no saturar la terminal
@@ -397,7 +407,10 @@ class CarControllerNode(Node):
         return False
 
     def verificar_linea_meta(self, camara_id, p_front, p_back):
-        if (self.finish_line["camara_id"] is None or camara_id != self.finish_line["camara_id"]):
+        if (
+            self.finish_line["camara_id"] is None
+            or camara_id != self.finish_line["camara_id"]
+        ):
             return False
 
         A, B = self.finish_line["coordenadas"]
@@ -412,7 +425,9 @@ class CarControllerNode(Node):
             # Devolvemos False porque es la primera vez que cruza
             if self.tiempo_ultima_vuelta is None:
                 self.tiempo_ultima_vuelta = ahora
-                self.get_logger().info("🏁 Primera pasada por meta. Iniciando cronómetro...")
+                self.get_logger().info(
+                    "🏁 Primera pasada por meta. Iniciando cronómetro..."
+                )
                 return False
 
             diferencia_segundos = (ahora - self.tiempo_ultima_vuelta).nanoseconds / 1e9
@@ -425,7 +440,7 @@ class CarControllerNode(Node):
                     f"⏱️ ¡VUELTA {self.vueltas} COMPLETADA! Tiempo: {diferencia_segundos:.3f} s"
                 )
                 self.tiempo_ultima_vuelta = ahora
-            
+
             return True
 
 
