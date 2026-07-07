@@ -211,6 +211,16 @@ class CarControllerNode(Node):
         f_e_y = msg.finish_line.end.y
         self.finish_line["coordenadas"] = ((f_s_x, f_s_y), (f_e_x, f_e_y))
 
+        self.get_logger().info("SE RECIBIO LA LINEA DE META :)")
+
+        self.get_logger().info("COORDENADAS INICIO:")
+        inicio = f"X:{self.finish_line['coordenadas'][0][0]}, Y:{self.finish_line['coordenadas'][0][1]}"
+        self.get_logger().info(inicio)
+
+        self.get_logger().info("COORDENADAS FIN:")
+        fin = f"X:{self.finish_line['coordenadas'][1][0]}, Y:{self.finish_line['coordenadas'][1][1]}"
+        self.get_logger().info(fin)
+
     def callback_control_calibracion(self, msg):
         if msg.data == False and self.en_calibracion:
             self.en_calibracion = False
@@ -291,7 +301,7 @@ class CarControllerNode(Node):
         self.get_logger().info("🚗 ¡Mapa mental listo! Pasando a MODO CARRERA.")
 
     def ejecutar_control_carrera(self, msg: CarLocation):
-        time_received_from_camera = self.get_clock().now().to_msg()
+        time_received_from_camera = self.get_clock().now()
 
         camara = msg.camara_id
 
@@ -325,11 +335,13 @@ class CarControllerNode(Node):
 
         # Crear mensaje para la telemetria
         msg_car_control_telemetry = CarControlTelemetry()
-        msg_car_control_telemetry.receive_msg_stamp = time_received_from_camera
+        msg_car_control_telemetry.receive_msg_stamp = time_received_from_camera.to_msg()
         msg_car_control_telemetry.pipeline_time = (
             time_pipeline_finish - time_received_from_camera
         ).nanoseconds / 1e9
-        msg_car_control_telemetry.dist_derrape = self.algoritmos[camara].dist_derrape
+        msg_car_control_telemetry.dist_derrape = float(
+            self.algoritmos[camara].dist_derrape
+        )
         msg_car_control_telemetry.estado_derrapando = self.algoritmos[
             camara
         ].estado_derrapando
@@ -441,7 +453,9 @@ class CarControllerNode(Node):
                 )
                 self.tiempo_ultima_vuelta = ahora
 
-            return True
+                return True
+
+        return False
 
 
 def main(args=None):
