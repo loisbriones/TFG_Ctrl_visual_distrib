@@ -24,6 +24,7 @@ from rclpy.executors import MultiThreadedExecutor
 import math
 import numpy as np
 import time
+import json
 
 # Importamos la clase de Mario
 from AlgoritmoVelocidad import MarioAlgorithm
@@ -176,6 +177,9 @@ class CarControllerNode(Node):
             callback_group=self.car_position_group,
         )
 
+        # --- RUTA DE GUARDADO DE TRAYECTORIAS ---
+        self.cache_file = "/ros2_ws/src/image_processor_pkg/cache_trayectoria_controller.json"
+
         self.get_logger().info("🏁 Controlador iniciado. MODO CALIBRACIÓN ACTIVO.")
 
     def callback_heartbeat(self, msg):
@@ -270,7 +274,10 @@ class CarControllerNode(Node):
                 "¡Flag activado! Se ha publicado: True en /modo_calibracion"
             )
 
+
     def procesar_trayectorias(self):
+        datos_a_guardar = {}  # 1. Creamos el diccionario para el JSON
+
         for camara, puntos in self.puntos_crudos.items():
             if not puntos:
                 continue
@@ -288,6 +295,9 @@ class CarControllerNode(Node):
 
             self.trayectoria_base[camara] = np.array(ruta_limpia, dtype=np.float32)
 
+            # 2. Convertimos el array de NumPy a lista de Python para poder serializarlo
+            datos_a_guardar[camara] = self.trayectoria_base[camara].tolist()
+
             # Instanciamos a Mario para esta cámara
             self.algoritmos[camara] = MarioAlgorithm(
                 self.v_max, self.v_min, self.get_name(), camara
@@ -297,6 +307,15 @@ class CarControllerNode(Node):
             self.get_logger().info(
                 f"✅ {camara}: Ruta base con {len(ruta_limpia)} nodos. Algoritmo Mario inyectado."
             )
+
+        # 3. Guardamos en disco la trayectoria de puntos por cámara
+        try:
+            with open(self.cache_file, "w") as f:
+                # Usamos indent=4 para que el JSON quede formateado y sea fácil de leer por humanos
+                json.dump(datos_a_guardar, f, indent=4)
+            self.get_logger().info(f"💾 Trayectoria del controlador guardada en {self.cache_file}")
+        except Exception as e:
+            self.get_logger().error(f"❌ Error guardando caché del controlador: {e}")
 
         self.get_logger().info("🚗 ¡Mapa mental listo! Pasando a MODO CARRERA.")
 
