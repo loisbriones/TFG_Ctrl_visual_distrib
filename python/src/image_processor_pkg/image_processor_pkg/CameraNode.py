@@ -100,35 +100,33 @@ class ImageProcessor(Node):
         # ---- CALIBRACION ----
         self.declare_parameter("modo_calibracion", True)
         self.modo_calibracion = self.get_parameter("modo_calibracion").value
-        # TOPIC para controlar el modo de calibracion
-        self.sub_modo_calibracion = self.create_subscription(
-            Bool, "/modo_calibracion", self.callback_control, 10
-        )
+        # Nos subcribimos al topic para que nos puedan avisar de cuando acaba la calibracion 
+        self.sub_modo_calibracion = self.create_subscription(Bool, "/modo_calibracion", self.callback_control, 10)
         # Trayectoria base que sigue el coche
         self.puntos_trayectoria = []
         # Mascara para calcular la trayectoria
         self.mascara_trayectoria = None
-        # Tamaño kernel para generar la imagen
+        # Tamaño kernel para generar la mascara 
         self.declare_parameter("camera.mascara_kernel_size", 25)
         self.mascara_kernel_size = self.get_parameter("camera.mascara_kernel_size").value
         # --------------------
 
         # ----- DETECTION -----
         self.declare_parameter("camera.detection.min_area", 50)
-        self.declare_parameter("camera.detection.stiker_front", "rojo")
-        self.declare_parameter("camera.detection.stiker_back", "verde")
-        self.declare_parameter("camera.detection.kernel_size", 5)
-
         self.min_area = self.get_parameter("camera.detection.min_area").value
+
+        self.declare_parameter("camera.detection.stiker_front", "rojo")
         self.stiker_front = self.get_parameter("camera.detection.stiker_front").value
+
+        self.declare_parameter("camera.detection.stiker_back", "verde")
         self.stiker_back = self.get_parameter("camera.detection.stiker_back").value
+
+        self.declare_parameter("camera.detection.kernel_size", 5)
         self.kernel_size = self.get_parameter("camera.detection.kernel_size").value
         # ---------------------
 
         # --- COLOR DETECTOR ---
-        self.color_detector = ColorDetector(
-            self.stiker_front, self.stiker_back, self.kernel_size
-        )
+        self.color_detector = ColorDetector(self.stiker_front, self.stiker_back, self.kernel_size)
         # ----------------------
 
         # ---- DEBUG ----
@@ -178,26 +176,19 @@ class ImageProcessor(Node):
                 "debug_y": 0,
                 "debug_points": [],
             }
+        # ---------------------------------------
 
-        # ---
-
-        # - Debug -
+        # -------------- Debug ------------------
         self.debug_publisher = self.create_publisher(
             CompressedImage, "camara_debug", qos_profile_sensor_data
         )
-        # ---
-
         # ---------------------------------------
 
         # ---- TIMER ----
         # Posicion
-        self.timer = self.create_timer(
-            0.033, self.process_frame, callback_group=self.image_processor_group
-        )
+        self.timer = self.create_timer(0.033, self.process_frame, callback_group=self.image_processor_group)
         # Debug
-        self.debug_timer = self.create_timer(
-            0.066, self._tarea_debug, callback_group=self.debug_group
-        )
+        self.debug_timer = self.create_timer(0.066, self._tarea_debug, callback_group=self.debug_group)
 
         # --- BUSCAR LINEA DE META ---
         self.declare_parameter("finish_line_color", "naranja")
@@ -231,13 +222,9 @@ class ImageProcessor(Node):
 
                 for car_name in self.coches:
                     if car_name in datos_cache:
-                        self.info_coches[car_name]["puntos_trayectoria"] = datos_cache[
-                            car_name
-                        ]
+                        self.info_coches[car_name]["puntos_trayectoria"] = datos_cache[car_name]
                         # Generamos la mascara para cada coche con la info almacenada
-                        self.info_coches[car_name]["mascara_trayectoria"] = (
-                            self.generar_mascara(datos_cache[car_name])
-                        )
+                        self.info_coches[car_name]["mascara_trayectoria"] = (self.generar_mascara(datos_cache[car_name]))
 
                 # Si cargamos la caché, saltamos la calibración
                 self.modo_calibracion = False
@@ -381,9 +368,7 @@ class ImageProcessor(Node):
 
     def actualizar_detector(self):
         """Función auxiliar para re-instanciar el detector con los nuevos valores."""
-        self.color_detector = ColorDetector(
-            self.stiker_front, self.stiker_back, self.kernel_size
-        )
+        self.color_detector = ColorDetector(self.stiker_front, self.stiker_back, self.kernel_size)
 
     def publish_car_position(self, detections, proc_duration, x, y, car_name):
         object_location_msg = CarLocation()
@@ -489,21 +474,15 @@ class ImageProcessor(Node):
     """
     Funcion que ejecutan los threads que se encargan de buscar los Stikers de los coches en el frame
     """
-
     def tarea_por_coche(self, frame, car_name, info):
+
         # --- MODO CALIBRACIÓN ---
         if self.modo_calibracion:
-            detections = self.color_detector.find_object(
-                frame, self.min_area, self.stiker_front, self.stiker_back
-            )
-            if detections["front"] is not None:
-                info["puntos_trayectoria"].append(
-                    (detections["front"]["cx"], detections["front"]["cy"])
-                )
-
-            # Usamos 0,0 como offset porque es el frame completo
-            # Solo publicamos en calibración si hemos detectado algo
-            if detections["front"] is not None or detections["back"] is not None:
+            detections = self.color_detector.find_object(frame, self.min_area, self.stiker_front, self.stiker_back)
+            if detections["front"] is not None and detections["back"] is not None:
+                info["puntos_trayectoria"].append((detections["front"]["cx"], detections["front"]["cy"]))
+                # Usamos 0,0 como offset porque es el frame completo
+                # Solo publicamos en calibración si hemos detectado algo
                 self.publish_car_position(detections, 0.0, 0, 0, car_name)
             return
 
@@ -519,9 +498,7 @@ class ImageProcessor(Node):
 
         # 3. Detectar
         start = time.perf_counter()
-        detections = self.color_detector.find_object(
-            roi_frame, self.min_area, self.stiker_front, self.stiker_back
-        )
+        detections = self.color_detector.find_object(roi_frame, self.min_area, self.stiker_front, self.stiker_back)
         duration = (time.perf_counter() - start) * 1000
 
         found_any = detections["front"] is not None or detections["back"] is not None
