@@ -24,6 +24,7 @@ from rclpy.executors import MultiThreadedExecutor
 import math
 import numpy as np
 import time
+import json
 
 # Importamos la clase de Mario
 from AlgoritmoVelocidad import MarioAlgorithm
@@ -176,6 +177,9 @@ class CarControllerNode(Node):
             callback_group=self.car_position_group,
         )
 
+        # --- RUTA DE GUARDADO DE TRAYECTORIAS ---
+        self.cache_file = "/ros2_ws/src/image_processor_pkg/cache_trayectoria_controller.json"
+
         self.get_logger().info("🏁 Controlador iniciado. MODO CALIBRACIÓN ACTIVO.")
 
     def callback_heartbeat(self, msg):
@@ -210,6 +214,16 @@ class CarControllerNode(Node):
         f_e_x = msg.finish_line.end.x
         f_e_y = msg.finish_line.end.y
         self.finish_line["coordenadas"] = ((f_s_x, f_s_y), (f_e_x, f_e_y))
+
+        self.get_logger().info("SE RECIBIO LA LINEA DE META :)")
+
+        self.get_logger().info("COORDENADAS INICIO:")
+        inicio = f"X:{self.finish_line['coordenadas'][0][0]}, Y:{self.finish_line['coordenadas'][0][1]}"
+        self.get_logger().info(inicio)
+
+        self.get_logger().info("COORDENADAS FIN:")
+        fin = f"X:{self.finish_line['coordenadas'][1][0]}, Y:{self.finish_line['coordenadas'][1][1]}"
+        self.get_logger().info(fin)
 
     def callback_control_calibracion(self, msg):
         if msg.data == False and self.en_calibracion:
@@ -260,7 +274,10 @@ class CarControllerNode(Node):
                 "¡Flag activado! Se ha publicado: True en /modo_calibracion"
             )
 
+
     def procesar_trayectorias(self):
+        datos_a_guardar = {}  # 1. Creamos el diccionario para el JSON
+
         for camara, puntos in self.puntos_crudos.items():
             if not puntos:
                 continue
@@ -278,6 +295,9 @@ class CarControllerNode(Node):
 
             self.trayectoria_base[camara] = np.array(ruta_limpia, dtype=np.float32)
 
+            # 2. Convertimos el array de NumPy a lista de Python para poder serializarlo
+            datos_a_guardar[camara] = self.trayectoria_base[camara].tolist()
+
             # Instanciamos a Mario para esta cámara
             self.algoritmos[camara] = MarioAlgorithm(
                 self.v_max, self.v_min, self.get_name(), camara
@@ -288,10 +308,19 @@ class CarControllerNode(Node):
                 f"✅ {camara}: Ruta base con {len(ruta_limpia)} nodos. Algoritmo Mario inyectado."
             )
 
+        # 3. Guardamos en disco la trayectoria de puntos por cámara
+        try:
+            with open(self.cache_file, "w") as f:
+                # Usamos indent=4 para que el JSON quede formateado y sea fácil de leer por humanos
+                json.dump(datos_a_guardar, f, indent=4)
+            self.get_logger().info(f"💾 Trayectoria del controlador guardada en {self.cache_file}")
+        except Exception as e:
+            self.get_logger().error(f"❌ Error guardando caché del controlador: {e}")
+
         self.get_logger().info("🚗 ¡Mapa mental listo! Pasando a MODO CARRERA.")
 
     def ejecutar_control_carrera(self, msg: CarLocation):
-        time_received_from_camera = self.get_clock().now().to_msg()
+        time_received_from_camera = self.get_clock().now()
 
         camara = msg.camara_id
 
@@ -323,10 +352,16 @@ class CarControllerNode(Node):
 
         # Crear mensaje para la telemetria
         msg_car_control_telemetry = CarControlTelemetry()
-        msg_car_control_telemetry.receive_msg_stamp = time_received_from_camera
-        msg_car_control_telemetry.pipeline_time = (time_pipeline_finish - time_received_from_camera).nanoseconds / 1e9
-        msg_car_control_telemetry.dist_derrape = self.algoritmos[camara].dist_derrape
-        msg_car_control_telemetry.estado_derrapando = self.algoritmos[camara].estado_derrapando
+        msg_car_control_telemetry.receive_msg_stamp = time_received_from_camera.to_msg()
+        msg_car_control_telemetry.pipeline_time = (
+            time_pipeline_finish - time_received_from_camera
+        ).nanoseconds / 1e9
+        msg_car_control_telemetry.dist_derrape = float(
+            self.algoritmos[camara].dist_derrape
+        )
+        msg_car_control_telemetry.estado_derrapando = self.algoritmos[
+            camara
+        ].estado_derrapando
 
         self.pub_car_control_telemetry.publish(msg_car_control_telemetry)
 
@@ -435,7 +470,9 @@ class CarControllerNode(Node):
                 )
                 self.tiempo_ultima_vuelta = ahora
 
-            return True
+                return True
+
+        return False
 
 
 def main(args=None):
