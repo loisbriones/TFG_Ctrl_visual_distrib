@@ -1,7 +1,7 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from launch.substitutions import PathJoinSubstitution, EnvironmentVariable, LaunchConfiguration
+from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
 from launch.actions import DeclareLaunchArgument
 
 def generate_launch_description():
@@ -13,8 +13,14 @@ def generate_launch_description():
         'params.yaml'
     ])
 
-    # Optenemos el nombre del nodo
-    node_id = EnvironmentVariable('NODE_ID', default_value='camera_00')
+    # Obtenemos el nombre del nodo
+    node_id = DeclareLaunchArgument(
+        'node_id',
+        default_value='camera_00',
+        description='Nombre con el que se va a identificar al nodo dentro de la red de ROS2'
+
+    )
+
     # Nombre de la camara que queremos levantar
     camera_name = DeclareLaunchArgument(
         'camera_name',
@@ -24,13 +30,14 @@ def generate_launch_description():
 
     return LaunchDescription([
         camera_name,
+        node_id,
         Node(
             package='image_processor_pkg',
             executable='CameraNode.py', 
-            namespace=node_id,
+            namespace=LaunchConfiguration('node_id'),
             parameters=[
                 params_file,
-                {'camara_id': node_id},
+                {'camara_id': LaunchConfiguration('node_id')},
                 {'camera.device': LaunchConfiguration('camera_name')}
             ],
             respawn=True,
