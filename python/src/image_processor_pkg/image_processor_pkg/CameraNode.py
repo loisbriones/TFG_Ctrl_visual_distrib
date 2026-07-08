@@ -66,19 +66,27 @@ class ImageProcessor(Node):
 
         # ---- ID NODO ----
         self.declare_parameter("camara_id", "camara")
-        # Lo recibimos como parametro pero se envia desde el launchfile
         self.camara_id = self.get_parameter("camara_id").value
         # -----------------
 
         # ----- CAMARA -----
+        # Seleccionar tamaño del frame usando diccionario de modos
         self.declare_parameter("camera.mode", 2)
         mode = self.get_parameter("camera.mode").value
-
         # Coger modo camara para saber w,h del frame
         self.width, self.height = CAMERA_MODES[mode]
 
+    
         # Seleccionamos la camara
-        self.cam = cv.VideoCapture(0, cv.CAP_V4L2)
+        device_param = self.declare_parameter('camera.device','0')
+        device_param = self.get_parameter('camera.device').value
+
+        try:
+            camera_name = int(device_param)
+        except ValueError:
+            camera_name = device_param
+
+        self.cam = cv.VideoCapture(camera_name, cv.CAP_V4L2)
         # Esto le pide a la cámara que envíe los datos ya comprimidos en JPEG
         self.cam.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*"MJPG"))
         # Configuramos el ancho de la camara
@@ -102,9 +110,7 @@ class ImageProcessor(Node):
         self.mascara_trayectoria = None
         # Tamaño kernel para generar la imagen
         self.declare_parameter("camera.mascara_kernel_size", 25)
-        self.mascara_kernel_size = self.get_parameter(
-            "camera.mascara_kernel_size"
-        ).value
+        self.mascara_kernel_size = self.get_parameter("camera.mascara_kernel_size").value
         # --------------------
 
         # ----- DETECTION -----
@@ -198,14 +204,10 @@ class ImageProcessor(Node):
         self.finish_line_color = self.get_parameter("finish_line_color").value
 
         ret, frame_for_find_sectors = self.cam.read()
-        self.finish_line_position = self.color_detector.find_finish_line(
-            frame_for_find_sectors, self.finish_line_color
-        )
+        self.finish_line_position = self.color_detector.find_finish_line(frame_for_find_sectors, self.finish_line_color)
 
         if self.finish_line_position is not None and ret:
-            self.finish_line_publisher = self.create_publisher(
-                FinishLine, "/finish_line_position", QOS_FINISH_LINE
-            )
+            self.finish_line_publisher = self.create_publisher(FinishLine, "/finish_line_position", QOS_FINISH_LINE)
 
             finish_line_msg = FinishLine()
             finish_line_msg.camara_id = self.camara_id
@@ -218,10 +220,10 @@ class ImageProcessor(Node):
 
             self.finish_line_publisher.publish(finish_line_msg)
 
+
         # --- CARGAR RUTA DE CACHE ---
-        self.cache_file = (
-            f"/ros2_ws/src/image_processor_pkg/cache_trayectoria_{self.camara_id}.json"
-        )
+        self.cache_file = (f"/ros2_ws/src/image_processor_pkg/cache_trayectoria_{self.camara_id}.json" )
+
         if os.path.exists(self.cache_file):
             try:
                 with open(self.cache_file, "r") as f:

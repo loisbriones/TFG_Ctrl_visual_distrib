@@ -310,9 +310,7 @@ class CarControllerNode(Node):
         self.verificar_linea_meta(camara, punto_front, punto_back)
 
         # 🏎️ MAGIA: MarioAlgorithm se encarga ahora de detectar el derrape y pedir la velocidad
-        nueva_vel = self.algoritmos[camara].actualizar_estado(
-            punto_front, punto_back, self.frame_count, self.vueltas
-        )
+        nueva_vel = self.algoritmos[camara].actualizar_estado(punto_front, punto_back, self.frame_count, self.vueltas)
 
         # Si el algoritmo nos dice que ignoremos el frame por ruido, nueva_vel será None
         if nueva_vel is not None:
@@ -326,13 +324,9 @@ class CarControllerNode(Node):
         # Crear mensaje para la telemetria
         msg_car_control_telemetry = CarControlTelemetry()
         msg_car_control_telemetry.receive_msg_stamp = time_received_from_camera
-        msg_car_control_telemetry.pipeline_time = (
-            time_pipeline_finish - time_received_from_camera
-        ).nanoseconds / 1e9
+        msg_car_control_telemetry.pipeline_time = (time_pipeline_finish - time_received_from_camera).nanoseconds / 1e9
         msg_car_control_telemetry.dist_derrape = self.algoritmos[camara].dist_derrape
-        msg_car_control_telemetry.estado_derrapando = self.algoritmos[
-            camara
-        ].estado_derrapando
+        msg_car_control_telemetry.estado_derrapando = self.algoritmos[camara].estado_derrapando
 
         self.pub_car_control_telemetry.publish(msg_car_control_telemetry)
 

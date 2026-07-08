@@ -9,22 +9,39 @@
     
     #Parametros para la camara 
     camera:
-      # Controlar el tamaño del frame
+      # Controlar el tamaño de la foto que sacamos
+      # CAMERA_MODES = {
+      #     0: (160, 120),
+      #     1: (320, 240),
+      #     2: (640, 480),
+      #     3: (800, 600),
+      #     4: (1280, 720),
+      # }
       mode: 2
+      device: '0'
+      # Tamaño del kernel que vamos a usar para generar la mascara 
       mascara_kernel_size: 25 
+      # Parametro que controla si estamos en modo debug o no, en caso de estar en bug se envia la imagen de lo que ve la camara
       debug: False
 
       # Parametros para el modulo de deteccion 
       detection:
+        # Color de la pegatina delantera del coche 
         stiker_front: "verde"
+        # Color de la pegatina trasera del coche
         stiker_back: "azul"
+        # Color de la linea del meta del circuito
         finish_line_color: "naranja"
+        # Tamaño del kernel que usamos para la operacion de deteccion
         kernel_size: 5
+        # Area minima que tiene que tener el stiker detectado para considerarlo valido
         min_area: 40 
       
     # Parámetros para el controlador
     controller:
+      # Velocidad minima a la que podemos ir
       minimum_speed: 78 
+      # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
       maximum_speed: 84 
       distancia_nodos_trayectoria: 15.0
       umbral_control_trayectoria_correcta: 60.0 
