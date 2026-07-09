@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
     modo_calibracion: True
-    coches: ["car1"]
+    coches: ["car2"]
     # Tiempo que puede pasar desde que nos envian un paquete hasta que consideramos que el nodo se callo
     delta_t: 1
     # Tiempo que tiene que pasar para que se ejecute el timer de comprobacion de estado

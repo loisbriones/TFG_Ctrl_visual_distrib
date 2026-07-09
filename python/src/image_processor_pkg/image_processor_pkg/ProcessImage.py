@@ -26,8 +26,8 @@ COLOR_RANGES = {
     ],
     "amarillo": [
         (
-            np.array([25, 100, 150], dtype=np.uint8),
-            np.array([35, 255, 255], dtype=np.uint8),
+            np.array([20, 50, 195], dtype=np.uint8),
+            np.array([50, 255, 255], dtype=np.uint8),
         )
     ],
     "cian": [(np.array([78, 65, 120]), np.array([120, 255, 255]))],

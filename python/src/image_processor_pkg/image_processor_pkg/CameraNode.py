@@ -26,7 +26,7 @@ from rclpy.qos import (
     QoSReliabilityPolicy,
     QoSHistoryPolicy,
 )
-from rcl_interfaces.msg import SetParametersResult
+from rcl_interfaces.msg import SetParametersResult, ParameterDescriptor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
@@ -78,7 +78,7 @@ class ImageProcessor(Node):
 
     
         # Seleccionamos la camara
-        device_param = self.declare_parameter('camera.device','0')
+        device_param = self.declare_parameter('camera.device','0',ParameterDescriptor(dynamic_typing=True))
         device_param = self.get_parameter('camera.device').value
 
         try:
@@ -155,6 +155,7 @@ class ImageProcessor(Node):
         self.info_coches = {}
 
         for car_name in self.coches:
+            self.get_logger().info(f"CREADO CARRIL PARA {car_name}")
             self.publisher_coche[car_name] = self.create_publisher(
                 CarLocation, f"/{car_name}/position", qos_profile_sensor_data
             )

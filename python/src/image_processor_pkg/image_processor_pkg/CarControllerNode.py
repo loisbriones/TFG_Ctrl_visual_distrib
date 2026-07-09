@@ -388,7 +388,7 @@ class CarControllerNode(Node):
     def publicar_velocidad(self, pwm):
         msg_vel = SpeedCarril()
         msg_vel.pwm = pwm
-        msg_vel.carril = "2"
+        msg_vel.carril = self.carril
         msg_vel.stamp = self.get_clock().now().to_msg()
         self.pub_pwm.publish(msg_vel)
 
