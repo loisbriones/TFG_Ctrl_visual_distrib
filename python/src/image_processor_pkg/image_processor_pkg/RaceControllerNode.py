@@ -31,9 +31,7 @@ class ArduinoBridgeNode(Node):
         self.coches = self.get_parameter("coches").value
 
         # TIMER
-        # Cada cierto tiempo se levanta el timer y se encarga de comprobar cuando hace que recibimos el ultimo mensaje, en caso de superar un limite entonces se encarga de parar el coche porque no estamos recibiendo informacion del controlador y signifca que esta caido por tanto no tiene sentido seguir controlando el coche
-
-        # Cada cuanto tiempo comprobamos si el nodo Controlador esta caido
+        # Cada cuanto tiempo comprobamos si el nodo Controlador está caído
         self.declare_parameter("hearthbear_timer", 0.066)
         self.heartbear_timer = self.get_parameter("hearthbear_timer").value
 
@@ -41,17 +39,18 @@ class ArduinoBridgeNode(Node):
         self.declare_parameter("delta_t", 1)
         self.delta_t = self.get_parameter("delta_t").value
 
-        # Timestamp de cuando recibimos el mensaje
-        self.msg_timestamp = None
-        self.last_msg_timestamp = None
-        # Lock para poder leer la variable de cuanto hace que nos llego un mensaje
+        # Lock para poder leer y escribir marcas de tiempo de forma segura entre hilos
         self.check_timer_lock = Lock()
 
         # Diccionario para mantener controlada la velocidad actual de cada carril
         self.rails = {}
+        
+        # [MODIFICADO] Diccionario para guardar el timestamp de cada carril de forma independiente
+        self.rail_timestamps = {}
+
         # Lista para no perder la referencia de las suscripciones
         self.sub_pwd = {}
-        # Diccionario para guardar los subcripciones de control de heartbeat para los diferentes CarController
+        # Diccionario para guardar las suscripciones de control de heartbeat
         self.sub_heartbeat_check = {}
 
         # Nos suscribimos al topic "pwd" de CADA coche (ej. /car1/pwd, /car2/pwd)
@@ -108,29 +107,32 @@ class ArduinoBridgeNode(Node):
             self.arduino.set_both_rails(self.calibration_speed, self.calibration_speed)
 
     def check_heartbeat(self):
+        """
+        [MODIFICADO] Comprueba de forma independiente si cada carril sigue emiting telemetría.
+        Si un carril supera delta_t sin enviar mensajes, se detiene únicamente ese raíl.
+        """
         if not self.modo_calibracion:
             with self.check_timer_lock:
-                # Comprobamos que existan las marcas de tiempo
-                if (
-                    self.last_msg_timestamp is not None
-                    and self.msg_timestamp is not None
-                ):
-                    # Convertimos los mensajes RAW de ROS2 a objetos Time operables de rclpy
-                    t_actual = Time.from_msg(self.msg_timestamp)
-                    t_anterior = Time.from_msg(self.last_msg_timestamp)
+                ahora = self.get_clock().now()
+                
+                # Iteramos por cada carril del que hayamos recibido datos alguna vez
+                for rail_num, timestamp in list(self.rail_timestamps.items()):
+                    t_ultimo_msg = Time.from_msg(timestamp)
+                    diferencia_segundos = (ahora - t_ultimo_msg).nanoseconds / 1e9
 
-                    # Calculamos la diferencia y la pasamos a segundos
-                    diferencia_segundos = (t_actual - t_anterior).nanoseconds / 1e9
-
+                    # Si ESTE carril concreto ha superado el tiempo límite (delta_t)
                     if diferencia_segundos > self.delta_t:
-                        # Ha pasado mucho tiempo, parada de emergencia
-                        self.arduino.set_both_rails(1, 1)
-                    else:
-                        # Todo va bien, actualizamos la marca de tiempo
-                        self.last_msg_timestamp = self.msg_timestamp
-                else:
-                    # Primera vez que entra
-                    self.last_msg_timestamp = self.msg_timestamp
+                        # Comprobamos que no esté ya parado para no saturar el cable USB
+                        if self.rails.get(rail_num, -1) > 1:
+                            self.get_logger().warn(
+                                f"⚠️ Pérdida de telemetría en Carril {rail_num}. Deteniendo SOLO ese carril."
+                            )
+                            # 1. Detenemos ÚNICAMENTE el raíl del coche que se ha salido
+                            self.arduino.set_rail_speed(rail_num, 1)
+                            
+                            # 2. Reseteamos la memoria de ESE raíl a 1 para que acepte 
+                            # el nuevo PWM en cuanto el coche vuelva a ponerse en la pista
+                            self.rails[rail_num] = 1
 
     def pwm_callback(self, msg: SpeedCarril):
         """
@@ -138,11 +140,7 @@ class ArduinoBridgeNode(Node):
         """
         pwm_value = msg.pwm
 
-        with self.check_timer_lock:
-            self.msg_timestamp = msg.stamp
-
         # Limpieza agresiva: quitamos comillas (simples y dobles), espacios y pasamos a minúscula
-        # Esto soluciona el problema de recibir "'2'", "r2" o " 2"
         rail_str = str(msg.carril).strip().lower().replace("'", "").replace('"', "")
 
         # Extraemos el número del carril (ej: de "r2" o "2" sacamos el entero 2)
@@ -151,6 +149,10 @@ class ArduinoBridgeNode(Node):
         except ValueError:
             self.get_logger().error(f"Formato de carril inválido: {msg.carril}")
             return
+
+        # [MODIFICADO] Guardamos la marca de tiempo ESPECÍFICA de este carril
+        with self.check_timer_lock:
+            self.rail_timestamps[rail_num] = msg.stamp
 
         # Inicializamos dinámicamente el carril en la memoria del puente si no existía
         if rail_num not in self.rails:
@@ -162,9 +164,8 @@ class ArduinoBridgeNode(Node):
 
         self.rails[rail_num] = pwm_value
 
-        # Validacion de seguridad y envío físico
+        # Validación de seguridad y envío físico
         if 0 <= pwm_value <= 255:
-            # Añadimos este log para confirmar que la señal sale hacia el cable USB
             self.get_logger().info(
                 f"⚡ Arduino OK -> Carril {rail_num} a PWM {pwm_value}"
             )
@@ -191,7 +192,6 @@ def main(args=None):
     # 1. Cargamos la lista de coches desde el YAML
     with open(params_file, "r") as f:
         config = yaml.safe_load(f)
-        # CORRECCIÓN: Cambiado 'coches_activos' a 'coches' para que coincida con params.yaml
         coches = config["/**"]["ros__parameters"]["coches"]
 
     executor = MultiThreadedExecutor(num_threads=(2 + (2 * len(coches))))
