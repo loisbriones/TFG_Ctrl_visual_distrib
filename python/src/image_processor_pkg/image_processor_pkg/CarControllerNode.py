@@ -42,7 +42,6 @@ class CarControllerNode(Node):
         super().__init__("car_controller")
 
         self.car_position_group = MutuallyExclusiveCallbackGroup()
-        self.heartbeat_car_controller_group = MutuallyExclusiveCallbackGroup()
 
         self.declare_parameter("car_name", "carPruebas")
         self.car_name = self.get_parameter("car_name").value
@@ -50,56 +49,8 @@ class CarControllerNode(Node):
         self.declare_parameter("is_primary", True)
         self.is_primary = self.get_parameter("is_primary").value
 
-        self.respawned_node = False
-        self.ultimo_latido_recibido = self.get_clock().now()
-
-        if self.is_primary:
-            self.sub_heartbeat = self.create_subscription(
-                Empty,
-                "heartbeat",
-                self.callback_heartbeat,
-                qos_profile_sensor_data,
-                callback_group=self.heartbeat_car_controller_group,
-            )
-            time.sleep(1)
-            if self.respawned_node:
-                self.is_primary = False
-            else:
-                self.destroy_subscription(self.sub_heartbeat)
-                self.sub_heartbeat = None
-                self.pub_heartbeat = self.create_publisher(
-                    Empty,
-                    "heartbeat",
-                    qos_profile_sensor_data,
-                    callback_group=self.heartbeat_car_controller_group,
-                )
-        else:
-            time.sleep(1)
-            self.sub_heartbeat = self.create_subscription(
-                Empty,
-                "heartbeat",
-                self.callback_heartbeat,
-                qos_profile_sensor_data,
-                callback_group=self.heartbeat_car_controller_group,
-            )
-
-        if self.is_primary:
-            self.timer_publicar_latido = self.create_timer(
-                0.1,
-                self.publicar_heartbeat,
-                callback_group=self.heartbeat_car_controller_group,
-            )
-        else:
-            self.timer_comprobar_failover = self.create_timer(
-                0.5,
-                self.comprobar_failover,
-                callback_group=self.heartbeat_car_controller_group,
-            )
-
         self.declare_parameter("controller.distancia_nodos_trayectoria", 15.0)
-        self.umbral_distancia = self.get_parameter(
-            "controller.distancia_nodos_trayectoria"
-        ).value
+        self.umbral_distancia = self.get_parameter("controller.distancia_nodos_trayectoria").value
 
         self.declare_parameter("controller.minimum_speed", 55)
         self.v_min = float(self.get_parameter("controller.minimum_speed").value)
@@ -183,31 +134,6 @@ class CarControllerNode(Node):
 
         self.get_logger().info("🏁 Controlador iniciado. MODO CALIBRACIÓN ACTIVO.")
 
-    def callback_heartbeat(self, msg):
-        if not self.is_primary:
-            self.ultimo_latido_recibido = self.get_clock().now()
-        else:
-            self.respawned_node = True
-
-    def publicar_heartbeat(self):
-        self.pub_heartbeat.publish(Empty())
-
-    def comprobar_failover(self):
-        tiempo_sin_latido = (
-            self.get_clock().now() - self.ultimo_latido_recibido
-        ).nanoseconds / 1e9
-        if tiempo_sin_latido > 5.0:
-            self.get_logger().error(
-                "¡Líder caído! Asumiendo el control como PRIMARY 👑"
-            )
-            self.is_primary = True
-            self.destroy_timer(self.timer_comprobar_failover)
-            self.destroy_subscription(self.sub_heartbeat)
-            self.pub_heartbeat = self.create_publisher(
-                Empty, "heartbeat", qos_profile_sensor_data
-            )
-            self.timer_publicar_latido = self.create_timer(0.1, self.publicar_heartbeat)
-
     def callback_get_finish_line_position(self, msg):
         self.finish_line["camara_id"] = msg.camara_id
         f_s_x = msg.finish_line.start.x
@@ -215,16 +141,6 @@ class CarControllerNode(Node):
         f_e_x = msg.finish_line.end.x
         f_e_y = msg.finish_line.end.y
         self.finish_line["coordenadas"] = ((f_s_x, f_s_y), (f_e_x, f_e_y))
-
-        self.get_logger().info("SE RECIBIO LA LINEA DE META :)")
-
-        self.get_logger().info("COORDENADAS INICIO:")
-        inicio = f"X:{self.finish_line['coordenadas'][0][0]}, Y:{self.finish_line['coordenadas'][0][1]}"
-        self.get_logger().info(inicio)
-
-        self.get_logger().info("COORDENADAS FIN:")
-        fin = f"X:{self.finish_line['coordenadas'][1][0]}, Y:{self.finish_line['coordenadas'][1][1]}"
-        self.get_logger().info(fin)
 
     def callback_control_calibracion(self, msg):
         if msg.data == False and self.en_calibracion:
@@ -275,7 +191,6 @@ class CarControllerNode(Node):
             self.get_logger().info(
                 "¡Flag activado! Se ha publicado: True en /modo_calibracion"
             )
-
 
     def procesar_trayectorias(self):
         datos_a_guardar = {}  # 1. Creamos el diccionario para el JSON

@@ -30,28 +30,11 @@ class ArduinoBridgeNode(Node):
         self.declare_parameter("coches", ["car1"])
         self.coches = self.get_parameter("coches").value
 
-        # TIMER
-        # Cada cuanto tiempo comprobamos si el nodo Controlador está caído
-        self.declare_parameter("hearthbear_timer", 0.066)
-        self.heartbear_timer = self.get_parameter("hearthbear_timer").value
-
-        # Delta t: periodo que dejamos que pase desde que recibimos un paquete
-        self.declare_parameter("delta_t", 1)
-        self.delta_t = self.get_parameter("delta_t").value
-
-        # Lock para poder leer y escribir marcas de tiempo de forma segura entre hilos
-        self.check_timer_lock = Lock()
-
         # Diccionario para mantener controlada la velocidad actual de cada carril
         self.rails = {}
         
-        # [MODIFICADO] Diccionario para guardar el timestamp de cada carril de forma independiente
-        self.rail_timestamps = {}
-
         # Lista para no perder la referencia de las suscripciones
         self.sub_pwd = {}
-        # Diccionario para guardar las suscripciones de control de heartbeat
-        self.sub_heartbeat_check = {}
 
         # Nos suscribimos al topic "pwd" de CADA coche (ej. /car1/pwd, /car2/pwd)
         for car_name in self.coches:
@@ -64,15 +47,8 @@ class ArduinoBridgeNode(Node):
                 callback_group=MutuallyExclusiveCallbackGroup(),
             )
 
-            group = MutuallyExclusiveCallbackGroup()
-            self.sub_heartbeat_check[car_name] = {
-                "group": group,
-                "timer": self.create_timer(
-                    self.heartbear_timer, self.check_heartbeat, callback_group=group
-                ),
-            }
-
         self.modo_calibracion = True
+
         self.grupo_calibracion = MutuallyExclusiveCallbackGroup()
         self.sub_modo_calibracion = self.create_subscription(
             Bool,
@@ -84,11 +60,12 @@ class ArduinoBridgeNode(Node):
 
         # --- PARAMETROS ---
         self.declare_parameter("arduino.port", "/dev/ttyACM0")
-        self.declare_parameter("arduino.baudrate", 115200)
-        self.declare_parameter("arduino.calibration_speed", 60)
-
         port = self.get_parameter("arduino.port").value
+
+        self.declare_parameter("arduino.baudrate", 115200)
         baud = self.get_parameter("arduino.baudrate").value
+
+        self.declare_parameter("arduino.calibration_speed", 60)
         self.calibration_speed = self.get_parameter("arduino.calibration_speed").value
 
         # Nos conectamos al arduino
@@ -106,34 +83,6 @@ class ArduinoBridgeNode(Node):
             # Arrancamos con la velocidad de calibración
             self.arduino.set_both_rails(self.calibration_speed, self.calibration_speed)
 
-    def check_heartbeat(self):
-        """
-        [MODIFICADO] Comprueba de forma independiente si cada carril sigue emiting telemetría.
-        Si un carril supera delta_t sin enviar mensajes, se detiene únicamente ese raíl.
-        """
-        if not self.modo_calibracion:
-            with self.check_timer_lock:
-                ahora = self.get_clock().now()
-                
-                # Iteramos por cada carril del que hayamos recibido datos alguna vez
-                for rail_num, timestamp in list(self.rail_timestamps.items()):
-                    t_ultimo_msg = Time.from_msg(timestamp)
-                    diferencia_segundos = (ahora - t_ultimo_msg).nanoseconds / 1e9
-
-                    # Si ESTE carril concreto ha superado el tiempo límite (delta_t)
-                    if diferencia_segundos > self.delta_t:
-                        # Comprobamos que no esté ya parado para no saturar el cable USB
-                        if self.rails.get(rail_num, -1) > 1:
-                            self.get_logger().warn(
-                                f"⚠️ Pérdida de telemetría en Carril {rail_num}. Deteniendo SOLO ese carril."
-                            )
-                            # 1. Detenemos ÚNICAMENTE el raíl del coche que se ha salido
-                            self.arduino.set_rail_speed(rail_num, 1)
-                            
-                            # 2. Reseteamos la memoria de ESE raíl a 1 para que acepte 
-                            # el nuevo PWM en cuanto el coche vuelva a ponerse en la pista
-                            self.rails[rail_num] = 1
-
     def pwm_callback(self, msg: SpeedCarril):
         """
         Cada vez que llega un nuevo valor de PWM, lo enviamos al Arduino.
@@ -150,10 +99,6 @@ class ArduinoBridgeNode(Node):
             self.get_logger().error(f"Formato de carril inválido: {msg.carril}")
             return
 
-        # [MODIFICADO] Guardamos la marca de tiempo ESPECÍFICA de este carril
-        with self.check_timer_lock:
-            self.rail_timestamps[rail_num] = msg.stamp
-
         # Inicializamos dinámicamente el carril en la memoria del puente si no existía
         if rail_num not in self.rails:
             self.rails[rail_num] = -1
@@ -166,9 +111,7 @@ class ArduinoBridgeNode(Node):
 
         # Validación de seguridad y envío físico
         if 0 <= pwm_value <= 255:
-            self.get_logger().info(
-                f"⚡ Arduino OK -> Carril {rail_num} a PWM {pwm_value}"
-            )
+            self.get_logger().info(f"Arduino OK -> Carril {rail_num} a PWM {pwm_value}")
             self.arduino.set_rail_speed(rail_num, pwm_value)
 
     def destroy_node(self):

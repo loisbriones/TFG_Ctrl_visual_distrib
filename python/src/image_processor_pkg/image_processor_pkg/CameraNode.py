@@ -78,12 +78,15 @@ class ImageProcessor(Node):
 
     
         # Seleccionamos la camara
+        # El ParameterDescriptor permite que el tipo que nos mandan pueda ser decidido en tiempo de ejecución cuando llega y no se comprueba 
         device_param = self.declare_parameter('camera.device','0',ParameterDescriptor(dynamic_typing=True))
         device_param = self.get_parameter('camera.device').value
 
+        # Intentamos primero convertir a numero
         try:
             camera_name = int(device_param)
         except ValueError:
+            # Asumimos que si no nos envian el numero nos dan el path /dev/deviceN 
             camera_name = device_param
 
         self.cam = cv.VideoCapture(camera_name, cv.CAP_V4L2)
@@ -502,7 +505,7 @@ class ImageProcessor(Node):
         detections = self.color_detector.find_object(roi_frame, self.min_area, self.stiker_front, self.stiker_back)
         duration = (time.perf_counter() - start) * 1000
 
-        found_any = detections["front"] is not None or detections["back"] is not None
+        found_any = detections["front"] is not None and detections["back"] is not None
 
         if found_any:
             # Preferimos el frontal para el seguimiento

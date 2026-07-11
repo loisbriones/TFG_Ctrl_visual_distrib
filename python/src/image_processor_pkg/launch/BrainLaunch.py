@@ -41,25 +41,6 @@ def generate_launch_description():
             )
         )
         
-        ld.add_action(
-            Node(
-                package="image_processor_pkg",
-                executable="CarControllerNode.py",
-                name="SpareCarControllerNode",
-                namespace=car_name,
-                parameters=[
-                    params_file,
-                    {
-                        "is_primary": False, 
-                        "car_name": car_name,
-                        "carril_asignado": carril_id,  # Pasamos el carril directamente por parámetro
-                    },
-                ],
-                respawn=True,
-                respawn_delay=2.0
-            )
-        )
-
     # 3. Lanzamos el único nodo de Arduino
     ld.add_action(
         Node(
