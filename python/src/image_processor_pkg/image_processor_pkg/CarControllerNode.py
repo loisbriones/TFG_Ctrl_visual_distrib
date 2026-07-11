@@ -26,8 +26,8 @@ import numpy as np
 import time
 import json
 
-# Importamos la clase de Mario
-from AlgoritmoVelocidad import MarioAlgorithm
+# Importamos el algoritmo de velocidad por perfil de PWM
+from AlgoritmoVelocidad import EstrategiaPerfil
 
 QOS_FINISH_LINE = QoSProfile(
     depth=1,
@@ -107,7 +107,7 @@ class CarControllerNode(Node):
         self.declare_parameter("controller.maximum_speed", 85)
         self.v_max = float(self.get_parameter("controller.maximum_speed").value)
 
-        self.declare_parameter("carril_asignado", "1")
+        self.declare_parameter("carril_asignado", "2")
         self.carril = self.get_parameter("carril_asignado").value
 
         self.en_calibracion = True
@@ -119,6 +119,7 @@ class CarControllerNode(Node):
         self.algoritmos = {}
         self.vueltas = 0
         self.frame_count = 0
+        self.derrapes_ultima_vuelta = 0
 
         self.finish_line = {"camara_id": None, "coordenadas": None}
         self.tiempo_ultima_vuelta = None
@@ -235,6 +236,7 @@ class CarControllerNode(Node):
             self.trayectoria_base.clear()
             self.algoritmos.clear()
             self.vueltas = 0
+            self.derrapes_ultima_vuelta = 0
             self.v_actual = 0.0
             self.publicar_velocidad(0)
             self.get_logger().warn("⚠️ Reiniciando calibración.")
@@ -298,14 +300,14 @@ class CarControllerNode(Node):
             # 2. Convertimos el array de NumPy a lista de Python para poder serializarlo
             datos_a_guardar[camara] = self.trayectoria_base[camara].tolist()
 
-            # Instanciamos a Mario para esta cámara
-            self.algoritmos[camara] = MarioAlgorithm(
+            # Instanciamos el algoritmo de perfil para esta cámara
+            self.algoritmos[camara] = EstrategiaPerfil(
                 self.v_max, self.v_min, self.get_name(), camara
             )
             self.algoritmos[camara].setTrayectoria(self.trayectoria_base[camara])
 
             self.get_logger().info(
-                f"✅ {camara}: Ruta base con {len(ruta_limpia)} nodos. Algoritmo Mario inyectado."
+                f"✅ {camara}: Ruta base con {len(ruta_limpia)} nodos. Algoritmo de perfil inyectado."
             )
 
         # 3. Guardamos en disco la trayectoria de puntos por cámara
@@ -336,9 +338,10 @@ class CarControllerNode(Node):
         punto_front = np.array([fx, fy], dtype=np.float32)
         punto_back = np.array([bx, by], dtype=np.float32)
 
-        self.verificar_linea_meta(camara, punto_front, punto_back)
+        if self.verificar_linea_meta(camara, punto_front, punto_back):
+            self.registrar_vuelta_algoritmos()
 
-        # 🏎️ MAGIA: MarioAlgorithm se encarga ahora de detectar el derrape y pedir la velocidad
+        # 🏎️ MAGIA: el algoritmo se encarga de detectar el derrape y pedir la velocidad
         nueva_vel = self.algoritmos[camara].actualizar_estado(punto_front, punto_back, self.frame_count, self.vueltas)
 
         # Si el algoritmo nos dice que ignoremos el frame por ruido, nueva_vel será None
@@ -367,13 +370,21 @@ class CarControllerNode(Node):
 
         # Log solo si cambia para no saturar la terminal
         if nueva_vel is not None and nueva_vel != self.ultimo_pwm_enviado:
-            estado_str = (
-                "FRENANDO (Curva)" if nueva_vel == self.v_min else "ACELERANDO (Recta)"
-            )
             self.get_logger().info(
-                f"🚦 MARIO ACTUANDO: {estado_str} | PWM: {self.v_actual}"
+                f"🚦 PERFIL ACTUANDO: PWM: {self.v_actual} (perfil {self.v_min}-{self.v_max})"
             )
             self.ultimo_pwm_enviado = self.v_actual
+
+    def registrar_vuelta_algoritmos(self):
+        # Una vuelta es limpia si NINGUNA camara registro derrapes en ella:
+        # solo entonces el perfil puede subir
+        derrapes_totales = sum(a.derrapes_contador for a in self.algoritmos.values())
+        vuelta_limpia = derrapes_totales == self.derrapes_ultima_vuelta
+        self.derrapes_ultima_vuelta = derrapes_totales
+        for algoritmo in self.algoritmos.values():
+            algoritmo.registrar_vuelta(self.vueltas, vuelta_limpia)
+        if vuelta_limpia:
+            self.get_logger().info("📈 Vuelta limpia: el perfil de PWM sube.")
 
     def distancia_punto_segmento(self, P, A, B):
         AB = B - A
@@ -388,7 +399,7 @@ class CarControllerNode(Node):
     def publicar_velocidad(self, pwm):
         msg_vel = SpeedCarril()
         msg_vel.pwm = pwm
-        msg_vel.carril = self.carril
+        msg_vel.carril = "2"
         msg_vel.stamp = self.get_clock().now().to_msg()
         self.pub_pwm.publish(msg_vel)
 

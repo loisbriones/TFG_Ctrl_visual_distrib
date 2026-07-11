@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
     modo_calibracion: True
-    coches: ["car2"]
+    coches: ["car1"]
     # Tiempo que puede pasar desde que nos envian un paquete hasta que consideramos que el nodo se callo
     delta_t: 1
     # Tiempo que tiene que pasar para que se ejecute el timer de comprobacion de estado
@@ -40,13 +40,13 @@
     # Parámetros para el controlador
     controller:
       # Velocidad minima a la que podemos ir
-      minimum_speed: 78 
+      minimum_speed: 85
       # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
-      maximum_speed: 84 
+      maximum_speed: 88 
       distancia_nodos_trayectoria: 15.0
       umbral_control_trayectoria_correcta: 60.0 
-      umbral_derrape_peligro: 16.0
-      umbral_derrape_seguro: 15.0
+      umbral_derrape_peligro: 10.0
+      umbral_derrape_seguro: 9.0
       latencia_min_nodos: 1
       latencia_max_nodos: 10
       debounce_meta: 1.0
