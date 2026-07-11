@@ -2,7 +2,6 @@
 
 import rclpy
 from rclpy.node import Node
-from rclpy.time import Time
 
 from image_processor_pkg.msg import SpeedCarril
 from std_msgs.msg import Bool
@@ -16,10 +15,8 @@ from rclpy.executors import MultiThreadedExecutor
 
 from ament_index_python.packages import get_package_share_directory
 
-from threading import Lock
 import yaml
 import os
-import time
 
 
 class ArduinoBridgeNode(Node):
@@ -137,7 +134,7 @@ def main(args=None):
         config = yaml.safe_load(f)
         coches = config["/**"]["ros__parameters"]["coches"]
 
-    executor = MultiThreadedExecutor(num_threads=(2 + (2 * len(coches))))
+    executor = MultiThreadedExecutor(num_threads=(2 + len(coches)))
     executor.add_node(node)
 
     try:

@@ -31,7 +31,6 @@ def generate_launch_description():
                 parameters=[
                     params_file,
                     {
-                        "is_primary": True,
                         "car_name": car_name,
                         "carril_asignado": carril_id,  # Pasamos el carril directamente por parámetro
                     },

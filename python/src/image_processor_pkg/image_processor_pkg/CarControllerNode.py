@@ -9,7 +9,7 @@ from rclpy.qos import (
     QoSReliabilityPolicy,
     QoSHistoryPolicy,
 )
-from std_msgs.msg import Bool, Empty
+from std_msgs.msg import Bool
 from image_processor_pkg.msg import (
     CarLocation,
     SpeedCarril,
@@ -23,7 +23,6 @@ from rclpy.executors import MultiThreadedExecutor
 
 import math
 import numpy as np
-import time
 import json
 
 # Importamos el algoritmo de velocidad por perfil de PWM
@@ -45,9 +44,6 @@ class CarControllerNode(Node):
 
         self.declare_parameter("car_name", "carPruebas")
         self.car_name = self.get_parameter("car_name").value
-
-        self.declare_parameter("is_primary", True)
-        self.is_primary = self.get_parameter("is_primary").value
 
         self.declare_parameter("controller.distancia_nodos_trayectoria", 15.0)
         self.umbral_distancia = self.get_parameter("controller.distancia_nodos_trayectoria").value
@@ -162,8 +158,7 @@ class CarControllerNode(Node):
         if self.en_calibracion:
             self.recolectar_datos_calibracion(msg)
         else:
-            if self.is_primary:
-                self.ejecutar_control_carrera(msg)
+            self.ejecutar_control_carrera(msg)
 
     def recolectar_datos_calibracion(self, msg: CarLocation):
         camara = msg.camara_id
@@ -263,7 +258,7 @@ class CarControllerNode(Node):
         if nueva_vel is not None:
             self.v_actual = nueva_vel
 
-        # Publicamos siempre para mantener el Heartbeat vivo
+        # Publicamos siempre la velocidad actual
         self.publicar_velocidad(int(self.v_actual))
 
         time_pipeline_finish = self.get_clock().now()
@@ -405,7 +400,7 @@ def main(args=None):
     rclpy.init(args=args)
     node = CarControllerNode()
 
-    executor = MultiThreadedExecutor(num_threads=3)
+    executor = MultiThreadedExecutor(num_threads=2)
     executor.add_node(node)
 
     try:
