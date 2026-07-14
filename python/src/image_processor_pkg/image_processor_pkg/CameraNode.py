@@ -569,7 +569,7 @@ class ImageProcessor(Node):
             # Evitamos que la información de debug se quede dibujando "fantasmas"
             self.puntos_for_debug[car_name] = None
 
-def _tarea_debug(self):
+    def _tarea_debug(self):
         if not self.debug or self.save_data or self.next_debug_frame is None:
             return
 
@@ -601,7 +601,7 @@ def _tarea_debug(self):
                     cv.rectangle(self.next_debug_frame, (gx, gy), (gw, gh), rect_color, 2)
 
                     # 2. Dibujamos la cruceta en el centro exacto (reemplaza al cv.circle)
-                    c_size = 6  # Tamaño del aspa de la cruz
+                    c_size = 3  # Tamaño del aspa de la cruz
                     cv.line(self.next_debug_frame, (gcx - c_size, gcy), (gcx + c_size, gcy), (0, 255, 255), 1)
                     cv.line(self.next_debug_frame, (gcx, gcy - c_size), (gcx, gcy + c_size), (0, 255, 255), 1)
 
