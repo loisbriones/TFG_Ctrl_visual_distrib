@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 import cv2 as cv
 import numpy as np
-from image_processor_pkg.msg import CarLocation, FinishLine
+from image_processor_pkg.msg import CarLocation, FinishLine, BoundingRect
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
 
@@ -376,6 +376,8 @@ class ImageProcessor(Node):
 
     def publish_car_position(self, detections, proc_duration, x, y, car_name):
         object_location_msg = CarLocation()
+        object_bounding_rect_front = BoundingRect() 
+        object_bounding_rect_back = BoundingRect()
 
         object_location_msg.camara_id = self.camara_id
         object_location_msg.coche = car_name
@@ -387,11 +389,31 @@ class ImageProcessor(Node):
                     object_location_msg.front.center.x = p["cx"] + x
                     object_location_msg.front.center.y = p["cy"] + y
                     object_location_msg.front.color = self.stiker_front
+                    # Guardar la posición del rectangulo que detectamos
+                    # También hay que ajustarlo porque se sacan las coordenas de dentro del ROI
+                    object_bounding_rect_front.x = p["x"] + x 
+                    object_bounding_rect_front.y = p["y"] + y
+                    object_bounding_rect_front.w = p["w"] + x 
+                    object_bounding_rect_front.h = p["h"] + y
+                    
+                    # Guardamos la posición dentro del /car1/position 
+                    object_location_msg.bounding_rect_stiker_front = object_bounding_rect_front
+
                 if key == "back":
                     object_location_msg.back.center.x = p["cx"] + x
                     object_location_msg.back.center.y = p["cy"] + y
                     object_location_msg.back.color = self.stiker_back
-
+                    
+                    # Guardar la posición del rectangulo que detectamos
+                    # También hay que ajustarlo porque se sacan las coordenas de dentro del ROI
+                    object_bounding_rect_back.x = p["x"] + x 
+                    object_bounding_rect_back.y = p["y"] + y
+                    object_bounding_rect_back.w = p["w"] + x 
+                    object_bounding_rect_back.h = p["h"] + y
+                    
+                    # Guardamos la posición dentro del /car1/position 
+                    object_location_msg.bounding_rect_stiker_back = object_bounding_rect_back
+        
         object_location_msg.proc_time = proc_duration
 
         # Publicamos los puntos detectados
@@ -547,7 +569,7 @@ class ImageProcessor(Node):
             # Evitamos que la información de debug se quede dibujando "fantasmas"
             self.puntos_for_debug[car_name] = None
 
-    def _tarea_debug(self):
+def _tarea_debug(self):
         if not self.debug or self.save_data or self.next_debug_frame is None:
             return
 
@@ -557,14 +579,31 @@ class ImageProcessor(Node):
                 debug_x = self.puntos_for_debug[car_name]["debug_x"]
                 debug_y = self.puntos_for_debug[car_name]["debug_y"]
                 for p in self.puntos_for_debug[car_name]["debug_points"]:
-                    # Dibujamos en el frame de debug (que ya es una copia)
-                    cv.circle(
-                        self.next_debug_frame,
-                        (int(debug_x + p["cx"]), int(debug_y + p["cy"])),
-                        5,
-                        (0, 255, 255),
-                        -1,
-                    )
+                    # Coordenadas globales del bounding rect y del centro
+                    gx = int(debug_x + p["x"])
+                    gy = int(debug_y + p["y"])
+                    gw = int(gx + p["w"])
+                    gh = int(gy + p["h"])
+                    gcx = int(debug_x + p["cx"])
+                    gcy = int(debug_y + p["cy"])
+
+                    # Cadena de ifs para contraste según el color detectado (en BGR)
+                    if p["color"] in ["rojo", "naranja"]:
+                        rect_color = (255, 255, 0)  # Cian
+                    elif p["color"] == "verde":
+                        rect_color = (255, 0, 255)  # Magenta
+                    elif p["color"] == "azul":
+                        rect_color = (0, 255, 255)  # Amarillo
+                    else:
+                        rect_color = (255, 255, 0)  # Cian por defecto
+
+                    # 1. Dibujamos los bordes del rectángulo
+                    cv.rectangle(self.next_debug_frame, (gx, gy), (gw, gh), rect_color, 2)
+
+                    # 2. Dibujamos la cruceta en el centro exacto (reemplaza al cv.circle)
+                    c_size = 6  # Tamaño del aspa de la cruz
+                    cv.line(self.next_debug_frame, (gcx - c_size, gcy), (gcx + c_size, gcy), (0, 255, 255), 1)
+                    cv.line(self.next_debug_frame, (gcx, gcy - c_size), (gcx, gcy + c_size), (0, 255, 255), 1)
 
         # Comprimir y publicar
         success, buffer = cv.imencode(
@@ -578,7 +617,6 @@ class ImageProcessor(Node):
             self.debug_publisher.publish(msg)
 
         self.save_data = True
-
 
 def main(args=None):
     rclpy.init(args=args)

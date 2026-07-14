@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SpeedCarril.msg"
   "msg/TimePerLap.msg"
   "msg/CarControlTelemetry.msg"
+  "msg/BoundingRect.msg"
   DEPENDENCIES builtin_interfaces
 )
 
