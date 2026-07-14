@@ -207,11 +207,11 @@ class ImageProcessor(Node):
             finish_line_msg = FinishLine()
             finish_line_msg.camara_id = self.camara_id
 
-            finish_line_msg.finish_line.start.x = int(self.finish_line_position[0][0])
-            finish_line_msg.finish_line.start.y = int(self.finish_line_position[0][1])
+            finish_line_msg.finish_line.start.x = float(self.finish_line_position[0][0])
+            finish_line_msg.finish_line.start.y = float(self.finish_line_position[0][1])
 
-            finish_line_msg.finish_line.end.x = int(self.finish_line_position[1][0])
-            finish_line_msg.finish_line.end.y = int(self.finish_line_position[1][1])
+            finish_line_msg.finish_line.end.x = float(self.finish_line_position[1][0])
+            finish_line_msg.finish_line.end.y = float(self.finish_line_position[1][1])
 
             self.finish_line_publisher.publish(finish_line_msg)
 
@@ -560,8 +560,8 @@ class ImageProcessor(Node):
                     # Dibujamos en el frame de debug (que ya es una copia)
                     cv.circle(
                         self.next_debug_frame,
-                        (debug_x + p["cx"], debug_y + p["cy"]),
-                        10,
+                        (int(debug_x + p["cx"]), int(debug_y + p["cy"])),
+                        5,
                         (0, 255, 255),
                         -1,
                     )

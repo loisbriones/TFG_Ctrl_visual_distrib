@@ -138,8 +138,8 @@ class ColorDetector:
         # Devuelve 4 puntos que representan un rectangulo que envuelve el contorno detectado
         x, y, w, h = cv.boundingRect(c)
 
-        cx = x + (w // 2)
-        cy = y + (h // 2)
+        cx = x + (w / 2)
+        cy = y + (h / 2)
 
         return {"color": color_bgr, "cx": cx, "cy": cy}
 
