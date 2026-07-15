@@ -2,6 +2,7 @@ import math
 import csv
 import os
 import numpy as np
+from datetime import datetime
 
 
 class EstrategiaPerfil:
@@ -73,6 +74,19 @@ class EstrategiaPerfil:
                            frame, vuelta)   devuelve el PWM a aplicar (o None)
       3. registrar_vuelta(v, limpia)     -> al cruzar la línea de meta; sin
                                             este aviso el perfil NUNCA sube
+
+    LOG DE EJECUCIÓN (derrapesLog_<nodo>_<camara>.txt): cada línea lleva
+    marca de tiempo y un prefijo que permite filtrar con grep:
+      [INIT]    parámetros con los que corre la instancia
+      [TRAY]    trayectoria base completa (nodo a nodo: x, y, tramo, s),
+                cortes en tramos y detección de cierre
+      [FRAME]   una línea por llamada a actualizar_estado: localización de
+                ambas pegatinas, estado del derrape, celda leída y PWM devuelto
+      [DERRAPE] transiciones de la máquina de estados (abierto/ignorado/cerrado)
+      [ZONA]    altas, fusiones y estado completo de las zonas de derrape
+      [PERFIL]  volcado completo del perfil tras cada modificación
+      [VUELTA]  decisión al cruzar meta: sube o no, y qué celdas se protegen
+    Leyendo el log de arriba abajo se reconstruye la ejecución completa.
     """
 
     def __init__(self, v_max, v_min, node_name="node", camara_id="cam"):
@@ -189,9 +203,29 @@ class EstrategiaPerfil:
         try:
             # Se abre en modo "w" para vaciar el log de la sesión anterior
             with open(self.log_file, "w") as f:
-                f.write("=== LOG INICIADO ===\n")
+                f.write(f"=== LOG INICIADO {datetime.now().isoformat()} ===\n")
         except IOError as e:
             print(f"Error inicializando log: {e}")
+
+        # Volcado de TODOS los parámetros vigentes para que el log sea
+        # autocontenido: al analizar una sesión a posteriori se sabe con qué
+        # constantes exactas corrió el algoritmo (se ajustan a mano en el código)
+        self.saveLogFile(f"[INIT] nodo={node_name} camara={camara_id}")
+        self.saveLogFile(
+            f"[INIT] v_min={self.v_min:.0f} v_max={self.v_max:.0f} | "
+            f"umbral_derrape={self.umbral_derrape} max_dist_ruta={self.max_dist_ruta} "
+            f"margen_extremo={self.margen_extremo}"
+        )
+        self.saveLogFile(
+            f"[INIT] paso_perfil={self.paso_perfil} incremento_vuelta={self.incremento_vuelta} "
+            f"reduccion_derrape={self.reduccion_derrape} ventana_reduccion={self.ventana_reduccion} "
+            f"vueltas_proteccion={self.vueltas_proteccion}"
+        )
+        self.saveLogFile(
+            f"[INIT] anticipacion_inicial={self.anticipacion_inicial} "
+            f"incremento_anticipacion={self.incremento_anticipacion} "
+            f"margen_fusion={self.margen_fusion}"
+        )
 
     # ----------------------------------------------------------------------
     # Propiedades de solo lectura: exponen estado interno a CarControllerNode
@@ -224,6 +258,11 @@ class EstrategiaPerfil:
         """Actualiza los límites de PWM en caliente (p. ej. si el usuario los
         cambia por parámetro ROS). No toca el perfil ya aprendido: las celdas
         conservan su valor, solo cambia el tope aplicado en _velocidad_en."""
+        self.saveLogFile(
+            f"[INIT] Límites PWM cambiados en caliente: "
+            f"v_min {self.v_min:.0f}->{float(v_min):.0f}, "
+            f"v_max {self.v_max:.0f}->{float(v_max):.0f} (el perfil aprendido no se toca)"
+        )
         self.v_max = float(v_max)
         self.v_min = float(v_min)
 
@@ -251,11 +290,18 @@ class EstrategiaPerfil:
         # Idempotente: si ya hay trayectoria cargada, se ignoran las siguientes
         # (la calibración solo debe procesarse una vez)
         if self.trayectoriaUsada is not None:
+            self.saveLogFile(
+                "[TRAY] setTrayectoria ignorado: ya hay una trayectoria cargada"
+            )
             return
 
         puntos = np.asarray(trayectoria, dtype=np.float32)
         # Hace falta una matriz (N, 2) con al menos 2 puntos para poder medir
         if puntos.ndim != 2 or len(puntos) < 2:
+            self.saveLogFile(
+                f"[TRAY] Trayectoria RECHAZADA: hacen falta >=2 puntos (x, y) "
+                f"(recibido con forma {puntos.shape})"
+            )
             return
         self.trayectoriaUsada = puntos
 
@@ -269,6 +315,13 @@ class EstrategiaPerfil:
         # Se usa la MEDIANA (robusta frente a los propios saltos) multiplicada
         # por 4, con un mínimo absoluto de 60 px por si la mediana fuese diminuta
         umbral_salto = max(4.0 * float(np.median(dist)), 60.0)
+        # Queda registrado el criterio de corte, para poder justificar a
+        # posteriori por qué la trayectoria se partió (o no) en tramos
+        self.saveLogFile(
+            f"[TRAY] Separación entre nodos: mediana={float(np.median(dist)):.1f} px, "
+            f"mín={float(dist.min()):.1f}, máx={float(dist.max()):.1f} -> "
+            f"umbral_salto={umbral_salto:.1f} px (max(4*mediana, 60))"
+        )
 
         # Recorrido secuencial asignando tramo y arco a cada punto:
         #  - salto grande  -> nuevo tramo, s se reinicia a 0
@@ -279,18 +332,41 @@ class EstrategiaPerfil:
             if dist[i - 1] > umbral_salto:
                 tramos[i] = tramos[i - 1] + 1
                 s[i] = 0.0
+                # Cada corte queda registrado: entre qué nodos ocurrió y de
+                # cuántos px fue el salto que lo provocó
+                self.saveLogFile(
+                    f"[TRAY] Salto de {dist[i - 1]:.1f} px entre los nodos "
+                    f"{i - 1} y {i}: comienza el tramo {int(tramos[i])}"
+                )
             else:
                 tramos[i] = tramos[i - 1]
                 s[i] = s[i - 1] + dist[i - 1]
 
         self._tramo_de_nodo = tramos
         self._s_nodos = s
+
+        # ------------------------------------------------------------------
+        # TRAYECTORIA BASE COMPLETA: una línea por nodo con su posición en
+        # píxeles de imagen, el tramo asignado y su longitud de arco s. Este
+        # volcado es el "mapa" con el que se interpretan todas las líneas
+        # [FRAME] posteriores (solo ocurre una vez, al cargar la calibración)
+        # ------------------------------------------------------------------
+        self.saveLogFile("[TRAY] --- Trayectoria base: nodo: (x, y) | tramo | s ---")
+        for i in range(len(puntos)):
+            self.saveLogFile(
+                f"[TRAY] nodo {i:3d}: ({puntos[i][0]:7.1f}, {puntos[i][1]:7.1f}) | "
+                f"tramo {int(tramos[i])} | s={s[i]:.1f}"
+            )
         # Longitud de cada tramo = s máximo alcanzado dentro de él; de paso se
         # crea la lista (vacía) de zonas de derrape del tramo
         for t in np.unique(tramos):
             seleccion = tramos == t
             self._long_tramos[int(t)] = float(s[seleccion].max())
             self.zonas[int(t)] = []
+            self.saveLogFile(
+                f"[TRAY] tramo {int(t)}: {int(np.count_nonzero(seleccion))} nodos, "
+                f"longitud de arco {self._long_tramos[int(t)]:.1f} px"
+            )
 
         # Si es un único tramo cuyo final conecta con el inicio, la cámara ve el
         # circuito completo y la trayectoria se trata como cerrada.
@@ -305,6 +381,23 @@ class EstrategiaPerfil:
                 # La longitud total incluye el "segmento fantasma" que une el
                 # último punto con el primero
                 self._long_tramos[0] += cierre
+                self.saveLogFile(
+                    f"[TRAY] Cierre: distancia último->primero = {cierre:.1f} px "
+                    f"<= umbral {umbral_salto:.1f} -> trayectoria CERRADA (esta cámara "
+                    f"ve el circuito completo; longitud total con el segmento "
+                    f"fantasma: {self._long_tramos[0]:.1f} px)"
+                )
+            else:
+                self.saveLogFile(
+                    f"[TRAY] Cierre: distancia último->primero = {cierre:.1f} px "
+                    f"> umbral {umbral_salto:.1f} -> trayectoria ABIERTA "
+                    f"(un solo tramo que no conecta consigo mismo)"
+                )
+        else:
+            self.saveLogFile(
+                f"[TRAY] {int(tramos[-1]) + 1} tramos separados -> trayectoria "
+                f"ABIERTA (esta cámara ve porciones sueltas del circuito)"
+            )
 
         # El perfil arranca con todas las celdas a v_min. ceil() garantiza que
         # el final del tramo también cae dentro de alguna celda; max(1, ...)
@@ -314,13 +407,10 @@ class EstrategiaPerfil:
             self.perfil[tramo] = np.full(n_celdas, self.v_min, dtype=float)
 
         self.saveLogFile(
-            f"Trayectoria cargada: {len(puntos)} nodos, "
+            f"[TRAY] Trayectoria cargada: {len(puntos)} nodos, "
             f"{len(self._long_tramos)} tramo(s), cerrada={self._cerrada}"
         )
-        self.saveLogFile(
-            "Perfil inicializado: "
-            + ", ".join(f"tramo {t}: {len(c)} celdas" for t, c in self.perfil.items())
-        )
+        self._log_perfil("inicial: todas las celdas a v_min")
 
     def _proyectar_segmento(self, p, a_idx, b_idx, s_base):
         """
@@ -448,6 +538,10 @@ class EstrategiaPerfil:
         loc_front = self.localizar(p_front)
         if loc_front is None:
             # Aún no hay trayectoria cargada: no se puede decidir nada
+            self.saveLogFile(
+                f"[FRAME {frame_count} v={vuelta}] DESCARTADO: aún no hay "
+                f"trayectoria cargada"
+            )
             return None
 
         tramo_f, s_f, dist_f = loc_front
@@ -456,6 +550,12 @@ class EstrategiaPerfil:
         # carril: si está lejos de la ruta es una detección falsa
         if dist_f > self.max_dist_ruta:
             self._margen_restante = 0.0
+            self.saveLogFile(
+                f"[FRAME {frame_count} v={vuelta}] DESCARTADO por ruido: "
+                f"front=({p_front[0]:.1f}, {p_front[1]:.1f}) está a {dist_f:.1f} px "
+                f"de la ruta (> max_dist_ruta={self.max_dist_ruta:.0f}); el "
+                f"controlador mantiene la velocidad anterior"
+            )
             return None
 
         # Margen restante = lo que queda de tramo por delante del coche
@@ -473,10 +573,37 @@ class EstrategiaPerfil:
             tramo_b, s_b, dist_b = loc_back
             self._dist_derrape = dist_b
             self._actualizar_derrape(tramo_b, s_b, dist_b, vuelta, frame_count)
+            texto_back = (
+                f"back=({p_back[0]:.1f}, {p_back[1]:.1f})->t={tramo_b} "
+                f"s={s_b:.1f} d={dist_b:.1f} (umbral {self.umbral_derrape:.0f})"
+            )
+        else:
+            texto_back = "back=NO localizado (máquina de derrape sin actualizar)"
 
         self._frame_valido = True
         # La velocidad es función pura de la posición: se lee del perfil
-        return self._velocidad_en(tramo_f, s_f)
+        velocidad = self._velocidad_en(tramo_f, s_f)
+
+        # Traza principal del algoritmo: una línea por fotograma con TODA la
+        # decisión tomada — dónde se localizó cada pegatina (tramo, s y
+        # distancia perpendicular), el estado del derrape, la celda del perfil
+        # leída y el PWM devuelto. Con el volcado [TRAY] como mapa, estas
+        # líneas permiten reconstruir la carrera completa
+        celdas_tramo = self.perfil.get(tramo_f)
+        if celdas_tramo is not None and len(celdas_tramo) > 0:
+            # Mismo índice (con recorte) que usa _velocidad_en para leer el PWM
+            celda = min(int(s_f / self.paso_perfil), len(celdas_tramo) - 1)
+        else:
+            celda = -1
+        texto_margen = "inf" if self._cerrada else f"{self._margen_restante:.1f}"
+        self.saveLogFile(
+            f"[FRAME {frame_count} v={vuelta}] "
+            f"front=({p_front[0]:.1f}, {p_front[1]:.1f})->t={tramo_f} "
+            f"s={s_f:.1f} d={dist_f:.1f} | {texto_back} | "
+            f"derrapando={self._estado_derrapando} | celda={celda} "
+            f"pwm={velocidad:.0f} | margen={texto_margen}"
+        )
+        return velocidad
 
     def _actualizar_derrape(self, tramo, s, dist, vuelta, frame):
         """
@@ -518,17 +645,34 @@ class EstrategiaPerfil:
                     or s > self._long_tramos[tramo] - self.margen_extremo
                 )
                 if en_borde:
+                    self.saveLogFile(
+                        f"[DERRAPE] Frame {frame} v={vuelta}: dist={dist:.1f} > umbral "
+                        f"pero IGNORADO por borde: s={s:.1f} está a menos de "
+                        f"{self.margen_extremo:.0f} px de un extremo del tramo {tramo} "
+                        f"(longitud {self._long_tramos[tramo]:.1f}); al entrar/salir "
+                        f"del encuadre la detección no es fiable"
+                    )
                     return
                 # Arranca un derrape nuevo en este punto
                 self._estado_derrapando = True
                 self._derrape_tramo = tramo
                 self._derrape_s_ini = s
                 self._derrape_s_fin = s
+                self.saveLogFile(
+                    f"[DERRAPE] Frame {frame} v={vuelta}: ABIERTO en tramo {tramo}, "
+                    f"s={s:.1f} (dist={dist:.1f} > umbral {self.umbral_derrape:.0f})"
+                )
             elif tramo == self._derrape_tramo:
                 long_tramo = self._long_tramos[tramo]
                 if self._cerrada and abs(s - self._derrape_s_fin) > long_tramo / 2.0:
                     # El derrape cruzó el origen de la trayectoria cerrada: se
                     # cierra la zona actual y se abre otra al otro lado
+                    self.saveLogFile(
+                        f"[DERRAPE] Frame {frame} v={vuelta}: salto de s "
+                        f"{self._derrape_s_fin:.1f}->{s:.1f} (> media vuelta de "
+                        f"{long_tramo:.1f} px): el derrape cruzó el origen; se "
+                        f"cierra la zona actual y se abre otra al otro lado"
+                    )
                     self._cerrar_derrape(vuelta, frame)
                     self._estado_derrapando = True
                     self._derrape_s_ini = s
@@ -549,13 +693,14 @@ class EstrategiaPerfil:
         sentido contrario al de carrera): garantiza s_ini <= s_fin.
         """
         self._estado_derrapando = False
-        self._registrar_zona(
-            self._derrape_tramo,
-            min(self._derrape_s_ini, self._derrape_s_fin),
-            max(self._derrape_s_ini, self._derrape_s_fin),
-            vuelta,
-            frame,
+        s_ini = min(self._derrape_s_ini, self._derrape_s_fin)
+        s_fin = max(self._derrape_s_ini, self._derrape_s_fin)
+        self.saveLogFile(
+            f"[DERRAPE] Frame {frame} v={vuelta}: CERRADO en tramo "
+            f"{self._derrape_tramo}, intervalo [{s_ini:.1f}, {s_fin:.1f}] "
+            f"({s_fin - s_ini:.1f} px de arco)"
         )
+        self._registrar_zona(self._derrape_tramo, s_ini, s_fin, vuelta, frame)
 
     def _registrar_zona(self, tramo, s_ini, s_fin, vuelta, frame):
         """
@@ -599,7 +744,17 @@ class EstrategiaPerfil:
 
         if solapadas:
             zona = solapadas[0]
-            # Si el derrape toca varias zonas, se unen en una sola
+            # Si el derrape toca varias zonas, se unen en una sola: queda
+            # registrado qué intervalos se fusionan y en qué resultado
+            if len(solapadas) > 1:
+                self.saveLogFile(
+                    f"[ZONA] Frame {frame} vuelta {vuelta}: el derrape "
+                    f"[{s_ini:.1f}, {s_fin:.1f}] toca {len(solapadas)} zonas del "
+                    f"tramo {tramo}, se fusionan: "
+                    + ", ".join(
+                        f"[{z['s_ini']:.1f}, {z['s_fin']:.1f}]" for z in solapadas
+                    )
+                )
             for extra in solapadas[1:]:
                 zonas.remove(extra)
                 zona["s_ini"] = min(zona["s_ini"], extra["s_ini"])
@@ -614,9 +769,10 @@ class EstrategiaPerfil:
             zona["anticipacion"] += self.incremento_anticipacion
             zona["vueltas"].append(vuelta)
             self.saveLogFile(
-                f"Frame {frame} vuelta {vuelta}: derrape repetido en zona "
+                f"[ZONA] Frame {frame} vuelta {vuelta}: derrape repetido en zona "
                 f"[{zona['s_ini']:.0f}, {zona['s_fin']:.0f}] del tramo {tramo}. "
-                f"Anticipación aumentada a {zona['anticipacion']:.0f}"
+                f"Anticipación aumentada a {zona['anticipacion']:.0f} "
+                f"(derrapes_contador={self.derrapes_contador})"
             )
         else:
             # Primera vez que se derrapa aquí: zona nueva
@@ -631,23 +787,40 @@ class EstrategiaPerfil:
             # Mantener las zonas ordenadas por posición facilita leer los logs
             zonas.sort(key=lambda z: z["s_ini"])
             self.saveLogFile(
-                f"Frame {frame} vuelta {vuelta}: nueva zona de derrape "
-                f"[{s_ini:.0f}, {s_fin:.0f}] en tramo {tramo}"
+                f"[ZONA] Frame {frame} vuelta {vuelta}: nueva zona de derrape "
+                f"[{s_ini:.0f}, {s_fin:.0f}] en tramo {tramo} con anticipación "
+                f"{self.anticipacion_inicial:.0f} (derrapes_contador="
+                f"{self.derrapes_contador})"
             )
+
+        # Estado completo de las zonas tras el alta/fusión/ampliación
+        self._log_zonas(f"estado tras el derrape de la vuelta {vuelta}")
 
         # Además castigamos el perfil en la zona previa al derrape, que es
         # donde se gestó la pérdida de adherencia
         indices = self._celdas_en(tramo, s_ini - self.ventana_reduccion, s_fin)
         if not indices:
+            self.saveLogFile(
+                f"[PERFIL] Castigo sin efecto: el intervalo "
+                f"[{s_ini - self.ventana_reduccion:.1f}, {s_fin:.1f}] no cubre "
+                f"ninguna celda del tramo {tramo}"
+            )
             return
         celdas = self.perfil[tramo]
+        # Se anota el valor previo de cada celda para poder loguear el cambio
+        # exacto antes->después que produce este castigo
+        antes = {i: celdas[i] for i in indices}
         for i in indices:
             # Bajada con suelo: nunca por debajo de v_min
             celdas[i] = max(self.v_min, celdas[i] - self.reduccion_derrape)
         self.saveLogFile(
-            f"Perfil reducido -{self.reduccion_derrape} en tramo {tramo}, "
-            f"{len(indices)} celdas antes del derrape [{s_ini:.0f}, {s_fin:.0f}]"
+            f"[PERFIL] Castigo -{self.reduccion_derrape:.0f} en tramo {tramo}: "
+            f"intervalo [{s_ini - self.ventana_reduccion:.1f}, {s_fin:.1f}] "
+            f"({self.ventana_reduccion:.0f} px antes del derrape), "
+            f"{len(indices)} celdas: "
+            + ", ".join(f"c{i}:{antes[i]:.0f}->{celdas[i]:.0f}" for i in indices)
         )
+        self._log_perfil("tras castigo por derrape")
 
     # --- PERFIL DE PWM ---
     def _celdas_en(self, tramo, s_desde, s_hasta):
@@ -722,9 +895,22 @@ class EstrategiaPerfil:
         """
         # ¿Vio ESTA cámara algún derrape desde el último aviso de vuelta?
         hubo_derrape_local = self.derrapes_contador != self._derrapes_vuelta_anterior
+        # Queda registrada la decisión completa: la visión global del
+        # controlador, el contador local antes/después y qué se decide
+        self.saveLogFile(
+            f"[VUELTA {vuelta}] limpia_global={vuelta_limpia} | derrapes de esta "
+            f"cámara: {self._derrapes_vuelta_anterior}->{self.derrapes_contador} "
+            f"(hubo_derrape_local={hubo_derrape_local})"
+        )
         self._derrapes_vuelta_anterior = self.derrapes_contador
 
         if not vuelta_limpia or hubo_derrape_local:
+            motivo = (
+                "esta cámara registró derrapes"
+                if hubo_derrape_local
+                else "otra cámara registró derrapes (aviso global del controlador)"
+            )
+            self.saveLogFile(f"[VUELTA {vuelta}] El perfil NO sube: {motivo}")
             return
 
         # Vuelta limpia: sube todo el perfil salvo las celdas de zonas con
@@ -737,10 +923,17 @@ class EstrategiaPerfil:
                 # ninguna apuntada: equivale a "hace muchísimo", sin protección)
                 ultima = zona["vueltas"][-1] if zona["vueltas"] else -10**6
                 if vuelta - ultima <= self.vueltas_proteccion:
-                    protegidas.update(
-                        self._celdas_en(
-                            tramo, zona["s_ini"] - self.ventana_reduccion, zona["s_fin"]
-                        )
+                    celdas_zona = self._celdas_en(
+                        tramo, zona["s_ini"] - self.ventana_reduccion, zona["s_fin"]
+                    )
+                    protegidas.update(celdas_zona)
+                    self.saveLogFile(
+                        f"[VUELTA {vuelta}] tramo {tramo}: la zona "
+                        f"[{zona['s_ini']:.1f}, {zona['s_fin']:.1f}] protege las "
+                        f"celdas {sorted(celdas_zona)} (último derrape en vuelta "
+                        f"{ultima}, le quedan "
+                        f"{self.vueltas_proteccion - (vuelta - ultima)} vuelta(s) "
+                        f"de protección)"
                     )
             # 2º suben todas las celdas no protegidas, con tope v_max
             for i in range(len(celdas)):
@@ -748,16 +941,60 @@ class EstrategiaPerfil:
                     celdas[i] = min(self.v_max, celdas[i] + self.incremento_vuelta)
 
         self.saveLogFile(
-            f"Vuelta {vuelta} limpia: perfil incrementado +{self.incremento_vuelta}"
+            f"[VUELTA {vuelta}] limpia: perfil incrementado "
+            f"+{self.incremento_vuelta:.0f} (tope v_max={self.v_max:.0f}) en las "
+            f"celdas no protegidas"
         )
+        self._log_perfil(f"tras la vuelta {vuelta} limpia")
+
+    # --- VOLCADOS DE ESTADO (solo escriben en el log, no modifican nada) ---
+    def _log_perfil(self, motivo):
+        """
+        Vuelca al log el perfil COMPLETO de PWM de todos los tramos.
+
+        Cada celda i cubre el intervalo de arco [i·paso_perfil, (i+1)·paso_perfil):
+        con paso_perfil=30, la celda 0 es s=[0,30), la 1 es s=[30,60), etc.
+        Se llama después de CADA modificación del perfil (inicialización,
+        castigo por derrape, subida por vuelta limpia), de forma que comparando
+        dos volcados consecutivos se ve exactamente qué celdas cambiaron.
+        """
+        self.saveLogFile(f"[PERFIL] ({motivo})")
+        for tramo, celdas in self.perfil.items():
+            self.saveLogFile(
+                f"[PERFIL] tramo {tramo} ({len(celdas)} celdas de "
+                f"{self.paso_perfil:.0f} px): "
+                + " ".join(f"{v:.0f}" for v in celdas)
+            )
+
+    def _log_zonas(self, motivo):
+        """
+        Vuelca al log todas las zonas de derrape acumuladas, por tramo: su
+        intervalo [s_ini, s_fin], la anticipación actual y en qué vueltas
+        derrapó. Se llama tras cada alta/ampliación/fusión de zona para ver
+        cómo evoluciona la estructura `zonas` a lo largo de la carrera.
+        """
+        self.saveLogFile(f"[ZONA] ({motivo})")
+        total = 0
+        for tramo, zonas in self.zonas.items():
+            for z in zonas:
+                total += 1
+                self.saveLogFile(
+                    f"[ZONA] tramo {tramo}: [{z['s_ini']:.1f}, {z['s_fin']:.1f}] "
+                    f"anticipación={z['anticipacion']:.0f} vueltas={z['vueltas']}"
+                )
+        if total == 0:
+            self.saveLogFile("[ZONA] (sin zonas registradas)")
 
     # --- PERSISTENCIA ---
     def saveLogFile(self, data):
-        """Añade una línea al log de texto de esta cámara. Los errores de E/S
-        solo se imprimen: un fallo de disco nunca debe tumbar el algoritmo."""
+        """Añade una línea al log de texto de esta cámara, con marca de tiempo
+        HH:MM:SS.mmm para poder correlacionarla con la telemetría y los bags.
+        Los errores de E/S solo se imprimen: un fallo de disco nunca debe
+        tumbar el algoritmo."""
         try:
             with open(self.log_file, "a") as log_file:
-                log_file.write(data + "\n")
+                marca = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                log_file.write(f"{marca} {data}\n")
         except IOError as e:
             print(f"Error escribiendo log: {e}")
 
