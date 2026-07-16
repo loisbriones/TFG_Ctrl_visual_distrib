@@ -36,9 +36,9 @@
     # Parámetros para el controlador
     controller:
       # Velocidad minima a la que podemos ir
-      minimum_speed: 85
+      minimum_speed: 75 
       # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
-      maximum_speed: 88 
+      maximum_speed: 100 
       distancia_nodos_trayectoria: 15.0
       umbral_control_trayectoria_correcta: 60.0 
       umbral_derrape_peligro: 10.0

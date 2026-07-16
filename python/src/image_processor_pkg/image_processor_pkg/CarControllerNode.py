@@ -73,6 +73,27 @@ class CarControllerNode(Node):
         self.declare_parameter("controller.debounce_meta", 1.0)
         self.debounce_meta = self.get_parameter("controller.debounce_meta").value
 
+        # --- ORDEN SECUENCIAL DE CÁMARAS ---
+        # El coche recorre las cámaras siempre en el mismo orden (se va por
+        # delante y entra por detrás). Estas estructuras lo aprenden en
+        # carrera para poder reenviar reducciones a la cámara PRECEDENTE
+        # cuando una zona de derrape se sale por el inicio de una trayectoria.
+        #
+        # Cámara cuyo último frame válido manda ahora mismo (regla pegajosa:
+        # se mantiene mientras siga entregando frames válidos, aunque otra
+        # cámara solapada intercale mensajes C1,C2,C1,C2)
+        self.camara_activa = None
+        # Instante (reloj del controlador, no stamps de las Raspberry: los
+        # relojes entre máquinas pueden estar desviados) del último frame
+        # válido de la cámara activa
+        self.t_ultimo_frame_valido = None
+        # Segundos sin frames válidos de la activa para darla por perdida y
+        # conmutar a la que sí está entregando (~10 frames a 30 Hz)
+        self.timeout_camara_activa = 0.3
+        # {cámara: cámara anterior en el orden de paso}: se rellena en cada
+        # conmutación y tras una vuelta completa queda el ciclo entero
+        self.camara_precedente = {}
+
         self.sub_car_position = self.create_subscription(
             CarLocation,
             "position",
@@ -150,6 +171,10 @@ class CarControllerNode(Node):
             self.vueltas = 0
             self.derrapes_ultima_vuelta = 0
             self.v_actual = 0.0
+            # El orden de cámaras se reaprende con la nueva calibración
+            self.camara_activa = None
+            self.t_ultimo_frame_valido = None
+            self.camara_precedente.clear()
             self.publicar_velocidad(0)
             self.get_logger().warn("⚠️ Reiniciando calibración.")
 
@@ -210,11 +235,18 @@ class CarControllerNode(Node):
             # 2. Convertimos el array de NumPy a lista de Python para poder serializarlo
             datos_a_guardar[camara] = self.trayectoria_base[camara].tolist()
 
-            # Instanciamos el algoritmo de perfil para esta cámara
+            # Instanciamos el algoritmo de perfil para esta cámara.
+            # varias_camaras desambigua dentro de setTrayectoria el caso
+            # "el final conecta con el inicio y hay un salto grande": con una
+            # sola cámara es el circuito completo con un hueco tapado; con
+            # varias, la grabación empezó en mitad de la porción visible
             self.algoritmos[camara] = EstrategiaPerfil(
                 self.v_max, self.v_min, self.get_name(), camara
             )
-            self.algoritmos[camara].setTrayectoria(self.trayectoria_base[camara])
+            self.algoritmos[camara].setTrayectoria(
+                self.trayectoria_base[camara],
+                varias_camaras=len(self.puntos_crudos) > 1,
+            )
 
             self.get_logger().info(
                 f"✅ {camara}: Ruta base con {len(ruta_limpia)} nodos. Algoritmo de perfil inyectado."
@@ -257,6 +289,59 @@ class CarControllerNode(Node):
         # Si el algoritmo nos dice que ignoremos el frame por ruido, nueva_vel será None
         if nueva_vel is not None:
             self.v_actual = nueva_vel
+
+        # --- Seguimiento de la cámara activa (orden secuencial) ---
+        # Regla pegajosa: nos quedamos con la cámara que estamos escuchando
+        # mientras siga entregando frames válidos; solo cuando lleva
+        # timeout_camara_activa sin entregar y OTRA cámara sí entrega,
+        # conmutamos. Así el intercalado C1,C2,C1,C2 de dos cámaras
+        # solapadas no ensucia el orden aprendido.
+        if self.algoritmos[camara].frame_valido:
+            if self.camara_activa is None:
+                self.camara_activa = camara
+                self.t_ultimo_frame_valido = time_received_from_camera
+                self.get_logger().info(f"👁️ Cámara activa inicial: {camara}")
+            elif camara == self.camara_activa:
+                self.t_ultimo_frame_valido = time_received_from_camera
+            else:
+                sin_activa = (
+                    time_received_from_camera - self.t_ultimo_frame_valido
+                ).nanoseconds / 1e9
+                if sin_activa > self.timeout_camara_activa:
+                    # La activa dejó de ver el coche: conmutamos. Se cierra
+                    # cualquier derrape que tuviera abierto (no van a llegar
+                    # más frames que lo extiendan) y se apunta el orden
+                    self.algoritmos[self.camara_activa].notificar_perdida_vision(
+                        self.vueltas, self.frame_count
+                    )
+                    self.camara_precedente[camara] = self.camara_activa
+                    self.get_logger().info(
+                        f"👁️ Cámara activa: {self.camara_activa} -> {camara} "
+                        f"(precedente de {camara} = {self.camara_activa})"
+                    )
+                    self.camara_activa = camara
+                    self.t_ultimo_frame_valido = time_received_from_camera
+
+        # --- Derrame de reducciones hacia la cámara precedente ---
+        # Si al retroceder una zona el algoritmo se salió por el inicio de
+        # su trayectoria, los px sobrantes se aplican al FINAL de la
+        # trayectoria de la cámara anterior en el orden de paso
+        pendiente = self.algoritmos[camara].consumir_reduccion_pendiente()
+        if pendiente > 0.0:
+            precedente = self.camara_precedente.get(camara)
+            if precedente is not None and precedente in self.algoritmos:
+                self.get_logger().info(
+                    f"↩️ Derrame: {camara} pide reducir {pendiente:.0f} px; "
+                    f"se aplican al final de la trayectoria de {precedente}"
+                )
+                self.algoritmos[precedente].aplicar_reduccion_externa(
+                    pendiente, self.vueltas
+                )
+            else:
+                self.get_logger().warn(
+                    f"↩️ Derrame de {pendiente:.0f} px de {camara} SIN aplicar: "
+                    f"aún no se conoce su cámara precedente"
+                )
 
         # Publicamos siempre la velocidad actual
         self.publicar_velocidad(int(self.v_actual))
