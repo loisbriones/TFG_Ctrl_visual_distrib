@@ -20,6 +20,7 @@ from image_processor_pkg.msg import (
 
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.time import Time
 
 import math
 import numpy as np
@@ -58,7 +59,7 @@ class CarControllerNode(Node):
         self.carril = self.get_parameter("carril_asignado").value
 
         self.en_calibracion = True
-        self.v_actual = self.v_max
+        self.v_actual = self.v_min
         self.ultimo_pwm_enviado = 0.0
 
         self.puntos_crudos = {}
@@ -72,6 +73,23 @@ class CarControllerNode(Node):
         self.tiempo_ultima_vuelta = None
         self.declare_parameter("controller.debounce_meta", 1.0)
         self.debounce_meta = self.get_parameter("controller.debounce_meta").value
+
+        # --- INTERPOLACIÓN DEL INSTANTE DE PASO POR META ---
+        # A ~30 Hz el cruce real ocurre ENTRE dos frames: asignarle el stamp
+        # del frame que lo detecta mete hasta ~33 ms de error por vuelta.
+        # Igual que hacía Mario en su TFG, interpolamos linealmente el
+        # instante exacto entre el frame anterior (delantera aún sin cruzar)
+        # y el actual, proporcionalmente a la distancia perpendicular de
+        # cada uno a la recta de meta. Los tiempos son stamps de CAPTURA de
+        # la cámara que ve la meta: como el tiempo de vuelta es la
+        # diferencia de dos stamps de la MISMA Raspberry, el desfase de
+        # reloj entre máquinas se cancela (no hace falta NTP).
+        #
+        # (punto_front, stamp_ns) del mensaje ANTERIOR de la cámara de meta
+        self.front_meta_anterior = None
+        # Instante interpolado (ns, reloj de la Raspberry de meta) del
+        # último cruce; la diferencia entre dos de estos es el lap_time
+        self.t_meta_anterior = None
 
         # --- ORDEN SECUENCIAL DE CÁMARAS ---
         # El coche recorre las cámaras siempre en el mismo orden (se va por
@@ -175,11 +193,17 @@ class CarControllerNode(Node):
             self.camara_activa = None
             self.t_ultimo_frame_valido = None
             self.camara_precedente.clear()
+            # El cronómetro de meta también parte de cero
+            self.front_meta_anterior = None
+            self.t_meta_anterior = None
+            self.tiempo_ultima_vuelta = None
             self.publicar_velocidad(0)
             self.get_logger().warn("⚠️ Reiniciando calibración.")
 
+
     def callback_posicion(self, msg: CarLocation):
         self.frame_count += 1
+
         if self.en_calibracion:
             self.recolectar_datos_calibracion(msg)
         else:
@@ -204,7 +228,7 @@ class CarControllerNode(Node):
 
         punto_back = np.array([bx, by], dtype=np.float32)
         # Como ya dimos una vuelta podemos terminar la calibración
-        if self.verificar_linea_meta(camara, punto_front, punto_back):
+        if self.verificar_linea_meta(camara, punto_front, punto_back, msg.stamp):
             msg = Bool()
             msg.data = False
             self.pub_modo_calibracion.publish(msg)
@@ -280,7 +304,7 @@ class CarControllerNode(Node):
         punto_front = np.array([fx, fy], dtype=np.float32)
         punto_back = np.array([bx, by], dtype=np.float32)
 
-        if self.verificar_linea_meta(camara, punto_front, punto_back):
+        if self.verificar_linea_meta(camara, punto_front, punto_back, msg.stamp):
             self.registrar_vuelta_algoritmos()
 
         # 🏎️ MAGIA: el algoritmo se encarga de detectar el derrape y pedir la velocidad
@@ -441,12 +465,61 @@ class CarControllerNode(Node):
 
         return False
 
-    def verificar_linea_meta(self, camara_id, p_front, p_back):
+    def interpolar_instante_meta(self, p_curr, t_curr, A, B):
+        # Instante exacto (ns) en el que la delantera cruzó la recta de meta,
+        # interpolando linealmente entre el frame anterior (front_meta_anterior)
+        # y el actual. Se llama SOLO en el frame en el que el cruce cuenta
+        # (primer cruce o vuelta que pasa el debounce): la detección ya la
+        # hizo crosses_segment; aquí solo se reparte el tiempo.
+        if self.front_meta_anterior is None:
+            self.get_logger().warn(
+                "🏁 Cruce de meta sin frame anterior guardado: "
+                "se usa el stamp del frame actual sin interpolar"
+            )
+            return t_curr
+        p_prev, t_prev = self.front_meta_anterior
+
+        # d(P) = cross(B-A, P-A) / |B-A| es la distancia perpendicular CON
+        # SIGNO a la recta (el signo dice de qué lado está P). Es la fórmula
+        # del TFG de Mario (getTiempoVuelta) pero con distancia perpendicular
+        # real en vez de la aproximación por el eje dominante de la meta.
+        # Producto cruzado 2D escrito a mano (np.cross con vectores 2D está
+        # retirado en NumPy 2.x)
+        AB = B - A
+        norma = float(np.linalg.norm(AB))
+        AP_prev = p_prev - A
+        AP_curr = p_curr - A
+        d_prev = float(AB[0] * AP_prev[1] - AB[1] * AP_prev[0]) / norma
+        d_curr = float(AB[0] * AP_curr[1] - AB[1] * AP_curr[0]) / norma
+
+        if d_prev * d_curr >= 0:
+            # Guard de VALIDEZ, no re-detección: interpolar entre t_prev y
+            # t_curr solo tiene sentido si el cruce cayó dentro de ese
+            # intervalo, es decir, si la delantera cambió de lado entre esos
+            # dos frames. Caso raro NO soportado (p. ej. se perdió el frame
+            # justo antes del cruce y el anterior ya estaba pasado): se usa
+            # el stamp de captura del frame actual tal cual, que sigue siendo
+            # mejor que el reloj del controlador.
+            self.get_logger().warn(
+                "🏁 Interpolación de meta sin cambio de lado "
+                f"(d_prev={d_prev:.1f}, d_curr={d_curr:.1f}): "
+                "se usa el stamp del frame actual sin interpolar"
+            )
+            return t_curr
+
+        # Fracción del intervalo entre frames recorrida hasta tocar la recta
+        s = abs(d_prev) / (abs(d_prev) + abs(d_curr))
+        return t_prev + s * (t_curr - t_prev)
+
+    def verificar_linea_meta(self, camara_id, p_front, p_back, stamp):
         if (
             self.finish_line["camara_id"] is None
             or camara_id != self.finish_line["camara_id"]
         ):
             return False
+
+        # Stamp de CAPTURA del frame (reloj de la Raspberry de meta), en ns
+        t_stamp = Time.from_msg(stamp).nanoseconds
 
         A, B = self.finish_line["coordenadas"]
         A_np = np.array(A, dtype=np.float32)
@@ -454,31 +527,57 @@ class CarControllerNode(Node):
 
         esta_cruzando = self.crosses_segment(p_front, p_back, A_np, B_np)
 
+        vuelta_completada = False
+
         if esta_cruzando:
             ahora = self.get_clock().now()
+
+            # OJO: la interpolación se calcula SOLO dentro de las dos ramas
+            # que consumen el instante (primer cruce y vuelta que pasa el
+            # debounce). El coche está a caballo de la meta varios frames
+            # seguidos y en los frames que el debounce descarta la delantera
+            # ya está pasada de línea: interpolar ahí no tendría sentido.
 
             # Devolvemos False porque es la primera vez que cruza
             if self.tiempo_ultima_vuelta is None:
                 self.tiempo_ultima_vuelta = ahora
+                self.t_meta_anterior = self.interpolar_instante_meta(
+                    p_front, t_stamp, A_np, B_np
+                )
                 self.get_logger().info(
                     "🏁 Primera pasada por meta. Iniciando cronómetro..."
                 )
-                return False
+            else:
+                # El debounce sigue con el reloj del controlador (mide "hace
+                # cuánto detectamos el cruce anterior", no necesita precisión)
+                diferencia_segundos = (
+                    ahora - self.tiempo_ultima_vuelta
+                ).nanoseconds / 1e9
 
-            diferencia_segundos = (ahora - self.tiempo_ultima_vuelta).nanoseconds / 1e9
+                # Devolvemos True porque es la segunda vez que cruza ahora empezo la carrera
+                if diferencia_segundos > self.debounce_meta:
+                    self.vueltas += 1
+                    # El tiempo de vuelta publicado es la diferencia entre
+                    # los dos instantes INTERPOLADOS de paso por meta
+                    t_meta = self.interpolar_instante_meta(
+                        p_front, t_stamp, A_np, B_np
+                    )
+                    lap_time = (t_meta - self.t_meta_anterior) / 1e9
+                    self.publicar_time_lap(lap_time, self.vueltas)
+                    self.get_logger().info(
+                        f"⏱️ ¡VUELTA {self.vueltas} COMPLETADA! Tiempo: {lap_time:.3f} s"
+                    )
+                    self.tiempo_ultima_vuelta = ahora
+                    self.t_meta_anterior = t_meta
 
-            # Devolvemos True porque es la segunda vez que cruza ahora empezo la carrera
-            if diferencia_segundos > self.debounce_meta:
-                self.vueltas += 1
-                self.publicar_time_lap(diferencia_segundos, self.vueltas)
-                self.get_logger().info(
-                    f"⏱️ ¡VUELTA {self.vueltas} COMPLETADA! Tiempo: {diferencia_segundos:.3f} s"
-                )
-                self.tiempo_ultima_vuelta = ahora
+                    vuelta_completada = True
 
-                return True
+        # Guardamos SIEMPRE el último punto/stamp de la cámara de meta: en el
+        # próximo cruce será el punto "pre-meta" de la interpolación (el
+        # equivalente a trayectoria[-1] en el código de Mario)
+        self.front_meta_anterior = (p_front.copy(), t_stamp)
 
-        return False
+        return vuelta_completada
 
 
 def main(args=None):

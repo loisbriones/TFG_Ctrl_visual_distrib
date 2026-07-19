@@ -192,7 +192,7 @@ class ImageProcessor(Node):
         # Posicion
         self.timer = self.create_timer(0.033, self.process_frame, callback_group=self.image_processor_group)
         # Debug
-        self.debug_timer = self.create_timer(0.066, self._tarea_debug, callback_group=self.debug_group)
+        self.debug_timer = self.create_timer(0.033, self._tarea_debug, callback_group=self.debug_group)
 
         # --- BUSCAR LINEA DE META ---
         self.declare_parameter("finish_line_color", "naranja")
@@ -257,8 +257,15 @@ class ImageProcessor(Node):
         while self.running and rclpy.ok():
             ret, frame = self.cam.read()
             if ret:
+                # El stamp se toma AQUÍ, justo tras leer el frame del hardware,
+                # y viaja junto al frame hasta el CarLocation publicado. Así el
+                # stamp representa el instante de CAPTURA (cuando el coche
+                # estaba realmente en esa posición), no el de publicación:
+                # el tiempo de detección + ROI no contamina la medida y el
+                # controlador puede interpolar tiempos de vuelta precisos.
+                stamp = self.get_clock().now().to_msg()
                 with self.frame_lock:
-                    self.latest_frame = frame
+                    self.latest_frame = (frame, stamp)
 
     def callback_control(self, msg):
         # Modo operacion
@@ -374,7 +381,7 @@ class ImageProcessor(Node):
         """Función auxiliar para re-instanciar el detector con los nuevos valores."""
         self.color_detector = ColorDetector(self.stiker_front, self.stiker_back, self.kernel_size)
 
-    def publish_car_position(self, detections, proc_duration, x, y, car_name):
+    def publish_car_position(self, detections, proc_duration, x, y, car_name, frame_stamp):
         object_location_msg = CarLocation()
         object_bounding_rect_front = BoundingRect() 
         object_bounding_rect_back = BoundingRect()
@@ -416,8 +423,13 @@ class ImageProcessor(Node):
         
         object_location_msg.proc_time = proc_duration
 
-        # Publicamos los puntos detectados
-        object_location_msg.stamp = self.get_clock().now().to_msg()
+        # El stamp es el instante de CAPTURA del frame (tomado en
+        # _capture_loop), no el de publicación: es el momento en el que el
+        # coche estaba de verdad en esta posición. El controlador interpola
+        # con estos stamps el instante exacto del paso por meta; como el
+        # tiempo de vuelta es la diferencia entre dos stamps de la MISMA
+        # Raspberry, el desfase de reloj entre máquinas se cancela solo.
+        object_location_msg.stamp = frame_stamp
 
         self.publisher_coche[car_name].publish(object_location_msg)
 
@@ -427,9 +439,11 @@ class ImageProcessor(Node):
             return
 
         current_frame = None
+        frame_stamp = None
         with self.frame_lock:
             if self.latest_frame is not None:
-                current_frame = self.latest_frame
+                # latest_frame es la tupla (frame, stamp de captura)
+                current_frame, frame_stamp = self.latest_frame
                 self.latest_frame = (
                     None  # Consumimos el frame para no repetir procesado
                 )
@@ -448,6 +462,7 @@ class ImageProcessor(Node):
                     self.thread_pool.submit(
                         self.tarea_por_coche,
                         current_frame,
+                        frame_stamp,
                         car_name,
                         self.info_coches[car_name],
                     )
@@ -500,16 +515,16 @@ class ImageProcessor(Node):
     """
     Funcion que ejecutan los threads que se encargan de buscar los Stikers de los coches en el frame
     """
-    def tarea_por_coche(self, frame, car_name, info):
+    def tarea_por_coche(self, frame, frame_stamp, car_name, info):
 
         # --- MODO CALIBRACIÓN ---
         if self.modo_calibracion:
             detections = self.color_detector.find_object(frame, self.min_area, self.stiker_front, self.stiker_back)
-            if detections["front"] is not None and detections["back"] is not None:
+            if detections["front"] is not None:
                 info["puntos_trayectoria"].append((detections["front"]["cx"], detections["front"]["cy"]))
                 # Usamos 0,0 como offset porque es el frame completo
                 # Solo publicamos en calibración si hemos detectado algo
-                self.publish_car_position(detections, 0.0, 0, 0, car_name)
+                self.publish_car_position(detections, 0.0, 0, 0, car_name, frame_stamp)
             return
 
         # --- MODO OPERACION---
@@ -546,7 +561,7 @@ class ImageProcessor(Node):
             info["roi_size"] = 150  # Resetear tamaño de búsqueda
 
             # 5. Publicar (Solo lo hacemos si hemos encontrado el coche)
-            self.publish_car_position(detections, duration, x1, y1, car_name)
+            self.publish_car_position(detections, duration, x1, y1, car_name, frame_stamp)
 
             if self.debug and self.save_data:
                 # Restauramos la estructura del diccionario si venimos de perder el coche

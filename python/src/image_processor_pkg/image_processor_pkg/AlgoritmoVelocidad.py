@@ -113,14 +113,14 @@ class EstrategiaPerfil:
         # Ajustado empíricamente en pista: con 15 px (valor original) el
         # derrape se confirmaba tan tarde que el coche ya se había salido;
         # con 8 px se reacciona a tiempo
-        self.umbral_derrape = 16.0
+        self.umbral_derrape = 12.0
         # Ruido: si la etiqueta frontal está más lejos que esto de la ruta
         # se ignora el frame entero (detección falsa)
         self.max_dist_ruta = 80.0
         # Zona muerta (en CELDAS) junto a los extremos de la cadena abierta
         # y junto a las celdas gigantes: al entrar/salir del encuadre la
         # detección de la pose no es fiable y daría falsos derrapes
-        self.margen_extremo_celdas = 2
+        self.margen_extremo_celdas = 2 
 
         # ------------------------------------------------------------------
         # Parámetros de construcción de la cadena de celdas
