@@ -1,0 +1,225 @@
+\chapter{Tecnologías}
+\label{chap:tecnologias}
+
+\lettrine{E}{n} este capítulo se describen las tecnologías software y hardware utilizadas en
+el desarrollo del proyecto. Se detallan el lenguaje de programación empleado, el middleware
+de comunicación que permite crear la arquitectura distribuida, las principales librerías y
+herramientas integradas, así como los dispositivos físicos que permiten la interacción entre 
+el sistema y los coches del circuito.
+
+\section{Tecnologías software}
+\label{sec:tecnoloxias-software}
+
+\subsection{Lenguajes de programación}
+
+\subsubsection{Python}
+
+Python es un lenguaje de programación de código abierto, interpretado y de tipado dinámico,
+lo que significa que no requiere especificar el tipo de las variables de forma explícita y
+que el código se ejecuta directamente mediante un intérprete, sin necesidad de compilación
+previa~\cite{python}.
+
+Admite múltiples paradigmas de programación, como la orientación a objetos, la programación
+funcional y la programación por procedimientos, y es multiplataforma, lo que permite
+ejecutar el mismo programa en distintos sistemas operativos sin modificaciones. Su extenso
+ecosistema de librerías científicas y de visión artificial, junto con su sintaxis clara, lo
+han convertido en uno de los lenguajes más populares en la actualidad.
+
+En este proyecto, Python es el único lenguaje empleado en el sistema principal: todos los
+nodos de la arquitectura distribuida están implementados en Python sobre la librería 
+\texttt{rclpy} de ROS2.
+% TODO: Si documentas el firmware del Arduino, añade aquí un subsubsection breve sobre
+% C/C++ (lenguaje del sketch), como hacen Mario y Adrián.
+
+\subsection{ROS2}
+\label{sec:ros2}
+
+ROS2 (\textit{Robot Operating System 2}) es un conjunto de librerías y herramientas de
+código abierto para construir aplicaciones para robots~\cite{ros2docs}. A pesar de su nombre,
+no se trata de un sistema operativo, sino de un middleware que proporciona la
+infraestructura de comunicación, el sistema de construcción y las utilidades necesarias para
+componer aplicaciones a partir de procesos independientes llamados \textit{nodos}. En este
+trabajo se ha utilizado la distribución \textit{Humble Hawksbill}~\cite{ros2docs}, versión
+con soporte extendido (\gls{lts}) publicada en 2022.
+
+ROS2 constituye la columna vertebral de la arquitectura de este proyecto, del que se
+emplean los siguientes conceptos:
+
+\begin{itemize}
+    \item \textbf{Nodos:} procesos independientes que encapsulan una funcionalidad concreta
+    (en nuestro caso, la gestión de una cámara, el control de un coche o el puente con el
+    Arduino) y que pueden ejecutarse en máquinas distintas.
+
+    \item \textbf{Topics y mensajes:} bus que permite la comunicación entre los nodos que publican 
+    y reciben mensajes tipados. En el proyecto se definen tipos de
+    mensajes propios para intercambiar la posición del coche, el valor del pwm ("velocidad") y telemetría.
+
+    \item \textbf{Parámetros:} valores de configuración declarados por cada nodo, que
+    pueden establecerse desde un fichero \gls{yaml} común y modificarse en caliente durante
+    la ejecución.
+
+    \item \textbf{Ficheros \textit{launch}:} scripts de lanzamiento
+    que permiten arrancar varios nodos junto con sus configuraciones 
+    
+    \item \textbf{\textit{namespaces}:} es un mecanismo de encapsulación jerárquica que agrupa identificadores del sistema (nodos, tópicos, servicios o parámetros) bajo un prefijo de ruta común, es un sistema análoga a los directorios de un sistema de ficheros.
+
+    \item \textbf{\textit{Executors} y \textit{callback groups}:} mecanismos de
+    planificación que permiten atender varios \textit{callbacks} en paralelo dentro de un
+    nodo. Se emplea el \texttt{MultiThreadedExecutor} junto con grupos mutuamente
+    excluyentes para separar tareas críticas (procesamiento de posición) de tareas
+    secundarias (envio de imagen para depuración).
+\end{itemize}
+
+La característica de ROS2 más determinante para este trabajo es que su capa de transporte
+se apoya en el estándar \gls{dds}~\cite{ddsspec}, el cual se desglosa en la sección~\ref{sec:sistemas-distribuidos}.
+
+\subsection{Librerías}
+
+\subsubsection{OpenCV}
+
+OpenCV es una librería de visión por computador de código abierto ampliamente
+utilizada~\cite{opencv,bradski2008}. En este proyecto es el componente central del análisis
+visual: se emplea para capturar imagenes desde las cámaras, convertir los fotogramas al espacio
+de color \gls{hsv}, segmentar las pegatinas de los coches y la línea de meta mediante
+máscaras de color, aplicar operaciones morfológicas de limpieza y extraer los contornos de
+los objetos detectados.
+
+\subsubsection{NumPy}
+
+NumPy es una librería optimizada para el cálculo numérico con arreglos
+multidimensionales~\cite{numpy}. Se utiliza para representar y operar sobre las trayectorias
+del circuito (arrays de puntos), calculando de forma vectorizada distancias entre puntos y
+segmentos, el nodo de la trayectoria más cercano a una posición o las máscaras binarias
+derivadas de los fotogramas. Estas operaciones se ejecutan decenas de veces por segundo, por
+lo que su eficiencia resulta esencial para el funcionamiento en tiempo real.
+
+\subsubsection{pyserial}
+
+pyserial permite establecer comunicación serie entre Python y dispositivos externos como
+microcontroladores~\cite{pyserial}. En este proyecto se emplea en el nodo puente para enviar
+los comandos de velocidad al Arduino a través del puerto \gls{usb}, así como para recibir
+las confirmaciones de la placa.
+
+\subsubsection{threading y concurrent.futures}
+
+Los módulos estándar \texttt{threading} y \texttt{concurrent.futures} permiten ejecutar
+tareas en paralelo dentro de un mismo proceso. En el nodo cámara se emplean para desacoplar
+la captura de vídeo del procesamiento (un hilo dedicado actualizar el buffer de la
+cámara) y para buscar en paralelo las pegatinas de varios coches sobre el mismo fotograma
+mediante un \textit{pool} de hilos.
+
+\subsection{Herramientas de despliegue}
+
+\subsubsection{Docker y Docker Compose}
+
+Docker es una plataforma de contenedores que permite empaquetar una aplicación junto con
+todas sus dependencias en una imagen ejecutable de forma idéntica en cualquier
+máquina~\cite{docker}. En este proyecto resulta clave para el despliegue distribuido: los
+equipos que participan en el sistema no necesitan tener instalado ROS2 ni ninguna librería,
+únicamente Docker. Una única imagen, construida sobre la base oficial
+\texttt{ros:humble-ros-base}, sirve para todos los roles del sistema.
+
+Docker Compose complementa a Docker permitiendo describir en un fichero \gls{yaml} la
+configuración completa de arranque de un contenedor. Se definen dos ficheros: uno para las
+máquinas con cámara, parametrizado con el identificador del nodo y el dispositivo de vídeo,
+y otro para la máquina con acceso al puerto serie del Arduino. De esta forma, poner
+en marcha cualquier equipo del sistema se reduce a un único comando.
+
+\subsubsection{colcon}
+
+colcon es la herramienta oficial de construcción de "workspaces" de ROS2~\cite{ros2docs}. 
+Se encarga de compilar el paquete del proyecto, generar el código de
+los mensajes personalizados a partir de sus definiciones e instalar los ejecutables y
+ficheros de configuración para que puedan ser lanzados con las utilidades de ROS2.
+
+\subsection{Entornos de desarrollo y control de versiones}
+
+\subsubsection{Visual Studio Code}
+
+Visual Studio Code es un editor de código fuente gratuito y multiplataforma desarrollado por
+Microsoft~\cite{vscode}. Ofrece resaltado de sintaxis, autocompletado, depuración integrada
+y un amplio ecosistema de extensiones, entre ellas las de Python y ROS2, que facilitan el
+desarrollo y la depuración del proyecto.
+
+\subsubsection{Arduino IDE}
+
+Es el entorno de desarrollo oficial utilizado para programar placas Arduino~\cite{arduinoide}.
+Permite escribir el código del microcontrolador en un lenguaje basado en C/C++, compilarlo y
+cargarlo en la placa mediante la conexión serie. En este proyecto se emplea para cargar el
+firmware que interpreta los comandos de velocidad y genera las señales \gls{pwm} de los
+carriles.
+
+\subsubsection{Git}
+
+Git es un sistema de control de versiones distribuido~\cite{git}. Todo el desarrollo del
+proyecto se ha gestionado con Git, empleando ramas para las líneas de trabajo principales y
+una convención de mensajes de \textit{commit} con etiquetas por funcionalidad (por ejemplo
+\texttt{[FUN-FINDCOLOR]}, o \texttt{[ALGO-CTRL]}) que facilita reconstruir la
+evolución del sistema.
+
+\subsection{Formatos de datos}
+
+\subsubsection{YAML}
+
+El formato \gls{yaml} permite representar datos estructurados de forma legible para humanos
+y máquinas~\cite{pyyaml}. Es el formato estándar de configuración en ROS2 y de Docker
+Compose. En este proyecto centraliza toda la configuración del sistema en un único fichero
+de parámetros: colores de las pegatinas y de la meta, resolución de las cámaras, umbrales
+del algoritmo de control o el puerto del Arduino, entre otros.
+
+\subsubsection{JSON}
+
+El formato \gls{json} es un estándar ligero de intercambio de datos basado en texto. Se
+emplea para persistir en disco las trayectorias obtenidas durante la vuelta de calibración
+(tanto las de cada cámara como las del controlador), de forma que en arranques posteriores
+el sistema pueda cargarlas y omitir la calibración.
+
+\section{Tecnologías hardware}
+\label{sec:tecnoloxias-hardware}
+
+\subsection{Circuito de Scalextric}
+
+% TODO: Confirma marca y modelo del circuito y de los coches (Mario y Adrián usaron pista
+% analógica Carrera línea EVOLUTION y coche Carrera 27495).
+Se emplea un circuito analógico de coches tipo \textit{slot} con dos carriles alimentados de
+forma independiente, de modo que la tensión aplicada a cada carril determina la velocidad
+del coche que circula por él. Sobre los coches se colocan dos pegatinas de colores
+distintivos, una delantera y otra trasera, que el sistema de visión utiliza para determinar
+su posición y orientación. Además, sobre la pista se sitúa una marca de color en la línea de
+meta, que el sistema detecta automáticamente para contabilizar vueltas y finalizar la
+calibración. Este entorno físico constituye el escenario sobre el que interactúan la red de
+cámaras y el control hardware del sistema.
+
+\subsection{Placa Elegoo Uno R3}
+
+La placa Elegoo Uno R3 es una réplica compatible de la placa Arduino Uno R3, basada en el
+microcontrolador ATmega328P. Dispone de entradas y salidas digitales y analógicas y de
+conexión \gls{usb}, y es totalmente compatible con el \gls{ide} oficial de Arduino. Su
+función en el sistema es recibir por el puerto serie los comandos de velocidad enviados por
+el nodo puente y generar las señales \gls{pwm} correspondientes para cada carril, actuando
+como intermediario entre el software y el mundo físico.
+
+\subsection{Módulo controlador L293D}
+
+El L293D es un circuito integrado que implementa dos puentes en H, lo que permite controlar
+dos flujos de corriente simultáneos e independientes. Se emplea habitualmente como
+controlador de motores de corriente continua. 
+
+\subsection{Webcams Microsoft LifeCam HD-5000}
+
+% TODO: Confirma el modelo y el número de cámaras empleadas.
+Las cámaras utilizadas son webcams Microsoft LifeCam HD-5000, capaces de capturar vídeo en
+alta definición (720p) a 30 fotogramas por segundo a través de \gls{usb}. Cada cámara se
+sitúa sobre una parte del trazado, de forma que el conjunto cubra el circuito completo. Para
+reducir el ancho de banda \gls{usb} se solicita a la cámara el flujo comprimido en
+\gls{mjpg}, y se desactiva el autoenfoque para evitar variaciones de imagen durante la
+carrera.
+
+\subsection{Raspberry Pi 5}
+Estan equipadas con un procesador ARM Cortex-A76 de cuatro núcleos de 64 bits a 2,4 GHz, 4GB de RAM y puertos USB 3.0. En la arquitectura del sistema, este dispositivo se uso para conectar las cámaras y ejecutar los nodos de captura de ROS 2, adquiriendo las imágenes y publicando la posición del coche en tiempo real en la red para su posterior procesamiento.
+
+\subsection{Raspberry Pi 4}
+De manera complementaria, se emplean también placas Raspberry Pi 4 Modelo B, provistas de un procesador ARM Cortex-A72 de cuatro núcleos a 1,5 GHz, 4GB de RAM y puertos de comunicación USB. Cumplen una funcionalidad idéntica y paralela a la Raspberry Pi 5 dentro del proyecto.
+
+\subsection{ASUS Vivobook S 14}
+Esta equipado con un procesador AMD Ryzen AI 9 HX 370 de 12 núcleos a una frecuencia de hasta 5,16 GHz, gráficos integrados AMD Radeon 890M, 32 GB de memoria RAM LPDDR5X y 1 TB de almacenamiento SSD NVMe. El equipo opera bajo el sistema operativo Linux CachyOS en arquitectura x86\_64. Duranta las ejecuciones era donde iban los nodos de control y el nodo puente, al tener la conexión serie hacia el Arduino.

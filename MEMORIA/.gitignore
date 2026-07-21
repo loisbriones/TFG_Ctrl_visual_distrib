@@ -1,0 +1,40 @@
+# === Artefactos de compilación LaTeX ===
+# El PDF cambia en cada compilación: no se rastrea. Cualquiera lo regenera
+# con `latexmk` (o `pdflatex`) a partir de las fuentes .tex de esta carpeta.
+*.pdf
+
+# Ficheros auxiliares que genera LaTeX/latexmk al compilar
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+
+# Bibliografía (bibtex/biber): se regenera desde la .bib
+*.bbl
+*.blg
+*.bcf
+*.run.xml
+*-blx.bib
+
+# Índices, glosarios y acrónimos generados
+*.idx
+*.ilg
+*.ind
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.glsdefs
+
+# Beamer / presentaciones (por si acaso)
+*.nav
+*.snm
+*.vrb

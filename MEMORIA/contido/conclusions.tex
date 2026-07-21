@@ -1,0 +1,58 @@
+\chapter{Conclusiones y trabajo futuro}
+\label{chap:conclusions}
+
+\lettrine{E}{n} este último capítulo se presentan las conclusiones extraídas del trabajo
+realizado, valorando el grado de cumplimiento de los objetivos planteados en la
+introducción. Se comentan asimismo las principales limitaciones y dificultades encontradas
+durante el desarrollo, se reflexiona sobre las lecciones aprendidas y se proponen posibles
+líneas de trabajo futuro que den continuidad al proyecto.
+
+\section{Conclusiones}
+\label{sec:conclusions-final}
+
+% TODO: Redactar al final. Puntos a valorar contra los objetivos de la sección 1.2:
+%  - Se ha transformado un sistema monolítico en una arquitectura distribuida ROS2
+%    funcional: cámaras en máquinas independientes, controlador por coche y puente
+%    hardware desacoplado.
+%  - El sistema escala a circuitos arbitrarios añadiendo nodos cámara sin tocar código.
+%  - El algoritmo de control heredado se ha adaptado al entorno multicámara (longitud
+%    de arco, una trayectoria por cámara).
+%  - Tolerancia a fallos verificada: failover primary/spare y parada selectiva por
+%    carril.
+%  - Despliegue reproducible con Docker y telemetría completa para el análisis.
+% Relacionar también con las competencias de la titulación/mención, como hacen las
+% memorias de referencia.
+
+\section{Limitaciones y dificultades encontradas}
+\label{sec:limitacions}
+
+% TODO: Documentar honestamente, por ejemplo:
+%  - Dependencia de la iluminación en la segmentación por color (ajuste de rangos HSV).
+%  - Sincronización y solape entre campos de visión de cámaras contiguas (arbitraje
+%    de cámaras).
+%  - Latencia de red y su efecto en el control a altas velocidades.
+%  - Dificultades de depuración de un sistema multi-máquina (de ahí la herramienta de
+%    grabación y análisis).
+%  - Imposibilidad de probar sin el montaje físico completo.
+
+\section{Lecciones aprendidas}
+\label{sec:leccions}
+
+% TODO: Reflexión personal: diseño de sistemas distribuidos con ROS2 (QoS, executors,
+% callback groups), importancia de la telemetría para validar sistemas en tiempo real,
+% valor de construir sobre trabajos previos y de documentar para los siguientes.
+
+\section{Trabajo futuro}
+\label{sec:traballo-futuro}
+
+% TODO: Posibles líneas, coherentes con lo que quedó abierto:
+%  - Carreras multicoche reales con varios controladores compitiendo simultáneamente.
+%  - Arbitraje avanzado entre cámaras con campos de visión solapados y transferencia
+%    de seguimiento (hand-off) explícita.
+%  - Algoritmos de control más avanzados: perfil de velocidad continuo por sección
+%    (en lugar de dos niveles) o aprendizaje por refuerzo.
+%  - Elección de líder genérica (p. ej. algoritmo de elección distribuido) en lugar
+%    del esquema primary/spare estático.
+%  - Interfaz web de monitorización en tiempo real alimentada por los topics de
+%    telemetría.
+%  - Detección automática de la disposición de las cámaras y del orden de la ruta.

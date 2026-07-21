@@ -1,0 +1,930 @@
+\chapter{Diseño e implementación}
+\label{chap:implementacion}
+
+\lettrine{E}{N} este capítulo se presenta el diseño y la implementación llevados a cabo para garantizar el correcto funcionamiento del sistema, cumpliendo con los requisitos establecidos. Asimismo, se describe la arquitectura general, ilustrando la construcción de cada subsistema y el flujo de intercambio de datos, y se especifican los componentes hardware y software que constituyen cada uno de ellos.
+
+\section{Arquitectura general del sistema}
+\label{sec:arquitectura}
+
+El proyecto cuenta con cuatro nodos diferenciados, atendiendo cada uno a un subconjunto de los requisitos totales del proyecto agrupados por funcionalidades:
+
+\begin{itemize}
+    \item El sistema de captura y detección de posición
+    \item El sistema de control de velocidad
+    \item El sistema de actuación sobre el hardware
+    \item El sistema de visualización
+\end{itemize}
+
+Esto permite el aislamiento del proyecto en sistemas independientes que se interconectan, enviando y recibiendo la información necesaria para su correcto funcionamiento através de la red, no pueden compartir un estado de memoria.
+
+El funcionamiento del proyecto se lleva a cabo mediante la ejecución de un conjunto de nodos ROS~2 distribuidos en varias máquinas, que realizan la comunicación entre todos los nodos mediante la publicación y suscripción a \emph{topics} de ROS~2 y de una aplicación ejecutada en un Arduino cuyo hardware está conectado a la pista del Scalextric (ver figura~\ref{fig:arquitectura-general}). 
+
+El \textbf{sistema de captura y detección} está formado por un nodo cámara por cada cámara que observa el circuito, desplegado dentro de un contenedor Docker sobre la máquina a la que está conectada físicamente. Cada uno de estos nodos captura los fotogramas de su cámara, detecta en ellos los coches presentes en su porción visible del circuito y publica la posición de cada uno de ellos. 
+
+El \textbf{sistema de control del rail} se compone de un nodo controlador por cada raíl del circuito que, suscrito a las posiciones publicadas para su rail por cada uno de los nodos cámara, reconstruye la trayectoria del coche asignado a su carril y además utilizando las posiciones que recibe aplica un algoritmo cuyo objetivo es obtener el mejor valor del PWM para cada instante con el propósito de reducir al máximo el tiempo por vuelta. Cada uno de los nodos publica el valor de PWM correspondiente a su caril, para vez que el nodo camara procesa un fotograma y publica la ubicación del coche.
+
+El \textbf{sistema actuación} centraliza en un único nodo la comunicación con el Arduino los valores de PWM publicados por todos los controladores, trasladándoselos a la aplicación Arduino, que aplica la tensión correspondiente a cada carril de la pista a través de un controlador L293D. La comunicación entre este nodo y el Arduino se lleva a cabo mediante un puerto serie USB conectado al Arduino.
+
+El \textbf{sistema de visualización y logging} se compone de un nodo de captura que se suscribe a la información de telemetría publicada por el resto del sistema y la almacena dentro de un bag de ROS2. Por otro lado existe un nodo de visualización que permite al usuario supervisar el estado de la carrera en directo y luego en diferido acceder a un analisis de las estadisticas, apartir del bag que genera el otro nodo. 
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{imaxes/ARQUITECTURA/Arquitectura_General_Sistema.pdf}
+    \caption{Arquitectura general del sistema pensado para el control distribuido de coches tipo scalextric con visión por computado}
+    \label{fig:arquitectura-general}
+\end{figure}
+
+\section{Implementación arquitectura general en ROS~2}
+
+Antes de empezar a ver cada uno de los sistemas por separados es mejor ver en un vistazo más general como se implementa la arquitectura anteriormente propuesta usando ROS~2, junto con una pequeña explicación de que hace cada uno de los mensajes.
+ 
+\definecolor{ArqTeal}{RGB}{23, 111, 122}     % nodo camara
+\definecolor{ArqTealClaro}{RGB}{218, 238, 240}
+\definecolor{ArqAzul}{RGB}{47, 84, 128}      % nodo controlador
+\definecolor{ArqAzulClaro}{RGB}{224, 234, 244}
+\definecolor{ArqViola}{RGB}{94, 66, 138}     % nodo puente
+\definecolor{ArqViolaClaro}{RGB}{235, 228, 244}
+\definecolor{ArqVerde}{RGB}{58, 110, 92}     % borde visualización
+\definecolor{ArqVerdeClaro}{RGB}{223, 238, 232} % relleno visualización
+\definecolor{ArqGris}{RGB}{90, 95, 100}      % hardware y flechas
+\definecolor{ArqGrisClaro}{RGB}{235, 236, 238} % relleno topics
+\definecolor{ArqNaranja}{RGB}{176, 101, 44}  % flujo de control (calibración)
+\definecolor{ArqCrema}{RGB}{253, 244, 205}   % topics grabados en el bag
+ 
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\sffamily,
+    nodosw/.style={
+        rectangle, rounded corners=8pt, draw=ArqAzul, fill=ArqAzulClaro,
+        text=ArqAzul, line width=0.9pt, minimum width=3.5cm, minimum height=1.5cm,
+        align=center, inner xsep=8pt, font=\sffamily\bfseries\small
+    },
+    nodocam/.style={
+        nodosw, draw=ArqTeal, fill=ArqTealClaro, text=ArqTeal
+    },
+    nodopuente/.style={
+        nodosw, draw=ArqViola, fill=ArqViolaClaro, text=ArqViola
+    },
+    nodovis/.style={
+        nodosw, draw=ArqVerde, fill=ArqVerdeClaro, text=ArqVerde
+    },
+    nodohw/.style={
+        rectangle, draw=ArqGris, fill=ArqGrisClaro, text=ArqGris,
+        line width=0.9pt, minimum width=2.3cm, minimum height=1.5cm,
+        align=center, font=\sffamily\bfseries\small
+    },
+    topic/.style={
+        rectangle, rounded corners=6pt, draw=ArqGris, fill=ArqCrema,
+        line width=0.7pt, minimum height=0.62cm, inner xsep=7pt,
+        align=center, font=\ttfamily\scriptsize
+    },
+    topicctrl/.style={
+        topic, draw=ArqNaranja, text=ArqNaranja
+    },
+    msgtag/.style={font=\sffamily\tiny\itshape, text=ArqGris},
+    datos/.style={-{Stealth[length=2.6mm]}, line width=0.9pt, ArqGris},
+    control/.style={-{Stealth[length=2.6mm]}, line width=0.8pt, dashed, ArqNaranja},
+    serie/.style={-{Stealth[length=2.6mm]}, line width=0.9pt, densely dotted, ArqGris}
+]
+ 
+% ================= FILA PRINCIPAL: FLUJO DE DATOS =================
+\node[nodocam] (camara)  at (0,0)    {Nodo Cámara\\{\mdseries\scriptsize(uno por cámara)}};
+\node[nodosw] (control) at (7.6,0)  {Nodo Controlador\\{\mdseries\scriptsize(uno por carril)}};
+\node[nodopuente] (puente)  at (15.2,0) {Nodo Puente\\{\mdseries\scriptsize(único)}};
+\node[nodohw] (arduino) at (20.4,0) {Arduino\\+ L293D};
+ 
+% --- Posición del coche: cámara -> controlador ---
+\draw[datos] (camara) -- node[topic] (tposition) {/carN/position} (control);
+\node[msgtag, below=1mm of tposition] {CarLocation};
+ 
+% --- Línea de meta: cámara -> controlador (arco superior) ---
+\draw[datos] (camara.north) to[bend left=28]
+    node[topic, pos=0.5] (tfinish) {/finish\_line\_position} (control.north);
+\node[msgtag, above=1mm of tfinish] {FinishLine};
+ 
+% --- Consigna de velocidad: controlador -> puente ---
+\draw[datos] (control) -- node[topic] (tpwd) {/carN/pwd} (puente);
+\node[msgtag, below=1mm of tpwd] {SpeedCarril};
+ 
+% --- Enlace serie: puente -> arduino ---
+\draw[serie] (puente) -- node[above, font=\sffamily\tiny, text=ArqGris] {puerto serie} (arduino);
+ 
+% ================= FLUJO DE CONTROL: CALIBRACIÓN (parte superior) =================
+\node[topicctrl] (tcalib) at (8.5,3.6) {/modo\_calibracion};
+\node[msgtag, above=1mm of tcalib] {std\_msgs/Bool};
+\draw[control] ([xshift=9mm]control.north) -- (tcalib.south);
+\draw[control] (tcalib.west) -| ([xshift=-9mm]camara.north);
+\draw[control] (tcalib.east) -| ([xshift=9mm]puente.north);
+ 
+% ================= TELEMETRÍA Y DEPURACIÓN (parte inferior) =================
+\node[nodovis, minimum width=5.4cm] (visu) at (7.6,-4.8) {Sistema de Visualización\\{\mdseries\scriptsize graba todos los \emph{topics} en un \emph{bag}}};
+ 
+\node[topic] (ttelem1) at (3.9,-2.4) {/telemetria/carN/car\_control};
+\node[msgtag, below=1mm of ttelem1, xshift=-6mm] {CarControlTelemetry};
+\draw[datos] (control.240) -- (ttelem1.north);
+\draw[datos] (ttelem1.south) -- (visu.110);
+ 
+\node[topic] (ttelem2) at (11.5,-2.4) {/telemetria/carN/time\_per\_lap};
+\node[msgtag, below=1mm of ttelem2, xshift=6mm] {TimePerLap};
+\draw[datos] (control.300) -- (ttelem2.north);
+\draw[datos] (ttelem2.south) -- (visu.70);
+ 
+\draw[datos] (camara.south) |- node[topic, pos=0.74] (tdebug) {/camaraX/camara\_debug} (visu.west);
+\node[msgtag, above=1mm of tdebug] {CompressedImage};
+ 
+% ================= LEYENDA =================
+\begin{scope}[shift={(15.6,-4.0)}, font=\sffamily\scriptsize]
+    \node[topic, minimum height=0.42cm, inner xsep=10pt] at (0.55,0.7) {};
+    \node[right, text=black] at (1.1,0.7) {\emph{topic} (grabado en el \emph{bag})};
+    \draw[datos]   (0,0)    -- (1.1,0)    node[right, text=black] {flujo de datos};
+    \draw[control] (0,-0.6) -- (1.1,-0.6) node[right, text=black] {flujo de control};
+    \draw[serie]   (0,-1.2) -- (1.1,-1.2) node[right, text=black] {comunicación serie};
+\end{scope}
+\end{tikzpicture}
+}
+\caption{Arquitectura general del sistema pensado para el control distribuido de coches tipo scalextric con visión por computado implementado usando nodos de ROS~2}
+\label{fig:arquitectura-ros2}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|l|l|l|l|}
+\hline
+\rowcolor{ArqAzulClaro}
+\textbf{Topic} & \textbf{Mensaje} & \textbf{Publica} & \textbf{Suscribe} \\
+\hline
+\texttt{/carN/position} & \texttt{CarLocation} & Nodos cámara & Controlador $N$ \\
+\hline
+\texttt{/finish\_line\_position} & \texttt{FinishLine} & Cámara que la observa & Controladores \\
+\hline
+\texttt{/carN/pwd} & \texttt{SpeedCarril} & Controlador $N$ & Nodo puente \\
+\hline
+\texttt{/modo\_calibracion} & \texttt{Bool} & Controladores & Cámaras, controladores y puente \\
+\hline
+\texttt{/telemetria/carN/car\_control} & \texttt{CarControlTelemetry} & Controlador $N$ & Visualización \\
+\hline
+\texttt{/telemetria/carN/time\_per\_lap} & \texttt{TimePerLap} & Controlador $N$ & Visualización \\
+\hline
+\texttt{/camaraX/camara\_debug} & \texttt{CompressedImage} & Nodo cámara $X$ & Visualización \\
+\hline
+\end{tabular}%
+}
+\caption{Resumen de los \emph{topics} del sistema, el tipo de mensaje que transportan y los nodos implicados en cada comunicación.}
+\label{tab:topics-ros2}
+\end{table}
+
+A continuación se resume el propósito de cada uno de los tipos de mensaje propios definidos en el proyecto:
+
+\begin{itemize}
+
+\item \texttt{CarLocation}: Es el mensaje central del sistema: cada nodo cámara publica uno por coche y por fotograma procesado. Contiene el identificador de la cámara que originó el dato, el nombre del coche, la posición y el color de las dos pegatinas (delantera y trasera) mediante dos mensajes \texttt{Stiker}, sus rectángulos delimitadores (\texttt{BoundingRect}), el tiempo invertido en procesar el fotograma y la marca de tiempo de captura. Con esta información el controlador reconstruye la trayectoria del coche y calcula su velocidad.
+
+\item \texttt{Stiker}: Mensaje auxiliar que representa una pegatina detectada sobre el coche: su centroide (\texttt{Point2D}) y su color. Cada \texttt{CarLocation} transporta dos, una por extremo del coche, lo que permite conocer no solo la posición sino también la orientación del vehículo.
+
+\item \texttt{BoundingRect}: Rectángulo delimitador ($x$, $y$, ancho y alto) de cada pegatina detectada. Se emplea para la depuración visual y para dimensionar la región de interés (ROI) del seguimiento.
+
+\item \texttt{Point2D}: Mensaje auxiliar mínimo que representa un punto en coordenadas de imagen. Es la pieza básica sobre la que se construyen \texttt{Stiker} y \texttt{LineSegment}.
+
+\item \texttt{FinishLine}: Comunica la posición de la línea de meta detectada por color en el arranque del nodo cámara. Contiene el identificador de la cámara que la observa y el segmento (\texttt{LineSegment}) que la delimita en coordenadas de imagen. Se publica una única vez con durabilidad \emph{transient local}, de modo que cualquier controlador que arranque más tarde la recibe automáticamente.
+
+\item \texttt{LineSegment}: Mensaje auxiliar que representa un segmento mediante sus dos extremos (\texttt{Point2D}). Se utiliza para describir la línea de meta.
+
+\item \texttt{SpeedCarril}: Es la consigna de actuación que el controlador envía al nodo puente: contiene el valor de PWM que debe aplicarse, el identificador del carril sobre el que aplicarlo y una marca temporal que permite medir la cadencia de llegada de las consignas.
+
+\item \texttt{TimePerLap}: Mensaje de telemetría que el controlador publica cada vez que su coche cruza la línea de meta. Contiene el tiempo de la vuelta completada, el número de vuelta y la marca temporal del cruce. Permite al sistema de visualización mostrar la evolución de los tiempos por vuelta.
+
+\item \texttt{CarControlTelemetry}: Mensaje de telemetría del lazo de control, publicado por el controlador en cada iteración. Incluye la distancia de derrape estimada y si el coche se encuentra derrapando, el tiempo de \emph{pipeline} (desde que se recibe la posición hasta que se publica el PWM), el instante de llegada del mensaje de la cámara y el tamaño de la ROI de seguimiento, útil para diagnosticar la calidad de la detección.
+
+\end{itemize}
+
+Adicionalmente, el sistema emplea dos tipos estándar de ROS 2: \texttt{std\_msgs/Bool} en el \emph{topic} global \texttt{/modo\_calibracion}, con el que el controlador notifica al resto de nodos el fin de la fase de calibración de su coche, y \texttt{sensor\_msgs/CompressedImage} en los \emph{topics} de depuración, sobre los que cada cámara publica, cuando el modo de depuración está activo, el fotograma procesado con las detecciones superpuestas.
+
+
+\section{Sistema de captura y detección}
+\label{sec:nodo-camara}
+
+El sistema de captura y detección de posición es el encargado de transformar las imágenes captadas por las cámaras en información de posición útil para el resto del sistema. Está formado por un nodo de cámara por cada cámara que observa el circuito, siendo todos los nodos versiones del mismo programa configuradas de forma independiente y desplegadas en contenedores de docker distintos. Cada nodo captura los fotogramas de su cámara, localiza en ellos las etiquetas de color que identifican a cada coche y publica sus posiciones para que los nodos controladores puedan consumirlas. Adicionalmente, el nodo detecta la línea de meta y los sectores si están presentes en su porción visible del circuito y ofrece información extra que para su posterior análisis o visualización en directo.
+
+Desde el punto de vista de la implementación, el tenemos 2 componentes: el nodo ROS~2 propiamente dicho y un objeto que encapsula todas las operaciones de visión artificial que se realizan sobre los fotogramas y con los que se obtiene el centroide de cada una de las pegatinas. Esta separación desacopla la lógica de procesamiento de imagen de la infraestructura de comunicación, permitiendo probar y modificar cada parte de forma aislada.
+
+A lo largo de esta sección se describe cada uno de los módulos funcionales que componen el nodo: la configuración y despliegue, el modelo de ejecución concurrente, la detección de las etiquetas por color, los modos de calibración y operación, el seguimiento mediante regiones de interés, el mecanismo de readquisición, la detección de la línea de meta y la publicación de la información en los topics.
+
+% --------------------------------------------------------------------------
+\subsection{Configuración y despliegue del nodo}
+\label{subsec:configuracion-despliegue}
+
+Dado que el sistema debe soportar un número variable de cámaras repartidas entre distintas máquinas, el nodo cámara se diseñó para ser completamente configurable en el momento de su lanzamiento, sin necesidad de modificar el código. Toda la configuración se centraliza en un fichero de parámetros común, compartido por todos los nodos del sistema, que se complementa con dos argumentos propios de cada instancia: el identificador del nodo y el dispositivo de cámara que debe utilizar.
+
+El identificador del nodo cumple una doble función. Por un lado, se emplea como espacio de nombres dentro de la red de ROS~2, evitando colisiones entre las distintas instancias del nodo. Por otro, se adjunta a todos los mensajes publicados, permitiendo que los nodos consumidores conozcan qué cámara originó cada dato. El dispositivo de cámara admite dos formatos: un índice numérico o la ruta completa del dispositivo en el sistema (\texttt{/dev/videoN}).
+
+El despliegue se realiza mediante contenedores Docker. Este recibe como variables de entorno el identificador del nodo y la ruta dentro del SO o el número que este mismo le asocia, esta información se la traslada al fichero de lanzamiendo de ROS~2. Este fichero de lanzamiento se encarga de arrancar el nodo con los parámetros adecuados y de reiniciarlo automáticamente en caso de fallo, aportando robustez al sistema frente a errores puntuales del hardware o del software.
+
+En cuanto a la propia cámara, el nodo permite seleccionar la resolución de trabajo entre un conjunto de modos predefinidos, que abarcan desde $160 \times 120$ hasta $1280 \times 720$ píxeles.
+
+Por último, el nodo admite la reconfiguración dinámica de sus parámetros de detección en tiempo de ejecución. Mediante el mecanismo de parámetros de ROS~2, es posible modificar en caliente, aunque cada modificación es validada antes de aplicarse. Esta capacidad resulta especialmente útil permitiendo el ajuste del sistema a las condiciones de iluminación de cada escenario, ya que evita tener que reiniciar los nodos con cada cambio.
+
+%-------------------------------------------------------------------------
+\subsection{Modelo de ejecución concurrente}
+\label{subsec:modelo-concurrente}
+
+El nodo de cámara debe realizar simultáneamente varias tareas con requisitos temporales distintos: capturar fotograma para después procesarlos buscando los coches, atender las comunicaciones de ROS~2 y generar toda la telemetría. Para realizar estas tareas sin que ninguna bloquee al resto, el nodo emplea concurrencia en dos niveles: a nivel de nodo, mediante un \emph{MultiThreadedExecutor} de ROS~2 y para procesar las imagenes y buscar las pegatinas de los coches, un conjunto de hilos organizados según el patrón productor-consumidor.
+
+\subsubsection*{Concurrencia a nivel de nodo: \emph{MultiThreadedExecutor}}
+
+Un nodo de ROS~2 atiende sus tareas a través de \emph{callbacks} que se disparan cuando llegan mensajes o porque salta un \emph{timer}. Por defecto si llegan varias llamadas al nodo estás se ejecutan de forma secuencial, de modo que una tarea lenta bloquearía a todas las demás hasta finalizar. Para evitarlo, el nodo de cámara se ejecuta sobre un nodo \emph{MultiThreadedExecutor}, lo que permite procesar varios \emph{callbacks} o \emph{timers} de forma concurrente.
+
+El nodo tiene dos tareas periódicas (\emph{timers}) bien diferenciadas. La primera, y principal, es el procesamiento de los fotogramas para localizar los coches y la segunda es la generación de las imágenes de depuración, que añaden telemetría e información al fotograma para poder visualizar el circuito y lo que ve la camara junto con la información de detección. Interesa que ambas puedan ejecutarse en paralelo pero también interesa que ninguna de ellas se solape consigo misma, ya que dos ejecuciones simultáneas de la misma tarea competirían por los mismos recursos. Para lograrlo, cada tarae se asigna a un \emph{MutuallyExclusiveCallbackGroup} distinto (figura~\ref{fig:executor-multihilo}), de esta forma nos aseguramos que un nodo solo pueda responder a uno de los \emph{callback} que pertenecen al grupo, de forma que para grupos distintos podemso realizar ejecución paralela.
+
+Además de estos dos grupos, el nodo mantiene el grupo por defecto de ROS~2, al que se asignan automáticamente el resto de \emph{callbacks} del nodo, como la suscripción al \emph{topic }de control de la calibración o la actualización de parámetros en caliente. Es precisamente este tercer hilo el que permite que dichas llamadas se atiendan sin verse bloqueadas por el ciclo de detección, haciendo posible cambiar valores en el nodo mientras se procesan fotogramas.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.95\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\small,
+        exec/.style={draw, thick, rounded corners=3pt, fill=blue!6,
+                     minimum width=3.0cm, minimum height=1.0cm, align=center},
+        group/.style={draw, thick, rounded corners=3pt, minimum width=3.2cm,
+                      minimum height=1.0cm, align=center},
+        cb/.style={draw, minimum width=2.9cm, minimum height=0.85cm,
+                   align=center, font=\scriptsize},
+        lbl/.style={font=\scriptsize, align=center, inner sep=1.5pt},
+        flow/.style={-{Stealth[length=2.2mm]}, thick}
+    ]
+
+    % --- Ejecutor ---
+    \node[exec] (exec)
+        {\textbf{MultiThreadedExecutor}\\\scriptsize 3 hilos};
+
+    % --- Grupo 1: posición ---
+    \node[group, fill=green!8, below=1.5cm of exec, xshift=-4.8cm] (g1)
+        {\textbf{Grupo de posición}};
+    \node[cb, fill=green!4, below=0.5cm of g1] (cb1)
+        {Procesado de fotograma};
+
+    % --- Grupo 2: debug ---
+    \node[group, fill=orange!10, below=1.5cm of exec] (g2)
+        {\textbf{Grupo de depuración}};
+    \node[cb, fill=orange!5, below=0.5cm of g2] (cb2)
+        {Generación imagen \emph{debug}};
+
+    % --- Grupo 3: por defecto ---
+    \node[group, fill=gray!12, below=1.5cm of exec, xshift=4.8cm] (g3)
+        {\textbf{Grupo por defecto}};
+    \node[cb, fill=gray!6, below=0.5cm of g3] (cb3)
+        {Parámetros en caliente};
+
+    % --- Flechas ejecutor -> grupos ---
+    \draw[flow] (exec) -- (g1);
+    \draw[flow] (exec) -- (g2);
+    \draw[flow] (exec) -- (g3);
+
+    % --- Flechas grupo -> callback ---
+    \draw[flow] (g1) -- (cb1);
+    \draw[flow] (g2) -- (cb2);
+    \draw[flow] (g3) -- (cb3);
+
+    % --- Anotación: paralelismo entre grupos ---
+    \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}, thick, blue!60]
+        (g1.east) -- node[lbl, above] {en paralelo} (g2.west);
+    \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}, thick, blue!60]
+        (g2.east) -- node[lbl, above] {en paralelo} (g3.west);
+
+    \end{tikzpicture}%
+    }
+    \caption{Esquema que permite ver el nivel de concurrencia a nivel de nodo dentro del nodo camara}
+    \label{fig:executor-multihilo}
+\end{figure}
+
+\subsubsection*{Concurrencia en el procesamiento: modelo productor-consumidor}
+
+La tarea principal del nodo, el procesamiento de fotogramas, incorpora a su vez su propio esquema de concurrencia, esta vez con un doble objetivo: desacoplar la captura del procesamiento y permitir que una misma cámara siga a varios coches al mismo tiempo. Este esquema sigue el patrón productor-consumidor que se ilustra en la figura~\ref{fig:modelo-hilos-camara}.
+
+El hilo productor se dedica en exclusiva a la captura, es el que se comunica directamente con la camara. Ejecuta un bucle que lee continuamente fotogramas de la cámara y almacena únicamente el más reciente en una variable compartida, de esa forma si el procesamiento se retrasa nos aseguramos que siempre estamos trabajando sobre la información más reciente. Además en el instante exacto de la lectura se toma una marca de tiempo que viaja junto al fotograma durante todo su procesamiento. Esta decisión es fundamental para la precisión del sistema: la marca de tiempo representa el momento real en el que el coche ocupaba la posición detectada, y no el momento posterior en que dicha posición se publica, lo que permite al sistema de control calcular tiempos de vuelta precisos.
+
+El papel de consumidor lo desempeña un \emph{timer} de ROS~2 que se dispara con un período de \qty{33}{\milli\second}, equivalente a la frecuencia máxima de \qty{33}{\hertz} de las cámaras empleadas. En cada disparo, el consumidor retira el último fotograma de la variable compartida. Un indicador de estado impide que un nuevo disparo del temporizador se solape con un procesamiento aún en curso: si el análisis de un fotograma se prolonga más de lo previsto, los disparos intermedios se descartan en lugar de encolarse, evitando de nuevo la acumulación de trabajo atrasado.
+
+El papel de consumidor lo realiza un \emph{timer} de ROS~2 que se dispara con un período de \qty{33}{\milli\second}, equivalente ala frecuencia máixmade captura de las camaras empleadas que son de \qty{33}{\hertz}. El consumidor retira el fotograma de la variable compartida y procede a lanzar el procesamiento de la imagen, el cual, se paraleliza mediante un \emph{ThreadPool} con un \emph{worker} por cada coche configurado. Dado que la búsqueda de cada coche es independiente de las demás, cada trabajador ejecuta la detección de su coche sobre el mismo fotograma de forma concurrente, y el consumidor espera a que todos finalicen antes de dar por procesada la imagen.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\small,
+        hw/.style={draw, rounded corners=2pt, fill=black!8,
+                   minimum width=2.2cm, minimum height=0.8cm, align=center},
+        proc/.style={draw, thick, minimum width=2.8cm, minimum height=1.0cm,
+                     align=center, fill=blue!6},
+        shared/.style={draw, thick, fill=orange!12, minimum width=3.2cm,
+                       minimum height=1.1cm, align=center},
+        worker/.style={draw, minimum width=2.0cm, minimum height=0.8cm,
+                       align=center, fill=green!8},
+        topic/.style={draw, rounded corners=8pt, fill=red!6,
+                      font=\scriptsize\ttfamily, inner xsep=4pt,
+                      minimum height=0.7cm, align=center},
+        flow/.style={-{Stealth[length=2.2mm]}, thick},
+        lbl/.style={font=\scriptsize, align=center, inner sep=1.5pt}
+    ]
+
+    % --- Recurso compartido (arriba, centro) ---
+    \node[shared] (buf)
+        {\textbf{\texttt{latest\_frame}}\\\scriptsize (fotograma, \emph{stamp})};
+
+    % --- Productor (derecha) + cámara encima ---
+    \node[proc, right=2.0cm of buf] (prod) {\textbf{Hilo productor}};
+    \node[hw, above=0.9cm of prod] (cam) {Cámara};
+
+    % --- Consumidor (izquierda) ---
+    \node[proc, left=2.0cm of buf] (cons) {\textbf{Hilo consumidor}};
+
+    % --- Trabajadores ---
+    \node[worker, below=1.6cm of cons] (w2) {Worker\\\scriptsize coche 2};
+    \node[worker, left=1.5cm of w2] (w1) {Worker\\\scriptsize coche 1};
+    \node[worker, right=1.5cm of w2] (wn) {Worker\\\scriptsize coche N};
+
+    \begin{scope}[on background layer]
+        \node[draw, dashed, fill=green!3, inner sep=6pt, fit=(w1)(w2)(wn)] (pool) {};
+    \end{scope}
+    \node[lbl, above=1pt of pool.north, anchor=south, xshift=1.8cm, fill=white, inner sep=2pt]
+        {Thread Pool (1 por coche)};
+
+    % --- Un topic por trabajador ---
+    \node[topic, below=1.0cm of w1] (t1) {/car1/position};
+    \node[topic, below=1.0cm of w2] (t2) {/car2/position};
+    \node[topic, below=1.0cm of wn] (tn) {/carN/position};
+
+    % --- Flujos horizontales ---
+    \draw[flow] (cam) -- node[lbl, right] {fotograma} (prod);
+    \draw[flow] (prod) -- node[lbl, above] {escribe} (buf);
+    \draw[flow] (buf) -- node[lbl, above] {lee y consume} (cons);
+
+    % --- Reparto ---
+    \draw[flow] (cons.south) -- ++(0,-0.4) -| (w1.north);
+    \draw[flow] (cons.south) -- ++(0,-0.4) -| (w2.north);
+    \draw[flow] (cons.south) -- ++(0,-0.4) -| (wn.north);
+
+    % --- Publicación: cada trabajador a su topic ---
+    \draw[flow] (w1) -- node[lbl, right] {publica} (t1);
+    \draw[flow] (w2) -- node[lbl, right] {publica} (t2);
+    \draw[flow] (wn) -- node[lbl, right] {publica} (tn);
+
+    % --- Retorno de espera ---
+    \draw[flow, dashed] (pool.west) -- ++(-0.9,0)
+        |- node[lbl, pos=0.25, left, text width=1.9cm] {espera a que\\todos terminen} (cons.west);
+
+    \end{tikzpicture}%
+    }
+    \caption{Modelo de ejecución multihilo productor-consumidor utilizado dentro
+             del nodo de cámara.}
+    \label{fig:modelo-hilos-camara}
+\end{figure}
+
+%--------------------------------------------------------------------------
+\subsection{Detección de las etiquetas por color}
+\label{subsec:deteccion-etiquetas}
+
+Para poder localizar los coches en la imagen, cada coche lleva dos etiquetas en la parte superior, cada una de colores distintos. La pegatina delantera permite determinar la parte delantera del coche lo que nos permite saber su posición siempre porque siempre va por encima del rail. Después la pegatina trasera a su vez nos permite concocer la posición de la parte trasera del coche permitiendonos además poder calcular más adelante, dentro del sistema de control, si se produjo culeo o no. 
+
+Para poder trabajar más comodamente el fotograma se convierte del espacio de color que nos entrega la cámara al espacio de color HSV. Este espacio separa la información cromática (matiz y saturación) de la intensidad luminosa (valor), lo que hace que la segmentación sea mucho más robusta frente a variaciones de iluminación. Se genera una máscara binaria independiente para cada etiqueta, conservando únicamente los píxeles cuyo valor HSV se encuentra dentro del rango definido para su color. Los rangos de los colores admitidos (rojo, azul, verde, naranja, amarillo, cian y violeta) se encuentran predefinidos y fueron ajustados a las condiciones del escenario, permitiendo pequeñas variaciones de iluminación. Dado que las máscaras obtenidas contienen imperfecciones o pequeños grupos de píxeles que no son correctos provocados por ruido o reflejos se deció aplicar una serie de operaciones morfológicas para corregirlas. Primero una apertura, que elimina los píxeles aislados que no pertenecen a ninguna etiqueta, y después un cierre, que rellena los huecos internos de las regiones que sí lo son, el valor del \emph{kernel} que se usa para realizar las operaciones es completamente configurable apartir de un parametro. 
+
+Sobre la máscara resultante se extraen los contornos externos de las regiones detectadas. De entre todos los contornos se selecciona el de mayor área, y se descarta si no supera un área mínima configurable, filtrando así falsos positivos de tamaño reducido que hayan sobrevivido al filtrado morfológico. Una vez validado el contorno, se calcula el rectángulo que lo delimita (\emph{bounding box}) y, a partir de él, su centroide. El centroide de la etiqueta delantera es el punto que identifica la posición del coche, mientras que el de la trasera permite medir el culeo del coche. Ambos puntos, junto con sus rectángulos, conforman el resultado de la detección.
+
+% --------------------------------------------------------------------------
+\subsection{Modos de funcionamiento: calibración y carrera}
+\label{subsec:modos-funcionamiento}
+
+Analizar el fotograma completo resulta costoso e innecesario. Además los coches solo pueden encontrarse sobre el trazado del circuito, que ocupa una fracción reducida de la imagen. Esto se puede percibir como una ventaja que nos permite reducir el número de pixeles del a imagen que vamos a procesar. 
+
+El nodo distingue dos modos de funcionamiento: 
+\begin{itemize}
+    \item Modo de calibración inicial, en el que se aprende una trayectoria base donde se toma como referencia la pegatina delantera del coche
+    \item Modo de operacion, publicamos la posición de ambas pegatinas, pero nos aprovechamos de la información generada en la calibración para reducir el area de busqueda.
+\end{itemize}
+
+Durante la calibración, los coches recorren el circuito a una velocidad reducida y constante, ordenada por el sistema de control. En este modo se analiza el fotograma completo y, cada vez que se detecta la pegatina delantera de un coche, su posición se almacena en una lista de puntos que va reconstruyendo la trayectoria seguida por ese coche a lo largo de su carril. Para la calibración basta con detectar la pegatina delantera, ya que es la que define la posición del coche: la trasera puede no ser visible en algunos instantes, por ejemplo al salir de un túnel o al pasar de una cámara a otra, pero como la trayectoria se emplea posteriormente como ruta base es necesario registrar el recorrido completo sin interrupciones.
+
+La cámara mantiene una trayectoria independiente para cada coche, lo que le permite filtrar por carril durante el modo de operación. Gracias a esta separación por carril, los coches pueden compartir el color de la pegatina trasera y distinguirse únicamente por el de la delantera. Por último, las posiciones detectadas se publican también durante la calibración, ya que los nodos controladores las necesitan para construir su propia representación del recorrido.
+
+La transición entre modos se coordina a través de un topic común a todo el sistema, en el que el sistema de control anuncia el inicio y el fin de la calibración. Al recibir la orden de finalización, el nodo genera para cada coche una máscara de trayectoria a partir de los puntos acumulados, lo que permite reducir como comentamos el area de busqueda y por tanto reducir el número de operaciones que vamos a tener que realizar durante la carrera. 
+
+Con el fin de no repetir la calibración en cada arranque, los puntos de
+trayectoria de cada coche se almacenan en disco en un fichero JSON propio de cada cámara. Al iniciarse, el nodo comprueba si existe este fichero y, en caso afirmativo, carga los puntos, regenera las máscaras y pasa directamente al modo de operación. Si en algún momento se ordena una recalibración a través del topic de control, las máscaras se descartan y el proceso comienza de nuevo. Este mecanismo de caché reduce considerablemente el tiempo de puesta en marcha del sistema cuando ni las cámaras ni el circuito han sido desplazados.
+
+% --------------------------------------------------------------------------
+\subsection{Seguimiento mediante región de interés}
+\label{subsec:seguimiento-roi}
+
+En el modo de carrera, la búsqueda de cada coche no se realiza sobre el fotograma completo, sino sobre una región de interés (ROI) centrada en la posición donde se predice que estará el coche. La predicción se calcula mediante extrapolación lineal: conocidas las dos últimas posiciones detectadas, se asume que el coche mantendrá su desplazamiento y se sitúa el centro de la ROI en la posición actual más el vector de movimiento del último frame. 
+
+La ROI tiene un tamaño base de $150 \times 150$ píxeles y se recorta a los límites de la imagen cuando la predicción se acerca a los bordes. Una vez que se calcula el ROI se realiza una intersección entre la mascara de la trayectoria con este, de forma que solo sobreviven los píxeles que pertenecen simultáneamente a la región de interés y a las proximidades del carril. La combinación de ambos filtros aporta dos beneficios: el primero es el rendimiento, el área a procesar pasa de todo el fotograma a una pequeña fracción de él reduciendo drásticamente el tiempo de detección y el segundo es evitar falsos positivos que no estén dentro de la zona de busqueda. La detección descrita en la sección~\ref{subsec:deteccion-etiquetas} se ejecuta sobre esta area de la imagen reducida y filtrada.
+
+Cuando la detección dentro del ROI tiene éxito las coordenadas que obtenemos son relativas a él por tanto es necesario trasladarlas al sistema de referencia global de la cámara antes de publicar la información.  
+
+ --------------------------------------------------------------------------
+\subsection{Readquisición del seguimiento}
+\label{subsec:readquisicion}
+
+Las oclusiones son habituales en un circuito de Scalextric: túneles, puentes, elementos decorativos o incluso la mano de un jugador pueden ocultar temporalmente el coche a la vista de la cámara. También puede ocurrir que un derrape brusco aleje al coche de la posición predicha, dejándolo fuera de la región de interés. En ambos casos la detección dentro de la ROI fracasa, y es necesario un mecanismo que permita readquirir la posición del coche cuando vuelva a ser visible.
+
+La estrategia adoptada consiste en ampliar progresivamente la zona de búsqueda. Cada vez que un fotograma concluye sin detectar al coche, el tamaño de la ROI se incrementa en 50 píxeles, hasta alcanzar como máximo la dimensión mayor del fotograma, momento en el que la búsqueda abarca la imagen completa. Como la máscara de trayectoria sigue aplicándose sobre la región ampliada, la búsqueda queda en todo momento restringida a las proximidades del carril, por lo que incluso en el peor de los casos el área realmente analizada sigue siendo una fracción reducida de la imagen.
+
+Al perder el seguimiento se descartan además las posiciones anteriores del coche. Esta decisión evita que, tras la readquisición, la extrapolación combine un punto anterior a la pérdida con el primer punto posterior a ella: la distancia entre ambos puede ser grande, y la predicción resultante situaría la ROI en una posición alejada de la real, provocando una nueva pérdida. En su lugar, la primera detección tras la readquisición centra la ROI directamente sobre la posición encontrada.
+% --------------------------------------------------------------------------
+\subsection{Detección de la línea de meta}
+\label{subsec:deteccion-meta}
+
+Además de la posición de los coches, el sistema necesita conocer la
+ubicación de la línea de meta para poder contabilizar vueltas y medir sus tiempos. La línea de meta se señaliza mediante una etiqueta alargada de un color reservado para este fin, colocada atravesando la pista, y su detección se realiza una única vez durante el arranque del nodo, puesto que su posición no varía durante la carrera.
+
+El proceso de detección comparte la base del empleado con las etiquetas de los coches: se captura un fotograma, se convierte a HSV y se genera la máscara binaria del color de la meta. En este caso, sin embargo, el cierre morfológico se aplica con un elemento estructurante de gran tamaño ($40 \times 40$ píxeles), ya que los raíles y las ranuras de la pista atraviesan la etiqueta y la fragmentan en varios trozos que es necesario unir en una única región. Sobre la máscara resultante se selecciona el contorno de mayor área y se calcula el rectángulo de área mínima que lo encierra, que a diferencia del rectángulo delimitador convencional puede estar rotado, adaptándose a la orientación real de la etiqueta sobre la pista. Finalmente, se identifican los dos lados cortos del rectángulo y se calculan sus puntos medios: el segmento que los une define la línea de meta que los nodos controladores emplearán para detectar los cruces.
+
+Si la etiqueta no es visible desde una cámara, esa instancia del nodo simplemente no publica línea de meta alguna: en un despliegue con varias cámaras, solo aquella que observa la meta lo hace, y el mensaje incluye el identificador de la cámara para que los consumidores sepan quien la detecto. 
+
+% --------------------------------------------------------------------------
+\subsection{Publicación de resultados y calidad de servicio}
+\label{subsec:publicacion-qos}
+
+Toda la información generada por el nodo se publica en topics de ROS~2, y la elección de la política de calidad de servicio (QoS) de cada uno responde a la naturaleza de los datos que transporta.
+
+Las posiciones de los coches se publican en un topic por coche, de la forma \texttt{/carN/position}, empleando un mensaje propio que contiene el identificador de la cámara, el nombre del coche, la posición y color de cada etiqueta con su rectángulo delimitador, el tiempo invertido en el procesamiento del fotograma y la marca de tiempo de captura descrita en la sección~\ref{subsec:modelo-concurrente}. Para este topic se emplea el perfil de QoS orientado a datos de sensores, cuya fiabilidad es de tipo \emph{best effort} con un histórico reducido. La justificación es la misma que motiva el diseño del hilo de captura: al tratarse de un flujo de alta frecuencia en el que cada mensaje queda obsoleto en cuanto llega el siguiente, no tiene sentido retransmitir mensajes perdidos; es preferible descartar una posición antigua que retrasar la entrega de la actual, especialmente cuando los mensajes atraviesan la red local entre máquinas.
+
+La línea de meta, en cambio, se publica una única vez y en el arranque del nodo, por lo que requiere la política opuesta. Su topic emplea una QoS con fiabilidad garantizada y durabilidad \emph{transient local} con profundidad uno: el middleware conserva el último mensaje publicado y lo entrega automáticamente a cualquier suscriptor que se una con posterioridad. De este modo, los nodos controladores reciben la línea de meta aunque arranquen después que las cámaras, sin necesidad de mecanismos adicionales de sincronización ni de republicaciones periódicas.
+
+Por último, el nodo ofrece un modo de depuración, desactivado por defecto y activable en caliente mediante un parámetro. Cuando está activo, el nodo conserva una copia del fotograma procesado y dibuja sobre ella los rectángulos delimitadores de las etiquetas detectadas y una cruceta sobre cada centroide. La imagen resultante se comprime en JPEG y se publica en un topic de depuración propio de cada cámara, pudiendo visualizarse con herramientas estándar del ecosistema ROS~2 desde cualquier máquina de la red. 
+
+\section{Sistema de control de rail}
+\label{sec:control-rail}
+
+El sistema de control de rail es el encargado de transformar las posiciones publicadas por los nodos cámara en el perfil de pwm que hay que aplicar en cada instante al carril para conseguir controlar el coche. Está formado por un nodo controlador por cada raíl del circuito, siendo todos los nodos versiones del mismo programa pero con distintas configuraciones. Para cada una de las instancias de los nodos se suscriben a las posiciones que se envían para su carril, reconstruye durante la calibración la trayectoria que recorre el coche que va sobre este y, durante la carrera, aplica un algoritmo de aprendizaje que ajusta el valor de PWM de cada tramo del circuito con el objetivo de reducir al máximo el tiempo por vuelta sin que el coche se salga de la pista.
+
+Desde el punto de vista de la implementación, y de forma análoga a lo descrito para el nodo de cámara, el controlador se divide en dos componentes: el nodo ROS~2 propiamente dicho, que gestiona la comunicación, los modos de funcionamiento y la detección del paso por meta con el correspondiente tiempo por vuelta, y un objeto que encapsula el algoritmo de velocidad. Esta separación desacopla la lógica de control de la infraestructura de comunicación. Como cada cámara observa una porción distinta del circuito, el nodo mantiene una instancia independiente del algoritmo por cada cámara de la que recibe posiciones, y es el propio nodo quien coordina la información que debe fluir entre ellas.
+
+A lo largo de esta sección se describen los módulos funcionales que componen el sistema: la configuración y el despliegue, el modelo de ejecución concurrente, los \emph{topics } empleados y su calidad de servicio, los modos de calibración y carrera, el algoritmo de velocidad basado en zonas y, por último, la detección del paso por meta y la medición de los tiempos de vuelta.
+
+% ------------------------------------------------------------
+\subsection{Configuración y despliegue del nodo}
+\label{subsec:control-configuracion}
+
+Al igual que el nodo de cámara, el controlador se diseñó para ser completamente configurable en el momento de su lanzamiento, sin necesidad de modificar el código. Toda la configuración se centraliza en el mismo fichero de parámetros común a todo el sistema, del que el controlador consume su propia sección. En ella se definen, entre otros, los límites del perfil de velocidad (la velocidad mínima, que es el valor de PWM con el que arranca el modo carrera, y la velocidad máxima, que actúa como techo del aprendizaje) y la distancia mínima entre puntos consecutivos de la trayectoria base.
+
+A esta configuración común se añaden dos parámetros propios de cada instancia: el nombre del coche y el carril que tiene asignado. El nombre del coche cumple una doble función. Por un lado se emplea como \emph{namespace} del nodo dentro de la red de ROS~2, de forma que los \emph{topic} relativos a los que se suscribe y en los que publica quedan automáticamente ligados a su coche (por ejemplo, la suscripción a \emph{position} se resuelve como \emph{/carN/position}); por otro, se incorpora a las rutas de los \emph{topics} de telemetría, lo que permite distinguir la información de cada controlador desde el sistema de visualización.
+
+El despliegue se realiza mediante un contenedor Docker que utiliza la misma imagen que el resto de nodos del sistema. El contenedor arranca un fichero de lanzamiento de ROS~2 que lee del fichero de parámetros la lista de coches configurados y crea dinámicamente un nodo controlador por cada uno de ellos, asignándole su nombre y su carril. De este modo, ampliar el sistema a un nuevo coche se reduce a añadir su nombre a la lista, sin tocar ni el código ni el despliegue. El fichero de lanzamiento se encarga además de reiniciar automáticamente cada controlador en caso de fallo, aportando la misma robustez frente a errores puntuales que se describió para el nodo de cámara.
+
+Por último, y con el mismo espíritu de la caché de trayectorias del nodo de cámara, el controlador guarda en disco, en un fichero JSON, la trayectoria base que construye para cada cámara al finalizar la calibración. Este fichero permite inspeccionar a posteriori el recorrido aprendido y reutilizarlo en caso de usar el mismo circuito sin repetir la calibración.
+
+% ------------------------------------------------------------
+\subsection{Modelo de ejecución concurrente}
+\label{subsec:control-concurrencia}
+
+El nodo controlador debe atender de forma continua un flujo de posiciones y, al mismo tiempo, seguir respondiendo a las órdenes de control de la calibración y a la actualización de parámetros en caliente. Por esta razón se implemento un modelo de concurrencia solamente a nivel de nodo, para ser capaz de responder a los distintos \emph{callbacks}. Reutiliza los mismos mecanismos de ROS~2, que el nodo cámara, un \textit{MultiThreadedExecutor} y los grupos de \emph{callbacks}, para garantizar que ninguna tarea bloquee al resto.
+
+El controlador recibe varios \emph{callbacks} distintos, cada uno con un cometido diferente pero todos relacionados con el control: la llegada de la posición del coche, la orden de cambio de modo y la recepción de la línea de meta. Como todos modifican el mismo estado interno, se asignan a un único \emph{MutuallyExclusiveCallbackGroup}, lo que garantiza que solo un hilo los atiende y que nunca se procesan dos a la vez, evitando condiciones de carrera sin necesidad de usar \emph{mutex}. Junto a este grupo, el nodo conserva el grupo por defecto de ROS~2, atendido por un segundo hilo, que queda disponible para la actualización de parámetros en caliente sin interrumpir el control (figura~\ref{fig:concurrencia-controlador}).
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.95\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\small,
+        exec/.style={draw, thick, rounded corners=3pt, fill=blue!6,
+                     minimum width=3.0cm, minimum height=1.0cm, align=center},
+        group/.style={draw, thick, rounded corners=3pt, minimum width=3.2cm,
+                      minimum height=1.0cm, align=center},
+        cb/.style={draw, minimum width=2.9cm, minimum height=0.85cm,
+                   align=center, font=\scriptsize},
+        lbl/.style={font=\scriptsize, align=center, inner sep=1.5pt},
+        flow/.style={-{Stealth[length=2.2mm]}, thick}
+    ]
+
+    % --- Ejecutor ---
+    \node[exec] (exec)
+        {\textbf{MultiThreadedExecutor}\\\scriptsize 2 hilos};
+
+    % --- Grupo 1: control (mutuamente exclusivo) ---
+    \node[group, fill=green!8, below=1.5cm of exec, xshift=-3.4cm] (g1)
+        {\textbf{Grupo de control}\\\scriptsize (mutuamente exclusivo)};
+    \node[cb, fill=green!4, below=1.0cm of g1] (cb2)
+        {Control de calibración};
+    \node[cb, fill=green!4, left=0.35cm of cb2] (cb1)
+        {Posiciones del coche};
+    \node[cb, fill=green!4, right=0.35cm of cb2] (cb3)
+        {Línea de meta};
+
+    % --- Grupo 2: por defecto ---
+    \node[group, fill=gray!12, below=1.5cm of exec, xshift=4.6cm] (g2)
+        {\textbf{Grupo por defecto}};
+    \node[cb, fill=gray!6, below=1.0cm of g2] (cb4)
+        {Parámetros en caliente};
+
+    % --- Flechas ejecutor -> grupos ---
+    \draw[flow] (exec) -- (g1);
+    \draw[flow] (exec) -- (g2);
+
+    % --- Flechas grupo -> callbacks (una cada vez) ---
+    \draw[flow] (g1.south) -- ++(0,-0.35) -| (cb1.north);
+    \draw[flow] (g1.south) -- (cb2.north);
+    \draw[flow] (g1.south) -- ++(0,-0.35) -| (cb3.north);
+    \node[lbl] at ($(g1.south)+(2.6,-0.5)$) {una cada vez};
+    \draw[flow] (g2) -- (cb4);
+
+    % --- Anotación: paralelismo entre grupos ---
+    \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}, thick, blue!60]
+        (g1.east) -- node[lbl, above] {en paralelo} (g2.west);
+
+    \end{tikzpicture}%
+    }
+    \caption{Modelo de ejecución multihilo a nivel de nodo utilizado dentro del nodo de control de rail}
+    \label{fig:concurrencia-controlador}
+\end{figure}
+
+\subsection{Modos de funcionamiento: calibración y carrera}
+\label{subsec:control-modos}
+
+El controlador distingue los mismos dos modos de funcionamiento que el nodo cámara, coordinados a través del \emph{topic} común de control de la calibración. Un modo de calibración inicial, en el que aprende la trayectoria que sigue el coche por su carril, y un modo de carrera, en el que utiliza ese conocimiento para aplicar el algoritmo de velocidad.
+
+Durante la calibración, el coche recorre el circuito a una velocidad constante (se aplica un valor de pwm igual para todo el circuito) mientras que el controlador se limita a acumular las posiciones que recibe. La posición de la etiqueta delantera se añade a una lista de puntos asociada a la cámara que lo originó. Se emplea únicamente la etiqueta delantera porque es la que define la posición del coche sobre el raíl; la trasera puede no ser visible en algunos instantes y su ausencia no debe interrumpir la reconstrucción del recorrido. El nodo mantiene una lista separada por cámara, ya que cada una observa una porción distinta del circuito y sus coordenadas de imagen no son comparables entre sí. Mientras acumula puntos, el controlador vigila además el paso por la línea de meta con el mecanismo descrito en la sección~\ref{subsec:control-meta}: cuando detecta que el coche ha completado una vuelta entera, da la calibración por terminada y publica el fin del modo de calibración en el \emph{topic } común, con lo que la transición se propaga simultáneamente a todos los nodos del sistema.
+
+Al recibirse la orden de finalización, el controlador procesa las listas de puntos acumuladas para construir la trayectoria base de cada cámara. Este procesado consiste en un filtrado por distancia: se recorre la lista y solo se conservan los puntos que distan del último punto aceptado más que un umbral configurable, eliminando así las acumulaciones de puntos casi idénticos que se producen en los tramos donde el coche avanza despacio. Con la trayectoria base ya depurada, el nodo instancia el algoritmo de velocidad de cada cámara, le inyecta su trayectoria y guarda una copia de todas ellas en el fichero JSON de caché. A partir de ese momento el nodo entra en modo carrera.
+
+En modo carrera, cada posición recibida se entrega a la instancia del algoritmo de la cámara que la originó, que devuelve el valor de PWM que corresponde aplicar en ese instante o bien indica que el fotograma debe descartarse por ruido, en cuyo caso el controlador mantiene el último valor valido. El valor del pwm resultante se publica con cada posición procesada, y en durante la misma ejecución el nodo comprueba el paso por meta, contabiliza las vueltas y notifica al algoritmo los eventos que necesita para su ciclo de aprendizaje. Si en cualquier momento se ordena una recalibración a través del \emph{topic} de control, el controlador descarta las trayectorias y las instancias del algoritmo. Comenzando de nuevo el proceso desde cero.
+
+% ------------------------------------------------------------
+\subsection{Algoritmo de velocidad por zonas}
+\label{subsec:control-algoritmo}
+
+El núcleo del sistema de control es el algoritmo que decide qué valor de PWM hay que aplicar al coche en cada punto del circuito. Para ello, la porción del circuito visible por cada cámara se representa como una cadena de pequeñas celdas equiespaciadas, agrupadas en zonas que comparten un mismo valor de PWM. Sobre esta estructura, el algoritmo detecta las zonas donde se produce derrape y las marca, limitando su velocidad, mientras que el resto de zonas puede seguir incrementando su valor con cada vuelta limpia. De esta forma se consigue maximizar la velocidad en cada parte del circuito de manera independiente.
+
+\subsubsection{Construcción de la cadena de celdas}
+
+Al finalizar la calibración, cada instancia del algoritmo recibe la trayectoria base de su cámara y las somete a un procesado. 
+
+Se va recoriendo la trayectoria y se generan celdas, esto se hace porque puede pasar que los puntos no queden bien repartidos. Para ello lo que hacemos es aproximar los puntos como están muy cerca con una linea que después vamos a remuestrear y sobre la que vamos a crear las celdas. De esta manera conseguimos que las celdas queden repartidas de manera uniforme sobre el recorrido real con independencia de cómo cayeran los puntos crudos. Los saltos entre puntos que superan un umbral se tratan de forma especial: corresponden a partes del circuito que la cámara no ve, por ejemplo porque un puente o un elemento decorativo tapa la pista, y no tiene sentido interpolar dentro de ellos. En su lugar se crea una única \emph{celda gigante}, que registra la longitud real del hueco. Dentro de una celda gigante no es posible localizar el coche ni detectar derrapes, pero sí ajustar su valor de PWM como el de cualquier otro tramo.
+
+Sobre la cadena resultante se define las zonas: intervalos contiguos de celdas que comparten un único valor de PWM , de modo que cada celda pertenece exactamente a una zona. El estado inicial es el más sencillo, solamente tenemos una única zona libre que cubre toda la cadena al valor minimo de pwm. A partir de ahí, el ciclo de aprendizaje irá rompiendo y ajustando esta partición.
+
+\subsubsection{Localización sobre la trayectoria}
+
+Durante la carrera, cada posición recibida hay que traducirla de coordenadas de imagen a una posición sobre la cadena de celdas. Lo que se busca no es solo saber en qué celda está el coche, sino a qué distancia se encuentra de la trayectoria, que es la información que después permite detectar los derrapes.
+
+El proceso empieza localizando la celda cuyo punto está más próximo a la etiqueta. Como esa celda por sí sola es solo un punto, se toman además sus dos vecinas (la anterior y la siguiente) y se forman los dos segmentos que las unen. Sobre esos segmentos se proyecta la etiqueta y se conserva la menor de las dos distancias, que es la distancia perpendicular real de la etiqueta a la trayectoria.
+
+La proyección solo puede hacerse sobre segmentos entre celdas consecutivas: a través de una celda gigante no hay trayectoria conocida sobre la que proyectar, por lo que en esos tramos no se mide distancia.
+
+Las dos etiquetas del coche desempeñan papeles distintos. La etiqueta delantera define la posición del coche, la cual se usa para determinar, su celda cuyo para así obtener el valor de PWM que se va a aplicar,
+También si la distancia a la trayectoria supera un umbral amplio se considera que la detección a fallado y nos saltamos el fotograma. La etiqueta trasera, en cambio, es la que mide el derrape, como el coche pivota sobre la guía delantera, que discurre encarrilada en la ranura del raíl, cualquier pérdida de adherencia se manifiesta como un desplazamiento lateral de la parte trasera. La distancia perpendicular de la etiqueta trasera a la trayectoria base cuantifica, por tanto, cuánto está culeando el coche en cada instante, y es la señal que alimenta la detección de derrapes.
+
+\subsubsection{Detección de derrapes}
+
+La detección de derrapes se implementa como una pequeña máquina de estados que se alimenta, en cada fotograma, con la celda y la distancia perpendicular de la etiqueta trasera. Cuando la distancia supera el umbral de derrape, se abre un derrape anotando la celda en la que comenzó; mientras la distancia se mantenga por encima del umbral, el derrape se prolonga actualizando su celda final; y cuando la distancia vuelve a caer por debajo, el derrape se cierra. El conjunto de celdas afectadas por el derrape conforma una zona de derrape. Lo que va a provocar que todas ellas vean reducido el valor de pwm que tenian asignado en 2 unidades. 
+
+En caso de que estemos trabajando con varias camaras puede pasar que el derrape que abra en una camara pero continue en la siguiente. Para poder cerrar la zona. En cuanto el coche se sale el controlador es el encargado de avisar de que ya no van a llegar más mensajes y se tiene que cerrar la zona. Y también es el encargado de comunicar a la siguiente camara que tiene que crear una nueva zona de derrape. De esta forma se puede extender la zona de derrape entre camaras permitiendo detectar derrapes cuando los cortes de las camaras se producen en las curvas.
+
+\subsubsection{Castigo de zonas y ciclo de aprendizaje}
+
+Cada derrape cerrado desencadena el mecanismo de castigo, que es donde reside el aprendizaje del algoritmo. La observación clave es que el exceso de velocidad que provoca un derrape se gesta antes de que este se manifieste: cuando el coche empieza a culear en mitad de una curva, la decisión que debió tomarse era frenar antes de entrar en la curva. Por ello, la zona castigada no es solo el intervalo de celdas del derrape, sino ese intervalo extendido hacia atrás una distancia fija en píxeles, de modo que en las siguientes vueltas el coche llegue ya frenado a la entrada de la curva. 
+
+El intervalo resultante se convierte en una zona de derrape y su PWM se fija en el mínimo de las zonas que cubría el intervalo, menos una reducción fija y con la velocidad mínima como limite. Si el derrape cae dentro o junto a una zona de derrape ya existente, ambas se fusionan en una sola (unión de los intervalos y mínimo de sus PWM menos la reducción). En ese caso el retroceso añadido es menor que el de una zona nueva, porque la zona existente ya aplicó su retroceso completo al crearse. Si cada reincidencia retrocediera de nuevo la distancia completa, el circuito acabaría cubierto de zonas protegidas y el perfil no volvería a subir. Las celdas gigantes alcanzadas por un derrape o por su retroceso se castigan por separado y como una unidad, debido a que no hay precisión dentro del hueco, todo él recibe la misma reducción de PWM y se comporta como un único nodo de gran tamaño.
+
+La subida del perfil se produce al completarse las vueltas. Cuando el controlador detecta un paso por meta, comprueba si durante la vuelta se registró algún derrape en cualquiera de las cámaras y comunica el resultado a todas las instancias del algoritmo. Solo si la vuelta fue limpia a nivel global el perfil sube, y lo hace zona a zona: todas las zonas incrementan su PWM en una unidad, con la velocidad máxima como techo, excepto las que sufrieron un derrape en las últimas vueltas, que permanecen protegidas durante un número configurable de vueltas antes de poder volver a subir. Esta subida por zonas es la aportación fundamental del diseño frente a un perfil de velocidad único: una curva conflictiva limita únicamente la velocidad de su propia zona, mientras el resto del circuito continúa ganando velocidad vuelta tras vuelta.
+
+\subsubsection{Coordinación entre cámaras y propagación de reducciones}
+
+Cuando el circuito lo observan varias cámaras, dos situaciones requieren coordinación desde el nodo controlador, ya que cada instancia del algoritmo solo conoce su propia porción.
+
+La primera es la transición del coche entre cámaras. El controlador mantiene en todo momento la noción de \emph{cámara activa}, aquella cuyos fotogramas son los que se están usando para controlar el coche. En caso de que dos camaras se solapen un poco se aplica una regla un poco conservadora. La cámara activa se mantiene mientras siga entregando fotogramas válidos, y solo cuando deja de hacerlo durante un breve intervalo de tiempo y otra cámara sí está entregando, se conmuta a esta última. Esta regla evita que el solapamiento entre los campos de visión de dos cámaras consecutivas, en el que ambas publican posiciones intercaladas del mismo coche. En cada conmutación el controlador realiza dos acciones: notifica a la cámara saliente la pérdida de visión, para que cierre cualquier derrape que tuviera abierto, y registra qué cámara precede a cuál en el orden de paso. Como el coche recorre siempre el circuito en el mismo sentido, tras una vuelta completa este registro contiene el orden secuencial completo de las cámaras, aprendido en carrera sin configuración manual alguna.
+
+La segunda situación es la propagación de reducciones entre cámaras. Ocurre cuando un derrape se produce cerca del inicio de la porción visible de una cámara, algo habitual si una curva queda repartida entre dos encuadres. Entonces el retroceso del castigo se sale por el inicio de la cadena antes de agotarse, y los píxeles restantes corresponden al tramo inmediatamente anterior, que pertenece a otra cámara. El algoritmo anota ese sobrante como reducción pendiente. Tras procesar cada posición, el controlador la recoge y, según el orden de cámaras aprendido, ordena a la cámara precedente que aplique la reducción al final de su trayectoria, creando o ampliando allí la zona de derrape. Esta reducción externa no incrementa el contador de derrapes de la cámara que la recibe, ya que ese derrape lo contabilizó la cámara que lo observó, pero la zona sí queda protegida como cualquier otra. Si tampoco cupiera completa en la trayectoria de la precedente, el sobrante volvería a quedar pendiente y se propagaría en cascada hacia atrás.
+
+% ------------------------------------------------------------
+\subsection{Detección del paso por meta y medición de tiempos}
+\label{subsec:control-meta}
+
+El controlador es el encargado de contabilizar las vueltas y medir sus tiempos con precisión, ya que el tiempo por vuelta permite cerrar el ciclo de aprendizaje del algoritmo y sirve además como métrica para saber si se está mejorando o empeorando.
+
+La detección del cruce se apoya en la línea de meta publicada por el nodo de cámara que la observa. Por ello, el paso por meta solo se comprueba cuando llegan mensajes de esa cámara. Para cada uno de esos mensajes, y antes de realizar el cálculo geométrico completo, se aplica un test de proximidad que descarta el frame si ambas etiquetas del coche están más lejos de la línea de meta que un umbral, evitando así operaciones innecesarias. Cuando el coche está lo bastante cerca, se comprueba si el segmento que une sus dos etiquetas interseca el segmento de la línea de meta. Como el coche puede permanecer a caballo de la meta durante varios fotogramas consecutivos, lo que puede provocar muchas detecciones para evitarlo se utiliza un tiempo de espera que es configurable, de modo que solo la primera detección tras ese intervalo cuenta como nueva vuelta. Es también este mecanismo el que determina el final de la calibración.
+
+La dificultad de la medición del tiempo reside en que no se conoce el momento exacto en el que el coche pasa por la meta. Asignar como instante de cruce la marca de tiempo del fotograma que lo detecta introduciría un error, porque esa detección puede producirse bastante después del paso real. Por ello, siguiendo la aproximación empleada por Mario López en su trabajo, el instante exacto del cruce se estima por interpolación lineal entre el último fotograma en el que la etiqueta delantera aún no había cruzado y el primero en el que ya lo ha hecho. La interpolación se pondera con la distancia perpendicular con signo de cada etiqueta a la recta de meta, lo que permite obtener una aproximación precisa del tiempo por vuelta.
+
+Un detalle importante es qué relojes intervienen en la medida. Los instantes que se interpolan no son tiempos del controlador, sino las marcas de tiempo de captura que el nodo cámara adjunta a cada posición, tomadas en el momento exacto de la captura del fotograma tal y como se describió en la sección. De este modo, el tiempo de vuelta se calcula como la diferencia entre dos instantes interpolados medidos con el mismo reloj, el de la máquina que aloja la cámara que ve el sector de meta. Así, ni la latencia variable de la red ni el desfase entre los relojes de las distintas máquinas del sistema afectan al cálculo. El tiempo de espera, en cambio, sí se mide con el reloj local del controlador, ya que únicamente necesita saber cuánto hace que se detectó el cruce anterior y no requiere precisión.
+
+Con cada vuelta completada, el controlador publica en su topic de telemetría el tiempo obtenido junto con el número de vuelta y notifica el evento a todas las instancias del algoritmo indicando si la vuelta fue limpia, cerrando así el ciclo de aprendizaje descrito en la sección~\ref{subsec:control-algoritmo}.
+
+%-----------------------------------------------------------------------------------------------------------------
+
+\subsection{Topics y calidad de servicio}
+\label{subsec:control-topics}
+
+Toda la información que genera el controlador se publica en topics de ROS 2, y, al igual que en el nodo cámara, la elección de la política de calidad de servicio (QoS) de cada uno responde a la naturaleza de los datos que transporta. Además como necesitamos recibir información es necesario subscribirnos a los topics que tiene expuestos los nodos camara.
+
+Por esta razón el controlador se suscribe a los topics que le suministran la información necesaria para el control. El más cŕitico es el el que le permite recibir la información del coche (\texttt{/carN/position}), todas las camaras que ven ese coche envían la información aquí. Dentro de este mensaje recibe la información necesaria para poder realizar el control, dentro de él, vienen la posiciónd de las pegatinas, que camara está enviando la información y el instante de captura. Además también se incluye otra información que el controlador no utiliza pero se usan después para el analisis en diferido. Destacar que para poder subscribirse al topic es necesario utilizar la misma calidad de servicio (QoS) con la que el nodo expone el topic. Además también se suscribe al topic que permite recibir la línea de meta y al topic global de control de la calibración.
+
+Respecto a las publicaciones, la consigna de velocidad se publica en el topic \texttt{/carN/pwd} con un mensaje que contiene el valor de PWM, el identificador del carril sobre el que debe aplicarse y una marca temporal. Este topic emplea de nuevo el perfil de datos de sensores por la misma razón que lo haciamos en la camara para publicar la posición de las etiquedas. Adicionalmente, el controlador publica dos topics de telemetría propios de su coche, ambos con el perfil de datos de sensores. Por último, el controlador puede publicar también en el topic de control de la calibración porque es el controlador quien avisa que la calibración termino para el coche que está controlado.
+% ------------------------------------------------------------
+
+
+\section{Sistema de actuación}
+\label{sec:sistema-actuacion}
+
+El sistema de actuación es el encargado de enviar los valores de PWM calculados por los controladores hacia el arduino para que luego sean aplicados sobre el circuito. Está formado por dos elementos claramente diferenciados: un nodo puente de ROS~2, que centraliza la recepción de los valores de PWM de todos los controladores, y el subsistema hardware, compuesto por la placa Arduino y el L293D. Al existir un único punto de acceso físico al circuito, el nodo puente es el único nodo del sistema con acceso al hardwarem, el resto de nodos se limitan a publicar mensajes através de la red y es este nodo quien las traslada, una a una, a la placa a través del puerto serie.
+
+A lo largo de esta sección se describe la configuración y despliegue del nodo, su modelo de ejecución concurrente, los topics a los que se suscribe junto con sus políticas de calidad de servicio, la interfaz de comunicación con el Arduino y, por último, el subsistema hardware.
+
+% ---------------------------------------------------------------------
+\subsection{Configuración y despliegue del nodo}
+\label{subsec:actuacion-despliegue}
+
+Al igual que ocurre con los nodos de cámara y con los nodos controladores, el nodo puente se diseñó para ser completamente configurable en el momento de su lanzamiento, sin necesidad de modificar el código. Toda su configuración proviene del mismo fichero de parámetros común al resto del sistema, del que obtiene tres valores propios: el puerto serie en el que está conectado el Arduino y el valor del pwm que vamos a aplicar durante todo el circuito para realizar la calibración. Además, lee del mismo fichero la lista de coches activos, a partir de la cual construye dinámicamente sus suscripciones, de modo que añadir un coche al sistema no requiere tocar el nodo: basta con incluirlo en la lista de configuración.
+
+El proceso de desplegar el nodo es equivalente al resto de nodos que forman parte de la arquitectura, hay que utilizar un contenedor de Docker construido sobre la imagen común del proyecto. Destacar que el fichero de lanzamiento que se usa es el mismo que se usa para desplegar el sistema de control.  
+
+\subsection{Modelo de ejecución concurrente}
+\label{subsec:actuacion-concurrencia}
+
+El nodo puente sigue el mismo modelo de concurrencia, a nivel de nodo, que el resto de nodos del sistema. Se ejecuta sobre un \emph{MultiThreadedExecutor} de ROS~2 y organiza sus \emph{callbacks} en grupos de tipo \emph{MutuallyExclusiveCallbackGroup}. En este caso, se crea un grupo independiente por cada uno de los controladores que se despliegan, porque cada uno tiene su propio topic donde publica su valor de pwm. Ademas, se sigue manteniendo un grupo adicional para la suscripción al \emph{topic} de control de la calibración. Se sigue manteniendo igual que en el resto de nodos el grupo por defecto de ROS~2, para poder modificar parametros en caliente.
+
+Con esta organización, los valores de pwm pueden atenderse en paralelo, de forma que si el mensaje para un carril se demora no impide recibir y tratar los mensajes del resto. Al mismo tiempo, dentro de cada grupo los \textit{callbacks} se ejecutan de forma secuencial, lo que garantiza que los mensajes de un mismo coche se procesan en orden y sin solaparse entre sí.
+
+Ahora bien, esta concurrencia en la recepción no puede trasladarse al envío. Existe un único Arduino y un único puerto serie, por lo que el acceso al hardware debe estar serializado. La serialización la impone la propia interfaz de comunicación, en la que cada envío es una operación bloqueante que no finaliza hasta recibir la confirmación de la placa o agotar el tiempo de espera. De este modo, los comandos se trasladan al puerto uno a uno: los hilos pueden preparar sus órdenes en paralelo, pero el canal físico se utiliza siempre de forma secuencial.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.95\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\small,
+        exec/.style={draw, thick, rounded corners=3pt, fill=blue!6,
+                     minimum width=3.0cm, minimum height=1.0cm, align=center},
+        group/.style={draw, thick, rounded corners=3pt, minimum width=3.2cm,
+                      minimum height=1.0cm, align=center},
+        cb/.style={draw, minimum width=2.9cm, minimum height=0.85cm,
+                   align=center, font=\scriptsize},
+        hw/.style={draw, thick, rounded corners=3pt, fill=red!6,
+                   minimum width=4.2cm, minimum height=0.9cm, align=center},
+        lbl/.style={font=\scriptsize, align=center, inner sep=1.5pt},
+        flow/.style={-{Stealth[length=2.2mm]}, thick}
+    ]
+    % --- Ejecutor ---
+    \node[exec] (exec)
+        {\textbf{MultiThreadedExecutor}\\\scriptsize $2 + N$ hilos};
+    % --- Grupo 1: coche 1 ---
+    \node[group, fill=green!8, below=1.5cm of exec, xshift=-4.8cm] (g1)
+        {\textbf{Grupo coche 1}};
+    \node[cb, fill=green!4, below=0.5cm of g1] (cb1)
+        {Consigna PWM carril 1};
+    % --- Puntos suspensivos entre grupos de coches ---
+    \node[lbl, font=\normalsize] at ($(g1.east)!0.5!(g1.east)+(1.2,0)$) {$\cdots$};
+    \node[lbl, font=\normalsize] at ($(cb1.east)+(1.2,0)$) {$\cdots$};
+    % --- Grupo 2: coche N ---
+    \node[group, fill=green!8, below=1.5cm of exec] (g2)
+        {\textbf{Grupo coche $N$}};
+    \node[cb, fill=green!4, below=0.5cm of g2] (cb2)
+        {Consigna PWM carril $N$};
+    % --- Grupo 3: calibración ---
+    \node[group, fill=gray!12, below=1.5cm of exec, xshift=4.8cm] (g3)
+        {\textbf{Grupo de calibración}};
+    \node[cb, fill=gray!6, below=0.5cm of g3] (cb3)
+        {Control de calibración};
+    % --- Flechas ejecutor -> grupos ---
+    \draw[flow] (exec) -- (g1);
+    \draw[flow] (exec) -- (g2);
+    \draw[flow] (exec) -- (g3);
+    % --- Flechas grupo -> callback ---
+    \draw[flow] (g1) -- (cb1);
+    \draw[flow] (g2) -- (cb2);
+    \draw[flow] (g3) -- (cb3);
+    % --- Anotación: paralelismo entre grupos ---
+    \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}, thick, blue!60]
+        (g1.east) -- node[lbl, above] {en paralelo} (g2.west);
+    \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}, thick, blue!60]
+        (g2.east) -- node[lbl, above] {en paralelo} (g3.west);
+    % --- Interfaz serie: acceso serializado al Arduino ---
+    \node[hw, below=1.4cm of cb2] (serie)
+        {\textbf{Interfaz \emph{ArduinoController}}\\\scriptsize
+         puerto serie USB $\rightarrow$ Arduino};
+    \draw[flow] (cb1.south) -- ++(0,-0.45) -| ([xshift=-1.2cm]serie.north);
+    \draw[flow] (cb2.south) -- (serie.north);
+    \draw[flow] (cb3.south) -- ++(0,-0.45) -| ([xshift=1.2cm]serie.north);
+    \node[lbl] at ($(serie.north)+(3.6,0.45)$)
+        {envío bloqueante:\\una orden cada vez};
+    \end{tikzpicture}%
+    }
+    \caption{Modelo de ejecución multihilo a nivel de nodo utilizado dentro del nodo puente}
+    \label{fig:concurrencia-puente}
+\end{figure}
+
+% ---------------------------------------------------------------------
+\subsection{Suscripciones y calidad de servicio}
+\label{subsec:actuacion-topics}
+
+El nodo puente es un nodo consumidor, es decir, no publica información en la red sino que se limita a suscribirse a los datos que necesita. La suscripción más importante es a los \emph{topics} donde cada uno de los controladores publica los valores de pwm para su carril. Al igual que en la concurrencia los subscriptores se generan de forma dinámica uno por cada coche que tenemos declarado en la lista de parametros. Para estos \emph{topics} se emplea el perfil de calidad de servicio (QoS) orientado a datos de sensores, con fiabilidad de tipo \textit{best effort}, por el mismo motivo que en el resto de flujos de alta frecuencia del sistema. Esto es porque para poder acceder a los topics tenemos que usar la misma calidad de servicio (QoS) que tiene el topic cuando se publica el valor.
+
+Para cada uno de los mensajes que llega el nodo extrae el identificador del carril recibido y su número. A continuación aplica un filtro de repetición: mantiene en memoria el último valor de PWM enviado a cada carril y, si el valor recibido coincide con él, el mensaje se descarta sin llegar al puerto serie. Dado que los controladores publican una consigna por cada posición recibida, decenas de veces por segundo, y que el valor de PWM se mantiene estable durante tramos enteros del circuito, este filtro reduce drásticamente el tráfico sobre el puerto y evita saturar al Arduino con órdenes redundantes. Por último, antes del envío se valida que el valor esté dentro del rango admitido por el hardware (entre 0 y 255), actuando como una última barrera de seguridad ante consignas mal formadas. También está configurado un \emph{timer} que salta cada cierto tiempo y que vuelve a enviar el valor para avisar al Arduino que seguimos estando vivos.
+
+La segunda suscripción es la del topic global de control de la calibración (\texttt{/modo\_calibracion}), con calidad de servicio fiable, a través del cual el nodo detecta esta fase y aplica por sí mismo a ambos carriles la velocidad de calibración definida en la configuración, ya que durante ella los controladores aún no publican valores de pwm.
+
+% ---------------------------------------------------------------------
+\subsection{Interfaz de comunicación con el Arduino}
+\label{subsec:actuacion-interfaz}
+
+La comunicación con la placa se encapsula en una clase independiente del nodo, que abstrae por completo los detalles del puerto serie y del protocolo de comandos. El nodo se limita a invocar operaciones de alto nivel (fijar la velocidad de un carril, fijar la de ambos o detenerlos). Esta separación permite modificar el código o el protocolo sin tocar el nodo, y viceversa.
+
+En su inicialización, la interfaz enumera los puertos serie disponibles en la máquina y comprueba que el puerto configurado existe; si no es así, selecciona automáticamente el primer dispositivo compatible que encuentre (\texttt{ttyACM*} o \texttt{ttyUSB*}), lo que aporta robustez frente a cambios en la numeración de dispositivos entre arranques. Tras abrir el puerto se espera un breve intervalo, necesario porque la placa se reinicia automáticamente al establecerse la conexión, se vacían los búferes de comunicación y se envía una orden de parada a ambos carriles, de forma que el sistema arranca siempre desde un estado seguro y conocido.
+
+El protocolo de comunicación es textual y simple. Cada orden se codifica como una línea de texto de la forma \texttt{r<carril>:<valor>} (por ejemplo, \texttt{r1:120}), donde el primer campo identifica el carril y el segundo el valor de PWM a aplicar. Tras enviar una orden, la interfaz queda a la espera de la respuesta de la placa que responde con un mensaje de confirmación (\texttt{OK}), y solo entonces la operación se da por completada. Si la confirmación no llega dentro del tiempo límite, el envío se considera fallido y se notifica en el registro del nodo.
+
+% ---------------------------------------------------------------------
+\subsection{Subsistema hardware}
+\label{subsec:actuacion-hardware}
+
+El subsistema hardware es el encargado de pasar las órdenes recibidas por el puerto serie a un valor de tensión que se aplica sobre los raíles del circuito. Su diseño proviene de los trabajos previos y se reutiliza en este proyecto, integrándolo en la arquitectura distribuida a través del nodo puente descrito en las secciones anteriores.
+
+\subsubsection{Componentes y conexionado}
+
+Para la comunicación con el puerto serie nos apoyamos en una placa Elegoo UNO R3, compatible conArduino UNO sobre la que se monta un módulo controlador de motores construido en torno al chip L293D. Este circuito integrado implementa dos puentes en H independientes, lo que permite regular de forma simultánea y separada la tensión aplicada a cada uno de los dos carriles del circuito mediante señales PWM, ajustando así la velocidad de cada coche de manera continua.
+
+La placa se conecta al ordenador mediante un cable USB que establece el canal serie bidireccional sobre el que viajan los comandos y sus confirmaciones. Del módulo controlador parten las conexiones hacia el circuito una línea de masa común (GND) y dos salidas de potencia, una por carril, que suministran la tensión modulada por PWM a los terminales de alimentación de la pista. De este modo, cada orden recibida por el puerto serie acaba traducida en una señal eléctrica concreta sobre el carril al que va dirigida.
+
+En cuanto a la alimentación, los motores se alimentan directamente desde la propia placa a través del USB, manteniendo colocado el puente de alimentación del módulo controlador. Esta configuración, heredada del trabajo previo, simplifica el montaje al prescindir de fuentes externas y resulta suficiente para los niveles de tensión y consumo que demanda el circuito; el módulo admite, no obstante, una fuente independiente si en el futuro se necesitase.
+
+
+\subsubsection{Firmware y esquema funcional}
+
+Sobre este hardware se ejecuta un firmware sencillo, cargado en la placa mediante el IDE de Arduino, cuyo funcionamiento se articula en tres tareas: la configuración inicial de los pines de salida PWM asociados a cada carril, la lectura continua del puerto serie a la espera de nuevas órdenes y la generación de la señal correspondiente a cada orden recibida. El firmware permanece en ejecución constante: interpreta cada línea recibida, extrae el carril y el valor de PWM, aplica la señal sobre el pin adecuado y responde con la confirmación que la interfaz software espera para dar la orden por completada.
+
+La generación de la señal se realiza sobre los pines PWM del microcontrolador, cuyo ciclo de trabajo es proporcional al valor recibido: un valor de 0 corresponde a un ciclo de trabajo nulo (carril detenido) y un valor de 255 al ciclo de trabajo completo (tensión máxima). Esta es la razón del rango que valida el nodo puente. 
+
+En conjunto, el flujo de operación sigue una arquitectura en capas:
+
+\begin{itemize}
+    \item En la base el firmware interpreta los comandos y actúa sobre los pines
+    \item Sobre esta va la interfaz de comunicación descrita en la sección \ref{subsec:actuacion-interfaz}
+    \item Finalmente en la capa superior el nodo puente conecta la estructura con la red de ROS~2. 
+\end{itemize}
+
+\section{Sistema de visualización y análisis}
+\label{sec:sistema-visualizacion}
+
+El sistema de visualización y análisis permite en caso de activarlo consevar todos los mensajes que se intercambian durante la sesión para su posterior analisis permitiendo evaluar el comportamiento del sistema. Este nodo no interviene para nada en el lazo de control, se limita simplemente a escuchar todo lo que se envía por la red. 
+
+El sistema se compone de dos herramientas independientes que se comunican únicamente a través de los ficheros que una genera y la otra consume. 
+
+La \textbf{herramienta de grabación} se despliega junto al resto del sistema mientras la sesión está en marcha y almacena en un \emph{bag} de ROS~2 todos los mensajes que circulan por la red.
+
+La \textbf{herramienta de análisis en diferido} se ejecuta una vez terminada la sesión y, a partir de ese \emph{bag} y de los \emph{logs} que genera el algoritmo de velocidad, construye \emph{dashboard} web con gráficas que permiten estudiar la carrera vuelta a vuelta.
+
+A lo largo de esta sección se describen ambas herramientas: en primer lugar la de grabación, con su despliegue, la selección de los \emph{topics} y el formato de almacenamiento elegido; y a continuación la de análisis, con las fuentes de datos que combina, la información que permite visualizar y los mecanismos de exportación de los resultados.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\sffamily,
+    sistema/.style={
+        rectangle, rounded corners=8pt, draw=ArqGris, fill=ArqGrisClaro,
+        text=ArqGris, line width=0.9pt, minimum width=3.2cm, minimum height=1.6cm,
+        align=center, inner xsep=8pt, font=\sffamily\bfseries\small
+    },
+    herramienta/.style={
+        sistema, draw=ArqVerde, fill=ArqVerdeClaro, text=ArqVerde
+    },
+    fichero/.style={
+        rectangle, rounded corners=4pt, draw=ArqGris, fill=ArqCrema,
+        line width=0.7pt, minimum width=2.6cm, minimum height=1.0cm,
+        align=center, font=\ttfamily\scriptsize
+    },
+    salida/.style={
+        rectangle, rounded corners=8pt, draw=ArqAzul, fill=ArqAzulClaro,
+        text=ArqAzul, line width=0.9pt, minimum width=3.2cm, minimum height=1.6cm,
+        align=center, font=\sffamily\bfseries\small
+    },
+    etq/.style={font=\sffamily\tiny\itshape, text=ArqGris, align=center},
+    flujo/.style={-{Stealth[length=2.6mm]}, line width=0.9pt, ArqGris},
+    difer/.style={-{Stealth[length=2.6mm]}, line width=0.9pt, dashed, ArqVerde}
+]
+
+% --- Fila superior: durante la sesión ---
+\node[sistema, minimum width=4.4cm] (red) at (0,0)
+    {Nodos del sistema\\{\mdseries\scriptsize cámaras, controladores y puente}};
+\node[herramienta] (grabador) at (6.2,0)
+    {Herramienta\\de grabación};
+\node[fichero] (bag) at (12.0,0) {\emph{bag} (mcap)};
+\node[fichero, minimum height=1.0cm] (logs) at (12.0,-2.2) {logs del\\algoritmo};
+
+\draw[flujo] (red) -- node[etq, above] {todos los \emph{topics}} node[etq, below] {(\texttt{--all})} (grabador);
+\draw[flujo] (grabador) -- (bag);
+\draw[flujo] (red.south) |- node[etq, pos=0.25, left, align=right] {ficheros\\de registro} (logs.west);
+
+% --- Fila inferior: después de la sesión ---
+\node[herramienta, minimum width=4.0cm] (analisis) at (12.0,-5.2)
+    {Herramienta de análisis\\{\mdseries\scriptsize en diferido}};
+\node[salida] (dashboard) at (5.6,-5.2)
+    {\emph{Dashboard}\\{\mdseries\scriptsize (navegador)}};
+\node[fichero, minimum width=3.0cm] (export) at (0,-5.2) {PDF · CSV · MP4};
+
+\draw[difer] (bag.south) -- ++(0,-0.7) -| ([xshift=-12mm]analisis.north);
+\draw[difer] (logs.south) -- ++(0,-0.4) -| ([xshift=12mm]analisis.north);
+\draw[flujo] (analisis) -- node[etq, above] {HTML} node[etq, below] {(puerto 8988)} (dashboard);
+\draw[flujo] (dashboard) -- node[etq, above] {exportación} (export);
+
+% --- Separador conceptual ---
+\draw[densely dotted, ArqGris, line width=0.7pt] (-2.4,-3.6) -- (14.4,-3.6);
+\node[etq, anchor=west, text=ArqGris] at (-2.4,-3.25) {durante la sesión};
+\node[etq, anchor=west, text=ArqVerde] at (-2.4,-3.95) {una vez terminada la sesión};
+
+\end{tikzpicture}%
+}
+\caption{Esquema que permite ver como es el flujo que se realiza dentro del sistema de analisis}
+\label{fig:flujo-visualizacion}
+\end{figure}
+
+\subsection{Herramienta de grabación}
+\label{subsec:visualizacion-grabacion}
+
+La herramienta de grabación tiene un cometido deliberadamente estrecho: capturar sin pérdidas todo el tráfico de la red durante una sesión y dejarlo almacenado en disco. No procesa ni interpreta nada de lo que recibe.
+
+En lugar de implementar un nodo propio que se suscriba a cada \emph{topic} y escriba los mensajes, la herramienta se construye sobre \emph{rosbag2}, la utilidad de grabación que ROS~2 proporciona de serie. Esta decisión aporta dos ventajas frente a una implementación propia. La primera es que \emph{rosbag2} está preparado para sostener flujos de alta frecuencia con escritura por lotes y almacenamiento en memoria intermedia, un comportamiento que sería costoso de replicar y validar. La segunda, y más importante en un sistema pensado para crecer, es que su mecanismo de descubrimiento permite grabar sin conocer de antemano qué nodos van a estar presentes. 
+
+
+\subsubsection{Configuración y despliegue}
+
+Para facilitar el despliegue de este nodo se incluye la utilidad \emph{rosbag} dentro de un contenedor de Docker, junto con un script de bash que automatiza el arranque. Se usa un contenedor en lugar de la herramienta directamente para evitar tenerla instalada en el sistema; además, como empleamos mensajes propios, es necesario generarlos con la herramienta de ROS~2 para que \emph{rosbag} pueda interpretarlos. De este modo, el despliegue se reduce a ejecutar el script indicando el nombre que se le quiere dar a la grabación.
+
+Antes de lanzar el contenedor, el script realiza dos tareas. La primera es la sincronización de los tipos de mensaje, para conseguirlo, copia las definiciones de los mensajes propios desde el proyecto principal al paquete que compila el contenedor, que las genera automáticamente sin necesidad de enumerarlas. Así, cualquier mensaje nuevo o modificado queda disponible para la grabación sin tocar la herramienta. La segunda es la activación del modo de depuración de las cámaras, desactivado durante la operación normal por su coste: al activarse, cada nodo de cámara publica el fotograma procesado con las detecciones superpuestas, lo que es imprescindible para revisar después la sesión, pero genera un volumen de datos muy superior al del resto de la telemetría. El script lo activa en caliente sobre los nodos ya desplegados, aprovechando el mecanismo de modificación de parametros descrito en la sección~\ref{subsec:configuracion-despliegue}.
+
+\subsubsection{Selección de los \emph{topics} y descubrimiento dinámico}
+
+La primera versión de la herramienta trabajaba con una lista explícita de los \emph{topics} que debían grabarse, construida a partir del número de cámaras y de coches configurados. Este planteamiento resultó ser una fuente constante de errores porque cada vez que se añadía un \emph{topic} nuevo al sistema o se modificaba el nombre de uno existente, había que acordarse de reflejarlo en la lista.
+
+La versión definitiva graba, por tanto, la totalidad de los \emph{topics} presentes en el dominio. La preocupación razonable ante esta decisión es si la grabación se limita a los \emph{topics} que existen en el instante de arrancar, lo que dejaría fuera cualquier nodo que se incorporase más tarde y obligaría a un orden de arranque estricto. No es el caso, mientras el descubrimiento permanece activo, la herramienta sondea periódicamente el grafo de ROS~2 y se suscribe automáticamente a los \emph{topics} que van apareciendo.
+
+La calidad de servicio se resuelve igualmente de forma automática. Como se explicó en las secciones anteriores, cada \emph{topic} del sistema emplea el perfil que corresponde a la naturaleza de sus datos, y un suscriptor solo recibe mensajes si su perfil es compatible con el del publicador. En lugar de mantener un fichero que reprodujera esas políticas (con el mismo problema de desincronización que la lista de \emph{topics}), la herramienta delega en la capacidad de \emph{rosbag2} de adaptar el perfil de cada suscripción al que ofrecen los publicadores que encuentra.
+
+\subsubsection{Formato de almacenamiento}
+
+Las grabaciones se almacenan en formato mcap, es el formato que usa por defecto, siendo el resto considerados como \emph{legacy}. Además el formato mcap incorpora dentro del propio fichero la definición completa de cada tipo de mensaje grabado, tal y como era en el momento de la grabación. Dado que los mensajes propios del sistema fueron evolucionando conforme avanzaba el proyecto (por ejemplo, se añadieron campos de telemetría a medida que se identifica nueva información que almecenar). Al llevar el fichero su propia descripción, cualquier sesión anterior sigue siendo legible sin necesidad de recuperar la versión del código con la que se grabó.
+
+% ---------------------------------------------------------------------
+\subsection{Herramienta de análisis en diferido}
+\label{subsec:visualizacion-analisis}
+
+La herramienta de análisis convierte los datos crudos de una sesión en una serie de gráficas que facilitan el análisis del sistema. Recibe la grabación y los \emph{logs} que genera el algoritmo y produce un \emph{dashboard} web con diferentes figuras. Este se sirve desde un contenedor para poder realizar la consulta desde el navegador. También como objetivo de diseño se busco reducir a un único comando un proceso que antes exigía ejecutar varios códigos distintos, cada uno con sus propios resultados en formatos diferentes.
+
+El despliegue se realiza mediante un contenedor Docker que, a diferencia del resto, no forma parte del sistema desplegado. Se levanta bajo demanda indicándole qué sesión analizar y termina cuando se se para el contendor. Como necesitamos abrir ficheros mcap es necesario también es otra razón por la que tiene que ir dentro de un contenedor para así poder tener instaladas las librerías de ROS~2. Al igual que pasaba antes con el sistema de grabación, se simplificó la tarea de lanzamiento a un simple \emph{script} de bash que tiene que recbiir como parametro el nombre de la grabación y los ficheros de \emph{logs} que genero el algoritmo para esa sesión. Al arrancar el contenedor genera el \emph{dashboard} y lo sirve en un puerto que es accesible desde la maquina host.
+
+\subsubsection{Fuentes de datos}
+
+El análisis combina dos fuentes de información el fichero mcap generado por el ros2bag y los ficheros de \emph{logs} que genera el algoritmo. De la grabación se obtiene toda la información qeu se publicó en todos los \emph{topics} durante al sesión. De los \emph{logs} que escribe el algoritmo se obtiene su estado interno.
+
+La grabación describe qué hizo el coche y los \emph{logs} explican por qué el sistema decidió lo que decidió, de modo que solo cruzando ambas se puede relacionar un comportamiento con la decisión que lo provocó. Esa correspondencia se establece por el número de vuelta.
+
+\subsubsection{Lectura de la grabación y reconstrucción del estado}
+
+La grabación se recorre con la interfaz de \emph{rosbag2}, leyendo únicamente los \emph{topics} que el análisis va a utilizar. Para descodificar cada mensaje se emplea la clase generada al compilar el paquete pero, si esa clase ya no encaja porque el mensaje cambió desde la grabación, la herramienta recurre a la definición que el propio fichero mcap lleva embebida y continúa. Gracias a ello las sesiones grabadas en las primeras fases del proyecto siguen siendo analizables.
+
+Los \emph{logs} del algoritmo son ficheros de texto que se recorren una sola vez, reconociendo cada tipo de línea con la expresión regular que le corresponde.
+
+\subsubsection{Composición \emph{dashboard}}
+
+El \emph{dashboard} es una única página web autocontenida con gráficas interactivas, que permiten desplazarse, ampliar una zona y consultar el valor de cada punto. Se organiza en secciones numeradas, según recoge la tabla~\ref{tab:secciones-dashboard}. Para facilitar el analisis la información que se muestra en cada una de las graficas va cambiando segun vamos cambiando de vuelta.
+
+Destacar también que como cada cámara usa sus propias coordenadas de imagen, todas las gráficas espaciales se dibujan sobre un plano global común, aplicando a cada cámara una traslación fija que se calibra una sola vez por disposición física.
+
+\begin{table}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|l|}
+\hline
+\rowcolor{ArqAzulClaro}
+\textbf{Sección} & \textbf{Contenido} \\
+\hline
+0 & Resumen de la sesión \\
+\hline
+1 & Valor del derrape en cada punto del recorrido (3D) \\
+\hline
+2 & Trayectorias de las etiquetas delantera y trasera \\
+\hline
+3 & Distancia de derrape de la etiqueta trasera \\
+\hline
+4 & Mapa del circuito con el PWM de cada celda \\
+\hline
+5 & Tiempos por vuelta \\
+\hline
+6 & Evolución de las zonas, perfil de PWM y resumen por vuelta \\
+\hline
+7 & Visor de las imágenes grabadas y generación de vídeo \\
+\hline
+8 & Descarga de los datos en formato CSV \\
+\hline
+\end{tabular}%
+}
+\caption{Secciones del \emph{dashboard} generado por la herramienta de análisis.}
+\label{tab:secciones-dashboard}
+\end{table}
+
+\subsubsection{Visor de imágenes y exportación de resultados}
+
+El visor permite revisar los fotogramas grabados por las cámaras, sincronizados entre sí y con su instante de captura. Como las imágenes de una sesión ocupan varios centenares de megabytes, no se incrustan en la página se van pidiendo bajo demanda. Desde el mismo visor puede generarse un vídeo que combina las cámaras en un mosaico, útil para enseñar el funcionamiento del sistema fuera del entorno de análisis.
+
+Por último para facilitar la descarga de alguna de las gráficas cada una puede descargarse en formato \emph{pdf}. Además también se puede descargar la información que querramos en formato CSV.

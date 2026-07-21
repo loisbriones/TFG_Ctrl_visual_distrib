@@ -1,0 +1,220 @@
+\chapter{Contido demostrativo}
+\label{chap:demo}
+
+\lettrine{E}{ntre} a introdución e as conclusións, o documento conterá
+tantos capítulos como sexa preciso, sempre con coidado de non rebasar
+o límite de 80 páxinas fixado polo regulamento de TFGs.
+
+Empregaremos éste de xeito demostrativo, para ilustrar o uso de
+elementos habituais que poidan ser de utilidade\footnote{Por exemplo,
+  isto é unha nota a pé de páxina.}.
+
+\section{Inclusión de imaxes}
+
+Se precisamos imaxes no noso documento, incluirémolas do xeito que se
+indica na figura~\ref{fig:exemplo} (páxina~\pageref{fig:exemplo}). Se
+o facemos así, \LaTeX ubicará cada imaxe no mellor lugar posible,
+lugar que pode variar a medida que o documento vaia crecendo coa
+inclusión de máis texto e outros elementos (máis imaxes, táboas,
+etc.).
+
+\begin{figure}[hp!]
+  \centering
+  \includegraphics[width=0.75\textwidth]{imaxes/udc.png}
+  \caption{Pé de imaxe descritivo}
+  \label{fig:exemplo}
+\end{figure}
+
+Recoméndase almacenar os ficheiros gráficos no directorio
+\lstinline{imaxes}.
+
+\subsection{Inclusión de varias sub-imaxes}
+
+Se precisamos inserir imaxes relacionadas, pode ser apropiado
+incluílas como sub-figuras, do xeito que se pode apreciar na
+figura~\ref{fig:exemplo-subfiguras} (páxina~\pageref{fig:exemplo-subfiguras})
+coas imaxes~\ref{fig:subfigura-rotada} e~\ref{fig:subfigura-deformada}.
+Como se pode ver nos exemplos desta sección, sempre é recomendable
+referirse ás imaxes (ou táboas e outros elementos \emph{flotantes},
+que se demostrarán nas seccións seguintes deste capítulo demostrativo)
+pola súa referencia, xa que dese xeito non dependemos de onde
+queden ubicados os elementos en cuestión.
+
+\begin{figure}[hp!]
+  \centering
+  \begin{subfigure}[c]{0.3\textwidth}
+    \includegraphics[angle=45,width=\textwidth]{imaxes/udc.png}
+    \caption{Pé de subimaxe rotada}
+    \label{fig:subfigura-rotada}
+  \end{subfigure}
+  \hspace{0.1\textwidth}
+  \begin{subfigure}[c]{0.3\textwidth}
+    \includegraphics[width=\textwidth,height=3cm]{imaxes/udc.png}
+    \caption{Pé de subimaxe deformada}
+    \label{fig:subfigura-deformada}
+  \end{subfigure}
+  \caption{Pé de imaxe xeral}
+  \label{fig:exemplo-subfiguras}
+\end{figure}
+
+\section{Inclusión de táboas}
+
+Se precisamos táboas no noso documento, incluirémolas do xeito que se
+indica na táboa~\ref{tab:exemplo} (páxina~\pageref{tab:exemplo}). Se
+o facemos así, \LaTeX ubicará cada táboa no mellor lugar posible,
+lugar que pode variar a medida que o documento vaia crecendo coa
+inclusión de máis texto e outros elementos (máis imaxes, táboas,
+etc.).
+
+\begin{table}[hp!]
+  \centering
+  \rowcolors{2}{white}{udcgray!25}
+  \begin{tabular}{c|c}
+  \rowcolor{udcpink!25}
+  \textbf{Título de columna} & \textbf{Outro título de columna} \\\hline
+  \textit{Título de fila} & Contido da cela \\
+  \textit{Título de fila} & Contido da cela \\
+  \textit{Título de fila} & Contido da cela \\
+  \textit{Título de fila} & Contido da cela \\
+  \textit{Título de fila} & Contido da cela \\
+  \textit{Título de fila} & Contido da cela \\
+  \end{tabular}
+  \caption{Pé de táboa descritivo}
+  \label{tab:exemplo}
+\end{table}
+
+\subsection{Inclusión de táboas longas}
+
+Para táboas longas que ocupan varias páxinas, como é o caso da \ref{tab:longa}
+(páxina~\pageref{tab:longa}), recoméndase o uso do paquete \lstinline{lontable},
+incluído xa entre os paquetes recomendados no ficheiro raíz do proxecto
+(\verb+memoria_tfg.tex+).
+
+\input{contido/taboa-longa.tex}
+
+\subsection{Inclusión de táboas con celas que ocupan varias columnas ou filas}
+
+En ocasións pode resultar de interese incluír nunha táboa unha cela que se estenda
+a través de varias columnas, como ocorre na táboa~\ref{tab:exemplocolumnas}
+(páxina~\pageref{tab:exemplocolumnas}).
+
+\begin{table}[hp!]
+  \centering
+  \rowcolors{2}{white}{udcgray!25}
+  \begin{tabular}{c|c|c}
+  \rowcolor{udcpink!25}
+  \multicolumn{3}{c}{\textbf{Cela en varias columnas}} \\\hline
+  \rowcolor{udcpink!25}
+  \textbf{Título de columna} & \textbf{Outro título de columna} & \textbf{Outro título máis} \\\hline
+  \textit{Título de fila}    & Contido da cela                  & Contido da cela \\
+  \textit{Título de fila}    & Contido da cela                  & Contido da cela \\
+  \textit{Título de fila}    & \multicolumn{2}{c}{Contido da cela múltiple} \\
+  \textit{Título de fila}    & Contido da cela                  & Contido da cela \\
+  \end{tabular}
+  \caption{Pé de táboa descritivo (táboa con celas que ocupan varias columnas)}
+  \label{tab:exemplocolumnas}
+\end{table}
+
+Tamén pode resultar necesario facer o propio mais en varias filas da mesma columna,
+como ocorre na táboa~\ref{tab:exemplofilas} (páxina~\pageref{tab:exemplofilas}).
+Para isto é preciso o paquete \lstinline{multirow}, incluído entre os recomendados no
+ficheiro raíz do proxecto (\verb+memoria_tfg.tex+).
+
+O uso de celas multifila requerirá do xuste da coloración das filas, a fin de manter
+a coherencia entre o contido e o continente. Así, no canto de usar un único comando
+\verb+rowcolors+ para indicar a alternancia en toda a táboa, usaremos o comando
+\verb+rowcolor+ antes dunha fila que queiramos colorear, e o comando \verb+cellcolor+
+dentro dunha cela que queiramos colorear.
+
+\begin{table}[hp!]
+  \centering
+  \begin{tabular}{c|c}
+  \rowcolor{udcpink!25}
+  \textbf{Título de columna} & \textbf{Outro título de columna} \\\hline
+  \multirow{2}{*}{\textit{Título de fila}} & \cellcolor{udcgray!25} Contido da cela \\
+                                           & Contido da cela \\
+  \rowcolor{udcgray!25}
+  \textit{Título de fila}                  & Contido da cela \\
+  \multirow{3}{*}{\textit{Título de fila}} & Contido da cela \\
+                                           & \cellcolor{udcgray!25} Contido da cela \\
+                                           & Contido da cela \\
+  \rowcolor{udcgray!25}
+  \textit{Título de fila}                  & Contido da cela \\
+  \end{tabular}
+  \caption{Pé de táboa descritivo (táboa con celas que ocupan varias filas)}
+  \label{tab:exemplofilas}
+\end{table}
+
+Por suposto, pódense combinar nunha mesma táboa os dous tipos de celas (as que se 
+estenden máis dunha fila e máis dunha columna), como na táboa~\ref{tab:exemplofilasecolumnas}
+(páxina~\pageref{tab:exemplofilasecolumnas}).
+
+\begin{table}[hp!]
+  \centering
+  \begin{tabular}{c|c|c}
+  \rowcolor{udcpink!25}
+  \multicolumn{3}{c}{\textbf{Cela en varias columnas}} \\\hline
+  \rowcolor{udcpink!25}
+  \textbf{Título de columna}               & \textbf{Outro título de columna}             & \textbf{Outro título máis} \\\hline
+  \multirow{2}{*}{\textit{Título de fila}} & \cellcolor{udcgray!25} Contido da cela       & \cellcolor{udcgray!25} Contido da cela \\
+                                           & Contido da cela                              & Contido da cela \\
+  \rowcolor{udcgray!25}
+  \textit{Título de fila}                  & \multicolumn{2}{c}{Contido da cela múltiple} \\
+  \multirow{3}{*}{\textit{Título de fila}} & Contido da cela                              & Contido da cela \\
+                                           & \multicolumn{2}{c}{\cellcolor{udcgray!25} Contido da cela múltiple} \\
+                                           & \multicolumn{2}{c}{Contido da cela múltiple} \\
+  \rowcolor{udcgray!25}
+  \textit{Título de fila}                  & Contido da cela                              & Contido da cela \\
+  \end{tabular}
+  \caption{Pé de táboa descritivo (táboa con celas que ocupan varias columnas)}
+  \label{tab:exemplofilasecolumnas}
+\end{table}
+
+\section{Inclusión de código fonte}
+
+Se precisamos incluír fragmentos de código fonte, podemos facelo, por exemplo, da
+seguinte maneira:
+
+\begin{lstlisting}[language=C]
+#include <stdio.h>
+#define N 10
+
+int main()
+{
+  int i;
+
+  // Isto é un comentario
+  puts("Ola, mundo!");
+
+  for (i = 0; i < N; i++)
+  {
+    puts("LaTeX é a ferramenta de edición ideal para profesionais da informática!");
+  }
+
+  return 0;
+}
+\end{lstlisting}
+
+Para usar o estilo anterior en palabras ou expresións curtas insertadas nun
+parágrafo, recoméndase facelo co comando \lstinline{lstinline}.
+Nel úsase un tamaño de letra máis coherente co do resto do texto
+(\lstinline{small}), frente ao tamaño de letra usado no \lstinline{lstlisting}
+({\tt \footnotesize footnotesize}).
+
+\section{Uso da relación de acrónimos e do glosario}
+
+Os acrónimos edítanse no ficheiro \lstinline{bibliografia/acronimos.tex}
+e úsanse empregando a orde \lstinline{acrlong} para obter o termo
+completo (deste xeito: \acrlong{erlang}), a orde \lstinline{acrshort}
+para obter o acrónimo (deste xeito: \acrshort{erlang}). A primeira vez
+que usamos un termo con acrónimo no documento é recomendable usar orde
+\lstinline{acrfull} (que produce ambas versións á vez:
+\acrfull{erlang}). Os acrónimos que non se usan no documento, non
+aparecen na relación que se xerar na versión PDF.
+
+Pola súa banda, os termos do glosario edítanse en
+\lstinline{bibliografia/glosario.tex} e úsanse empregando a orde
+\lstinline{gls} (deste xeito, \gls{bytecode}) ou \lstinline{Gls} (deste
+xeito, \Gls{bytecode}). Ao igual que os acrónimos, os termos que non
+se usan no documento, non aparecen na relación que se xera na versión
+PDF.

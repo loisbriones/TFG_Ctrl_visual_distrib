@@ -1,0 +1,139 @@
+% =====================================================================
+% Capítulo 6 - Pruebas
+% Borrador para revisión del tutor.
+% Cada prueba se estructura con las preguntas guía:
+%   ¿Para qué?  -> objetivo de la prueba
+%   ¿Cómo?      -> procedimiento / montaje
+%   ¿Qué?       -> qué información se mostrará y cómo se documenta el proceso
+%   Resultados  -> pendiente de completar tras ejecutar la prueba
+% =====================================================================
+
+\chapter{Pruebas}
+\label{cap:pruebas}
+
+\lettrine{E}{n} este capítulo se detallan las pruebas realizadas durante el desarrollo del proyecto. Las pruebas específicas validan cada nueva funcionalidad antes de pasar a la siguiente iteración, de modo que cada avance parte de una base firme y ya probada. Las pruebas finales se ejecutan al terminar la implementación y validan el sistema en su totalidad, comprobando el cumplimiento de los requisitos planteados inicialmente. Siempre que es posible, los resultados se apoyan en la telemetría grabada durante las sesiones y analizada con la herramienta desarrollada al efecto.
+
+% =====================================================================
+\section{Pruebas específicas}
+\label{sec:pruebas-especificas}
+% =====================================================================
+
+% ---------------------------------------------------------------------
+\subsection{Detección por color y calibración}
+\label{subsec:prueba-color}
+% ---------------------------------------------------------------------
+
+\paragraph{¿Para qué?} El objetivo es comprobar que la segmentación por color en el espacio HSV aísla correctamente las pegatinas del coche y que, a partir de las máscaras generadas, se detecta con precisión el centro geométrico de cada etiqueta. Se quiere demostrar que las máscaras se aplican de forma correcta y que la posición reportada corresponde realmente al centro de la pegatina.
+
+\paragraph{¿Cómo?} Usando una vuelta a un circuito y viendo se detectan las pegatinas y el centro de la pegatina nunca cambia.
+
+\paragraph{¿Qué?} Se mostrarán capturas del fotograma original junto a la máscara binaria resultante y el centro detectado marcado sobre la imagen. Se documentará en qué condiciones la detección es fiable y en cuáles se degrada.
+
+
+% ---------------------------------------------------------------------
+\subsection{Seguimiento con ROI extrapolado y oclusiones}
+\label{subsec:prueba-tracking}
+% ---------------------------------------------------------------------
+
+\paragraph{¿Para qué?} El objetivo es verificar que la predicción de la región de interés (ROI) mediante extrapolación lineal funciona correctamente y que el sistema sigue operando ante oclusiones parciales. Se quiere demostrar que el seguimiento mantiene la posición del coche cuando la detección es continua y que, cuando esta falla por una oclusión, la ventana de búsqueda se amplía y el vehículo se readquiere en cuanto vuelve a ser visible.
+
+\paragraph{¿Cómo?} Se ejecutará el seguimiento sobre el coche en movimiento y se comprobará que la ROI acompaña a la trayectoria prevista. A continuación se introducirán oclusiones controladas (por ejemplo, un elemento que tape momentáneamente parte del trazado) para forzar el fallo de detección y observar el comportamiento de reexpansión de la ventana y la posterior readquisición del vehículo.
+
+\paragraph{¿Qué?} Se mostrará la evolución de la ROI sobre la secuencia de fotogramas, tanto en seguimiento normal como durante y después de una oclusión. Se documentará cuántos fotogramas tarda el sistema en volver a localizar el coche tras perderlo y cómo se comporta la ventana de búsqueda en ese intervalo.
+
+% ---------------------------------------------------------------------
+\subsection{Detección de la línea de meta y conteo de vueltas}
+\label{subsec:prueba-meta}
+% ---------------------------------------------------------------------
+
+\paragraph{¿Para qué?} El objetivo es comprobar que la línea de meta se detecta automáticamente por color y que el conteo de vueltas y la medición de tiempos se realizan de forma fiable. Se quiere demostrar que el cruce de meta se registra una sola vez por vuelta y que los tiempos medidos son consistentes.
+
+\paragraph{¿Cómo?} Se harán completar al coche varias vueltas al circuito y se registrará cada paso por la línea de meta. Se comprobará que el mecanismo de intersección entre el segmento que une las dos etiquetas y el segmento de la línea de meta detecta el cruce. Para asegurar que todo funcione con varios valores de pwm. Se puede aplicar un valor constante que se sepa que es controlado entonces hacer dos pruebas distintas con dos valores distintos.
+
+\paragraph{¿Qué?} Se mostrará el número de vueltas contabilizadas frente al número real de vueltas realizadas, junto con los tiempos por vuelta obtenidos de la telemetría. Se documentará si se produce algún fallo de conteo (vueltas duplicadas o no detectadas) y en qué circunstancias.
+
+% ---------------------------------------------------------------------
+\subsection{Control del Arduino}
+\label{subsec:prueba-arduino}
+% ---------------------------------------------------------------------
+
+\paragraph{¿Para qué?} El objetivo es validar que el actuador basado en Arduino funciona correctamente: que el programa se carga sin problemas y que, enviando comandos de forma manual, es posible controlar la velocidad del coche mediante señales PWM. Se quiere demostrar el correcto funcionamiento del control de bajo nivel del sistema.
+
+\paragraph{¿Cómo?} Se cargará el programa en la placa Arduino y se enviarán comandos manuales a través del nodo puente por la conexión serie. Se comprobará que la selección automática del puerto funciona (ttyACM*/ttyUSB*) y que los comandos enviados se traducen en cambios reales de la velocidad del coche.
+
+\paragraph{¿Qué?} Se mostrará la correspondencia entre los comandos enviados y la respuesta del coche, describiendo el proceso de carga del programa y de envío manual de consignas. Se documentará el rango de valores de PWM utilizable y el comportamiento observado.
+
+% ---------------------------------------------------------------------
+\subsection{Algoritmo de velocidad y respuesta a derrapes}
+\label{subsec:prueba-algoritmo}
+% ---------------------------------------------------------------------
+
+\paragraph{¿Para qué?} El objetivo es verificar el funcionamiento del algoritmo de velocidad por zonas: comprobar cómo mejora el tiempo por vuelta a medida que el coche completa vueltas limpias, cómo se detectan y se crean las zonas de derrape y cómo en esas zonas se reduce la velocidad para controlar el coche. Se quiere demostrar que el algoritmo aprende el circuito y maximiza la velocidad de forma independiente en cada tramo.
+
+\paragraph{¿Cómo?} Se dejará al sistema calibrar y correr durante un número suficiente de vueltas sobre un circuito, partiendo del estado conservador inicial (velocidad mínima en todo el circuito). Se observará la evolución del perfil de velocidad: la subida progresiva del PWM en las vueltas limpias y el castigo de las zonas donde se detecta derrape. La telemetría grabada permitirá analizar a posteriori la formación de las zonas de derrape y su efecto sobre la velocidad.
+
+\paragraph{¿Qué?} Se mostrará la evolución del tiempo por vuelta a lo largo de la sesión y la localización de las zonas de derrape sobre el circuito, junto con el perfil de PWM resultante. Se documentará cómo se van creando y ajustando esas zonas y cómo el resto del circuito continúa ganando velocidad vuelta tras vuelta.
+
+% ---------------------------------------------------------------------
+\subsection{Alta disponibilidad del controlador (tolerancia a fallos)}
+\label{subsec:prueba-tolerancia}
+% ---------------------------------------------------------------------
+
+\paragraph{¿Para qué?} El objetivo es validar la tolerancia a fallos del sistema distribuido, en concreto el reinicio automático de los nodos. Se quiere demostrar que, si un nodo cae durante la ejecución, el sistema se recupera automáticamente y la carrera puede continuar, comportamiento que constituye una de las aportaciones del proyecto frente a la arquitectura monolítica de partida.
+
+\paragraph{¿Cómo?} Se provocará de forma deliberada la caída de un nodo durante una sesión en marcha (por ejemplo, deteniendo su contenedor) y se observará el mecanismo de reinicio automático. Se comprobará que el nodo vuelve a levantarse, se reincorpora al sistema mediante el descubrimiento automático de DDS y la ejecución prosigue.
+
+\paragraph{¿Qué?} Se mostrará la secuencia de eventos desde la caída del nodo hasta su reincorporación, apoyándose en los registros de la sesión. Se documentará el tiempo aproximado de recuperación y el efecto de la caída sobre el comportamiento del coche.
+
+% ---------------------------------------------------------------------
+\subsection{Latencia de red: Ethernet frente a WiFi}
+\label{subsec:prueba-red}
+% ---------------------------------------------------------------------
+
+\paragraph{¿Para qué?} El objetivo es medir la latencia que introduce la red en el sistema distribuido y determinar si supone un problema para el funcionamiento en tiempo real. En particular se quiere realizar varias combinaciones, indicando también el tipo de wifi que se uso y el tipo de adaptador utilizando para poder usar esa versión de wifi. Después el objetivo será valorar si la diferencia entre los distintos métodos es apreciable en el comportamiento de la aplicación.  
+
+\paragraph{¿Cómo?} La prueba se realizará en dos fases. En una primera fase, con un publicador y un suscriptor sencillos, se medirán las latencias de red de forma aislada. En una segunda fase, con el sistema completo ya en funcionamiento, se repetirán las mediciones para comprobar si la latencia introducida por la red afecta o no al sistema. Ambas fases se ejecutarán primero sobre Ethernet y después sobre WiFi para poder comparar los dos escenarios. Para poder medir el tiempo entre cada uno de los mensajes, será necesario que todas las maquinas tengan configurado la misma hora, para eso se utiliza NTP. 
+
+\paragraph{¿Qué?} Se mostrarán las latencias medidas en cada configuración, tanto en el test aislado como con el sistema completo, y se compararán los escenarios Ethernet y WiFi. Se documentará si la diferencia se percibe.
+
+% ---------------------------------------------------------------------
+\subsection{Compatibilidad y rendimiento del hardware}
+\label{subsec:prueba-hardware}
+% ---------------------------------------------------------------------
+
+\paragraph{¿Para qué?} El objetivo es comprobar que el nodo camara puede funcionar correctamente en los dos modelos distintos de Raspberry Pi disponibles y, más allá de si simplemente arranca, valorar el rendimiento que ofrece cada uno.
+
+\paragraph{¿Cómo?} Se desplegará la arquitectura sobre cada modelo de Raspberry Pi mediante los contenedores Docker preparados y se ejecutará el sistema. Sobre cada equipo se medirán indicadores de rendimiento como los fotogramas por segundo del nodo cámara, el uso de CPU y de memoria, y la latencia de procesamiento por fotograma.
+
+\paragraph{¿Qué?} Se mostrará una comparativa del rendimiento obtenido en cada modelo de Raspberry Pi, indicando si en ambos es posible ejecutar el nodo camara y a qué coste. Se documentará el proceso de despliegue y cualquier limitación observada en el modelo menos potente.
+
+% ---------------------------------------------------------------------
+%\subsection{Escalabilidad: incorporación de una cámara}
+%\label{subsec:prueba-escalabilidad}
+%% ---------------------------------------------------------------------
+%% Se me ocurrió la verdad que no lo probé y puede ser interesante mirar si se puede añadir una camara en caliente al sistema. El problema es seguramente el algoritmo y la razón por la que no sé puede hacer porque si movemos las camaras todo explote. Lo que se puede probar es tener una zona del circuito que no sé puede ver y después lo que hacemos es añadir una camara en esa zona. El problema no sería en la camara pero si en el controlador porque no tengo forma de una vez en modo carrera poder cambiar y poner a guardar la información qeu te llega se podría hacer simplemente que si no lo tienes en el diccionario y estas en modo carrera entonces tienes que guardarlo pero solo para esa camara y cuando cruce la linea de meta poner a fcunionar pero solo esa parte no sé que tan complicado podría ser.
+
+
+%
+%\paragraph{¿Para qué?} El objetivo es demostrar la escalabilidad horizontal del sistema: que añadir cobertura al circuito se reduce a lanzar un nuevo nodo cámara, sin reconfigurar ningún otro componente. Se quiere validar que el descubrimiento automático de DDS integra la nueva cámara en el sistema sin intervención manual, una de las principales aportaciones frente a los trabajos previos.
+%
+%\paragraph{¿Cómo?} Partiendo de un sistema en funcionamiento con una o varias cámaras, se lanzará un nuevo nodo cámara que cubra una porción adicional del circuito. Se comprobará que el nodo es descubierto automáticamente, que empieza a publicar posiciones y que el controlador las incorpora sin necesidad de modificar la configuración de los demás nodos.
+%
+%\paragraph{¿Qué?} Se mostrará el proceso de incorporación de la nueva cámara y el momento en que sus detecciones comienzan a integrarse en el sistema. Se documentará que no ha sido necesaria ninguna reconfiguración manual y el efecto sobre la cobertura del circuito.
+%
+
+% =====================================================================
+\section{Pruebas finales}
+\label{sec:pruebas-finales}
+% =====================================================================
+
+% ---------------------------------------------------------------------
+\subsection{Demostración del sistema completo}
+\label{subsec:prueba-final}
+% ---------------------------------------------------------------------
+
+\paragraph{¿Para qué?} El objetivo es demostrar el funcionamiento del sistema completo y comprobar que se adapta a circuitos distintos, consiguiendo funcionar correctamente en todos ellos.
+
+\paragraph{¿Cómo?} Se desplegará el sistema completo con varias cámaras sobre distintos circuitos y se dejará correr al coche hasta que el algoritmo aprenda cada trazado.
+
+\paragraph{¿Qué?} Se mostrará el comportamiento del sistema completo sobre cada circuito, apoyándose en la telemetría grabada y en los vídeos de la demostración final. Se documentará la evolución de los tiempos por vuelta.

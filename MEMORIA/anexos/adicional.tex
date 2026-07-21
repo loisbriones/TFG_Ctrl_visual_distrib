@@ -1,0 +1,51 @@
+\chapter{Ejecución del sistema}
+\label{chap:execucion}
+
+\lettrine{E}{n} este anexo se describen los pasos necesarios para desplegar y ejecutar el
+sistema completo: el software requerido en cada máquina, la preparación del hardware y los
+comandos de lanzamiento de cada uno de los roles (nodos cámara y nodo cerebro).
+
+\section{Software requerido}
+\label{sec:software-requerido}
+
+% TODO: Enumerar: sistema Linux con Docker y docker-compose instalados en cada máquina
+% de la red (no es necesario instalar ROS2 en el anfitrión: va dentro de la imagen),
+% git para clonar el repositorio, y acceso a la misma red local en todas las máquinas.
+
+\section{Preparación del hardware}
+\label{sec:preparacion-hardware}
+
+% TODO: Describir:
+%  - Montaje del circuito y colocación de las cámaras cubriendo todo el trazado.
+%  - Pegatinas de colores en los coches (delantera y trasera) y marca de línea de
+%    meta de color naranja visible por una de las cámaras.
+%  - Carga del firmware en el Arduino y conexión del L293D a los carriles.
+%  - Conexión del Arduino por USB a la máquina cerebro (/dev/ttyACM0).
+
+\section{Instrucciones de ejecución}
+\label{sec:instrucions-execucion}
+
+% TODO: Documentar los comandos reales:
+%
+% En cada máquina con cámara (ajustando NODE_ID y CAMERA_DEV):
+%
+%   cd python
+%   NODE_ID=camara_01 CAMERA_DEV=0 docker compose -f docker-compose-camera.yml up
+%
+% En la máquina cerebro (conectada al Arduino):
+%
+%   cd python
+%   docker compose -f docker-compose-brain.yml up
+%
+% Explicar el flujo tras el arranque: los carriles se alimentan a la velocidad de
+% calibración, el coche da la vuelta de calibración, al cruzar la meta el sistema pasa
+% automáticamente a modo carrera. Para recalibrar: publicar True en /modo_calibracion
+% o borrar los ficheros de caché (cache_trayectoria_*.json).
+
+\section{Configuración}
+\label{sec:configuracion-anexo}
+
+% TODO: Referenciar python/src/image_processor_pkg/config/params.yaml y comentar los
+% parámetros que el usuario puede querer ajustar: lista de coches, colores de las
+% pegatinas y de la meta, resolución de cámara (camera.mode), velocidades mínima y
+% máxima del controlador, velocidad de calibración y puerto del Arduino.
