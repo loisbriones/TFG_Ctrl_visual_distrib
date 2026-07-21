@@ -212,7 +212,6 @@ Desde el punto de vista de la implementación, el tenemos 2 componentes: el nodo
 
 A lo largo de esta sección se describe cada uno de los módulos funcionales que componen el nodo: la configuración y despliegue, el modelo de ejecución concurrente, la detección de las etiquetas por color, los modos de calibración y operación, el seguimiento mediante regiones de interés, el mecanismo de readquisición, la detección de la línea de meta y la publicación de la información en los topics.
 
-% --------------------------------------------------------------------------
 \subsection{Configuración y despliegue del nodo}
 \label{subsec:configuracion-despliegue}
 
@@ -226,7 +225,6 @@ En cuanto a la propia cámara, el nodo permite seleccionar la resolución de tra
 
 Por último, el nodo admite la reconfiguración dinámica de sus parámetros de detección en tiempo de ejecución. Mediante el mecanismo de parámetros de ROS~2, es posible modificar en caliente, aunque cada modificación es validada antes de aplicarse. Esta capacidad resulta especialmente útil permitiendo el ajuste del sistema a las condiciones de iluminación de cada escenario, ya que evita tener que reiniciar los nodos con cada cambio.
 
-%-------------------------------------------------------------------------
 \subsection{Modelo de ejecución concurrente}
 \label{subsec:modelo-concurrente}
 
@@ -242,7 +240,7 @@ Además de estos dos grupos, el nodo mantiene el grupo por defecto de ROS~2, al 
 
 \begin{figure}[H]
     \centering
-    \resizebox{0.95\textwidth}{!}{%
+    \resizebox{0.95\textwidth}{!}{
     \begin{tikzpicture}[
         font=\small,
         exec/.style={draw, thick, rounded corners=3pt, fill=blue!6,
@@ -311,7 +309,7 @@ El papel de consumidor lo realiza un \emph{timer} de ROS~2 que se dispara con un
 
 \begin{figure}[H]
     \centering
-    \resizebox{\textwidth}{!}{%
+    \resizebox{\textwidth}{!}{
     \begin{tikzpicture}[
         font=\small,
         hw/.style={draw, rounded corners=2pt, fill=black!8,
@@ -382,7 +380,6 @@ El papel de consumidor lo realiza un \emph{timer} de ROS~2 que se dispara con un
     \label{fig:modelo-hilos-camara}
 \end{figure}
 
-%--------------------------------------------------------------------------
 \subsection{Detección de las etiquetas por color}
 \label{subsec:deteccion-etiquetas}
 
@@ -392,7 +389,6 @@ Para poder trabajar más comodamente el fotograma se convierte del espacio de co
 
 Sobre la máscara resultante se extraen los contornos externos de las regiones detectadas. De entre todos los contornos se selecciona el de mayor área, y se descarta si no supera un área mínima configurable, filtrando así falsos positivos de tamaño reducido que hayan sobrevivido al filtrado morfológico. Una vez validado el contorno, se calcula el rectángulo que lo delimita (\emph{bounding box}) y, a partir de él, su centroide. El centroide de la etiqueta delantera es el punto que identifica la posición del coche, mientras que el de la trasera permite medir el culeo del coche. Ambos puntos, junto con sus rectángulos, conforman el resultado de la detección.
 
-% --------------------------------------------------------------------------
 \subsection{Modos de funcionamiento: calibración y carrera}
 \label{subsec:modos-funcionamiento}
 
@@ -413,7 +409,6 @@ La transición entre modos se coordina a través de un topic común a todo el si
 Con el fin de no repetir la calibración en cada arranque, los puntos de
 trayectoria de cada coche se almacenan en disco en un fichero JSON propio de cada cámara. Al iniciarse, el nodo comprueba si existe este fichero y, en caso afirmativo, carga los puntos, regenera las máscaras y pasa directamente al modo de operación. Si en algún momento se ordena una recalibración a través del topic de control, las máscaras se descartan y el proceso comienza de nuevo. Este mecanismo de caché reduce considerablemente el tiempo de puesta en marcha del sistema cuando ni las cámaras ni el circuito han sido desplazados.
 
-% --------------------------------------------------------------------------
 \subsection{Seguimiento mediante región de interés}
 \label{subsec:seguimiento-roi}
 
@@ -423,7 +418,6 @@ La ROI tiene un tamaño base de $150 \times 150$ píxeles y se recorta a los lí
 
 Cuando la detección dentro del ROI tiene éxito las coordenadas que obtenemos son relativas a él por tanto es necesario trasladarlas al sistema de referencia global de la cámara antes de publicar la información.  
 
- --------------------------------------------------------------------------
 \subsection{Readquisición del seguimiento}
 \label{subsec:readquisicion}
 
@@ -432,7 +426,6 @@ Las oclusiones son habituales en un circuito de Scalextric: túneles, puentes, e
 La estrategia adoptada consiste en ampliar progresivamente la zona de búsqueda. Cada vez que un fotograma concluye sin detectar al coche, el tamaño de la ROI se incrementa en 50 píxeles, hasta alcanzar como máximo la dimensión mayor del fotograma, momento en el que la búsqueda abarca la imagen completa. Como la máscara de trayectoria sigue aplicándose sobre la región ampliada, la búsqueda queda en todo momento restringida a las proximidades del carril, por lo que incluso en el peor de los casos el área realmente analizada sigue siendo una fracción reducida de la imagen.
 
 Al perder el seguimiento se descartan además las posiciones anteriores del coche. Esta decisión evita que, tras la readquisición, la extrapolación combine un punto anterior a la pérdida con el primer punto posterior a ella: la distancia entre ambos puede ser grande, y la predicción resultante situaría la ROI en una posición alejada de la real, provocando una nueva pérdida. En su lugar, la primera detección tras la readquisición centra la ROI directamente sobre la posición encontrada.
-% --------------------------------------------------------------------------
 \subsection{Detección de la línea de meta}
 \label{subsec:deteccion-meta}
 
@@ -443,7 +436,6 @@ El proceso de detección comparte la base del empleado con las etiquetas de los 
 
 Si la etiqueta no es visible desde una cámara, esa instancia del nodo simplemente no publica línea de meta alguna: en un despliegue con varias cámaras, solo aquella que observa la meta lo hace, y el mensaje incluye el identificador de la cámara para que los consumidores sepan quien la detecto. 
 
-% --------------------------------------------------------------------------
 \subsection{Publicación de resultados y calidad de servicio}
 \label{subsec:publicacion-qos}
 
@@ -464,7 +456,6 @@ Desde el punto de vista de la implementación, y de forma análoga a lo descrito
 
 A lo largo de esta sección se describen los módulos funcionales que componen el sistema: la configuración y el despliegue, el modelo de ejecución concurrente, los \emph{topics } empleados y su calidad de servicio, los modos de calibración y carrera, el algoritmo de velocidad basado en zonas y, por último, la detección del paso por meta y la medición de los tiempos de vuelta.
 
-% ------------------------------------------------------------
 \subsection{Configuración y despliegue del nodo}
 \label{subsec:control-configuracion}
 
@@ -476,7 +467,6 @@ El despliegue se realiza mediante un contenedor Docker que utiliza la misma imag
 
 Por último, y con el mismo espíritu de la caché de trayectorias del nodo de cámara, el controlador guarda en disco, en un fichero JSON, la trayectoria base que construye para cada cámara al finalizar la calibración. Este fichero permite inspeccionar a posteriori el recorrido aprendido y reutilizarlo en caso de usar el mismo circuito sin repetir la calibración.
 
-% ------------------------------------------------------------
 \subsection{Modelo de ejecución concurrente}
 \label{subsec:control-concurrencia}
 
@@ -486,7 +476,7 @@ El controlador recibe varios \emph{callbacks} distintos, cada uno con un cometid
 
 \begin{figure}[H]
     \centering
-    \resizebox{0.95\textwidth}{!}{%
+    \resizebox{0.95\textwidth}{!}{
     \begin{tikzpicture}[
         font=\small,
         exec/.style={draw, thick, rounded corners=3pt, fill=blue!6,
@@ -551,7 +541,6 @@ Al recibirse la orden de finalización, el controlador procesa las listas de pun
 
 En modo carrera, cada posición recibida se entrega a la instancia del algoritmo de la cámara que la originó, que devuelve el valor de PWM que corresponde aplicar en ese instante o bien indica que el fotograma debe descartarse por ruido, en cuyo caso el controlador mantiene el último valor valido. El valor del pwm resultante se publica con cada posición procesada, y en durante la misma ejecución el nodo comprueba el paso por meta, contabiliza las vueltas y notifica al algoritmo los eventos que necesita para su ciclo de aprendizaje. Si en cualquier momento se ordena una recalibración a través del \emph{topic} de control, el controlador descarta las trayectorias y las instancias del algoritmo. Comenzando de nuevo el proceso desde cero.
 
-% ------------------------------------------------------------
 \subsection{Algoritmo de velocidad por zonas}
 \label{subsec:control-algoritmo}
 
@@ -598,7 +587,6 @@ La primera es la transición del coche entre cámaras. El controlador mantiene e
 
 La segunda situación es la propagación de reducciones entre cámaras. Ocurre cuando un derrape se produce cerca del inicio de la porción visible de una cámara, algo habitual si una curva queda repartida entre dos encuadres. Entonces el retroceso del castigo se sale por el inicio de la cadena antes de agotarse, y los píxeles restantes corresponden al tramo inmediatamente anterior, que pertenece a otra cámara. El algoritmo anota ese sobrante como reducción pendiente. Tras procesar cada posición, el controlador la recoge y, según el orden de cámaras aprendido, ordena a la cámara precedente que aplique la reducción al final de su trayectoria, creando o ampliando allí la zona de derrape. Esta reducción externa no incrementa el contador de derrapes de la cámara que la recibe, ya que ese derrape lo contabilizó la cámara que lo observó, pero la zona sí queda protegida como cualquier otra. Si tampoco cupiera completa en la trayectoria de la precedente, el sobrante volvería a quedar pendiente y se propagaría en cascada hacia atrás.
 
-% ------------------------------------------------------------
 \subsection{Detección del paso por meta y medición de tiempos}
 \label{subsec:control-meta}
 
@@ -612,7 +600,6 @@ Un detalle importante es qué relojes intervienen en la medida. Los instantes qu
 
 Con cada vuelta completada, el controlador publica en su topic de telemetría el tiempo obtenido junto con el número de vuelta y notifica el evento a todas las instancias del algoritmo indicando si la vuelta fue limpia, cerrando así el ciclo de aprendizaje descrito en la sección~\ref{subsec:control-algoritmo}.
 
-%-----------------------------------------------------------------------------------------------------------------
 
 \subsection{Topics y calidad de servicio}
 \label{subsec:control-topics}
@@ -622,7 +609,6 @@ Toda la información que genera el controlador se publica en topics de ROS 2, y,
 Por esta razón el controlador se suscribe a los topics que le suministran la información necesaria para el control. El más cŕitico es el el que le permite recibir la información del coche (\texttt{/carN/position}), todas las camaras que ven ese coche envían la información aquí. Dentro de este mensaje recibe la información necesaria para poder realizar el control, dentro de él, vienen la posiciónd de las pegatinas, que camara está enviando la información y el instante de captura. Además también se incluye otra información que el controlador no utiliza pero se usan después para el analisis en diferido. Destacar que para poder subscribirse al topic es necesario utilizar la misma calidad de servicio (QoS) con la que el nodo expone el topic. Además también se suscribe al topic que permite recibir la línea de meta y al topic global de control de la calibración.
 
 Respecto a las publicaciones, la consigna de velocidad se publica en el topic \texttt{/carN/pwd} con un mensaje que contiene el valor de PWM, el identificador del carril sobre el que debe aplicarse y una marca temporal. Este topic emplea de nuevo el perfil de datos de sensores por la misma razón que lo haciamos en la camara para publicar la posición de las etiquedas. Adicionalmente, el controlador publica dos topics de telemetría propios de su coche, ambos con el perfil de datos de sensores. Por último, el controlador puede publicar también en el topic de control de la calibración porque es el controlador quien avisa que la calibración termino para el coche que está controlado.
-% ------------------------------------------------------------
 
 
 \section{Sistema de actuación}
@@ -632,7 +618,6 @@ El sistema de actuación es el encargado de enviar los valores de PWM calculados
 
 A lo largo de esta sección se describe la configuración y despliegue del nodo, su modelo de ejecución concurrente, los topics a los que se suscribe junto con sus políticas de calidad de servicio, la interfaz de comunicación con el Arduino y, por último, el subsistema hardware.
 
-% ---------------------------------------------------------------------
 \subsection{Configuración y despliegue del nodo}
 \label{subsec:actuacion-despliegue}
 
@@ -651,7 +636,7 @@ Ahora bien, esta concurrencia en la recepción no puede trasladarse al envío. E
 
 \begin{figure}[H]
     \centering
-    \resizebox{0.95\textwidth}{!}{%
+    \resizebox{0.95\textwidth}{!}{
     \begin{tikzpicture}[
         font=\small,
         exec/.style={draw, thick, rounded corners=3pt, fill=blue!6,
@@ -714,7 +699,6 @@ Ahora bien, esta concurrencia en la recepción no puede trasladarse al envío. E
     \label{fig:concurrencia-puente}
 \end{figure}
 
-% ---------------------------------------------------------------------
 \subsection{Suscripciones y calidad de servicio}
 \label{subsec:actuacion-topics}
 
@@ -724,7 +708,6 @@ Para cada uno de los mensajes que llega el nodo extrae el identificador del carr
 
 La segunda suscripción es la del topic global de control de la calibración (\texttt{/modo\_calibracion}), con calidad de servicio fiable, a través del cual el nodo detecta esta fase y aplica por sí mismo a ambos carriles la velocidad de calibración definida en la configuración, ya que durante ella los controladores aún no publican valores de pwm.
 
-% ---------------------------------------------------------------------
 \subsection{Interfaz de comunicación con el Arduino}
 \label{subsec:actuacion-interfaz}
 
@@ -734,7 +717,6 @@ En su inicialización, la interfaz enumera los puertos serie disponibles en la m
 
 El protocolo de comunicación es textual y simple. Cada orden se codifica como una línea de texto de la forma \texttt{r<carril>:<valor>} (por ejemplo, \texttt{r1:120}), donde el primer campo identifica el carril y el segundo el valor de PWM a aplicar. Tras enviar una orden, la interfaz queda a la espera de la respuesta de la placa que responde con un mensaje de confirmación (\texttt{OK}), y solo entonces la operación se da por completada. Si la confirmación no llega dentro del tiempo límite, el envío se considera fallido y se notifica en el registro del nodo.
 
-% ---------------------------------------------------------------------
 \subsection{Subsistema hardware}
 \label{subsec:actuacion-hardware}
 
@@ -778,7 +760,7 @@ A lo largo de esta sección se describen ambas herramientas: en primer lugar la 
 
 \begin{figure}[H]
 \centering
-\resizebox{\textwidth}{!}{%
+\resizebox{\textwidth}{!}{
 \begin{tikzpicture}[
     font=\sffamily,
     sistema/.style={
@@ -865,7 +847,6 @@ La calidad de servicio se resuelve igualmente de forma automática. Como se expl
 
 Las grabaciones se almacenan en formato mcap, es el formato que usa por defecto, siendo el resto considerados como \emph{legacy}. Además el formato mcap incorpora dentro del propio fichero la definición completa de cada tipo de mensaje grabado, tal y como era en el momento de la grabación. Dado que los mensajes propios del sistema fueron evolucionando conforme avanzaba el proyecto (por ejemplo, se añadieron campos de telemetría a medida que se identifica nueva información que almecenar). Al llevar el fichero su propia descripción, cualquier sesión anterior sigue siendo legible sin necesidad de recuperar la versión del código con la que se grabó.
 
-% ---------------------------------------------------------------------
 \subsection{Herramienta de análisis en diferido}
 \label{subsec:visualizacion-analisis}
 
@@ -893,7 +874,7 @@ Destacar también que como cada cámara usa sus propias coordenadas de imagen, t
 
 \begin{table}[htbp]
 \centering
-\resizebox{\textwidth}{!}{%
+\resizebox{\textwidth}{!}{
 \begin{tabular}{|c|l|}
 \hline
 \rowcolor{ArqAzulClaro}
@@ -917,7 +898,7 @@ Destacar también que como cada cámara usa sus propias coordenadas de imagen, t
 \hline
 8 & Descarga de los datos en formato CSV \\
 \hline
-\end{tabular}%
+\end{tabular}
 }
 \caption{Secciones del \emph{dashboard} generado por la herramienta de análisis.}
 \label{tab:secciones-dashboard}

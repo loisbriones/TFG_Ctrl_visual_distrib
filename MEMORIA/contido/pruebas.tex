@@ -1,27 +1,13 @@
-% =====================================================================
-% Capítulo 6 - Pruebas
-% Borrador para revisión del tutor.
-% Cada prueba se estructura con las preguntas guía:
-%   ¿Para qué?  -> objetivo de la prueba
-%   ¿Cómo?      -> procedimiento / montaje
-%   ¿Qué?       -> qué información se mostrará y cómo se documenta el proceso
-%   Resultados  -> pendiente de completar tras ejecutar la prueba
-% =====================================================================
-
 \chapter{Pruebas}
 \label{cap:pruebas}
 
 \lettrine{E}{n} este capítulo se detallan las pruebas realizadas durante el desarrollo del proyecto. Las pruebas específicas validan cada nueva funcionalidad antes de pasar a la siguiente iteración, de modo que cada avance parte de una base firme y ya probada. Las pruebas finales se ejecutan al terminar la implementación y validan el sistema en su totalidad, comprobando el cumplimiento de los requisitos planteados inicialmente. Siempre que es posible, los resultados se apoyan en la telemetría grabada durante las sesiones y analizada con la herramienta desarrollada al efecto.
 
-% =====================================================================
 \section{Pruebas específicas}
 \label{sec:pruebas-especificas}
-% =====================================================================
 
-% ---------------------------------------------------------------------
 \subsection{Detección por color y calibración}
 \label{subsec:prueba-color}
-% ---------------------------------------------------------------------
 
 \paragraph{¿Para qué?} El objetivo es comprobar que la segmentación por color en el espacio HSV aísla correctamente las pegatinas del coche y que, a partir de las máscaras generadas, se detecta con precisión el centro geométrico de cada etiqueta. Se quiere demostrar que las máscaras se aplican de forma correcta y que la posición reportada corresponde realmente al centro de la pegatina.
 
@@ -30,10 +16,8 @@
 \paragraph{¿Qué?} Se mostrarán capturas del fotograma original junto a la máscara binaria resultante y el centro detectado marcado sobre la imagen. Se documentará en qué condiciones la detección es fiable y en cuáles se degrada.
 
 
-% ---------------------------------------------------------------------
 \subsection{Seguimiento con ROI extrapolado y oclusiones}
 \label{subsec:prueba-tracking}
-% ---------------------------------------------------------------------
 
 \paragraph{¿Para qué?} El objetivo es verificar que la predicción de la región de interés (ROI) mediante extrapolación lineal funciona correctamente y que el sistema sigue operando ante oclusiones parciales. Se quiere demostrar que el seguimiento mantiene la posición del coche cuando la detección es continua y que, cuando esta falla por una oclusión, la ventana de búsqueda se amplía y el vehículo se readquiere en cuanto vuelve a ser visible.
 
@@ -41,10 +25,8 @@
 
 \paragraph{¿Qué?} Se mostrará la evolución de la ROI sobre la secuencia de fotogramas, tanto en seguimiento normal como durante y después de una oclusión. Se documentará cuántos fotogramas tarda el sistema en volver a localizar el coche tras perderlo y cómo se comporta la ventana de búsqueda en ese intervalo.
 
-% ---------------------------------------------------------------------
 \subsection{Detección de la línea de meta y conteo de vueltas}
 \label{subsec:prueba-meta}
-% ---------------------------------------------------------------------
 
 \paragraph{¿Para qué?} El objetivo es comprobar que la línea de meta se detecta automáticamente por color y que el conteo de vueltas y la medición de tiempos se realizan de forma fiable. Se quiere demostrar que el cruce de meta se registra una sola vez por vuelta y que los tiempos medidos son consistentes.
 
@@ -52,10 +34,8 @@
 
 \paragraph{¿Qué?} Se mostrará el número de vueltas contabilizadas frente al número real de vueltas realizadas, junto con los tiempos por vuelta obtenidos de la telemetría. Se documentará si se produce algún fallo de conteo (vueltas duplicadas o no detectadas) y en qué circunstancias.
 
-% ---------------------------------------------------------------------
 \subsection{Control del Arduino}
 \label{subsec:prueba-arduino}
-% ---------------------------------------------------------------------
 
 \paragraph{¿Para qué?} El objetivo es validar que el actuador basado en Arduino funciona correctamente: que el programa se carga sin problemas y que, enviando comandos de forma manual, es posible controlar la velocidad del coche mediante señales PWM. Se quiere demostrar el correcto funcionamiento del control de bajo nivel del sistema.
 
@@ -63,10 +43,8 @@
 
 \paragraph{¿Qué?} Se mostrará la correspondencia entre los comandos enviados y la respuesta del coche, describiendo el proceso de carga del programa y de envío manual de consignas. Se documentará el rango de valores de PWM utilizable y el comportamiento observado.
 
-% ---------------------------------------------------------------------
 \subsection{Algoritmo de velocidad y respuesta a derrapes}
 \label{subsec:prueba-algoritmo}
-% ---------------------------------------------------------------------
 
 \paragraph{¿Para qué?} El objetivo es verificar el funcionamiento del algoritmo de velocidad por zonas: comprobar cómo mejora el tiempo por vuelta a medida que el coche completa vueltas limpias, cómo se detectan y se crean las zonas de derrape y cómo en esas zonas se reduce la velocidad para controlar el coche. Se quiere demostrar que el algoritmo aprende el circuito y maximiza la velocidad de forma independiente en cada tramo.
 
@@ -74,10 +52,8 @@
 
 \paragraph{¿Qué?} Se mostrará la evolución del tiempo por vuelta a lo largo de la sesión y la localización de las zonas de derrape sobre el circuito, junto con el perfil de PWM resultante. Se documentará cómo se van creando y ajustando esas zonas y cómo el resto del circuito continúa ganando velocidad vuelta tras vuelta.
 
-% ---------------------------------------------------------------------
 \subsection{Alta disponibilidad del controlador (tolerancia a fallos)}
 \label{subsec:prueba-tolerancia}
-% ---------------------------------------------------------------------
 
 \paragraph{¿Para qué?} El objetivo es validar la tolerancia a fallos del sistema distribuido, en concreto el reinicio automático de los nodos. Se quiere demostrar que, si un nodo cae durante la ejecución, el sistema se recupera automáticamente y la carrera puede continuar, comportamiento que constituye una de las aportaciones del proyecto frente a la arquitectura monolítica de partida.
 
@@ -85,10 +61,8 @@
 
 \paragraph{¿Qué?} Se mostrará la secuencia de eventos desde la caída del nodo hasta su reincorporación, apoyándose en los registros de la sesión. Se documentará el tiempo aproximado de recuperación y el efecto de la caída sobre el comportamiento del coche.
 
-% ---------------------------------------------------------------------
 \subsection{Latencia de red: Ethernet frente a WiFi}
 \label{subsec:prueba-red}
-% ---------------------------------------------------------------------
 
 \paragraph{¿Para qué?} El objetivo es medir la latencia que introduce la red en el sistema distribuido y determinar si supone un problema para el funcionamiento en tiempo real. En particular se quiere realizar varias combinaciones, indicando también el tipo de wifi que se uso y el tipo de adaptador utilizando para poder usar esa versión de wifi. Después el objetivo será valorar si la diferencia entre los distintos métodos es apreciable en el comportamiento de la aplicación.  
 
@@ -96,10 +70,8 @@
 
 \paragraph{¿Qué?} Se mostrarán las latencias medidas en cada configuración, tanto en el test aislado como con el sistema completo, y se compararán los escenarios Ethernet y WiFi. Se documentará si la diferencia se percibe.
 
-% ---------------------------------------------------------------------
 \subsection{Compatibilidad y rendimiento del hardware}
 \label{subsec:prueba-hardware}
-% ---------------------------------------------------------------------
 
 \paragraph{¿Para qué?} El objetivo es comprobar que el nodo camara puede funcionar correctamente en los dos modelos distintos de Raspberry Pi disponibles y, más allá de si simplemente arranca, valorar el rendimiento que ofrece cada uno.
 
@@ -107,10 +79,8 @@
 
 \paragraph{¿Qué?} Se mostrará una comparativa del rendimiento obtenido en cada modelo de Raspberry Pi, indicando si en ambos es posible ejecutar el nodo camara y a qué coste. Se documentará el proceso de despliegue y cualquier limitación observada en el modelo menos potente.
 
-% ---------------------------------------------------------------------
 %\subsection{Escalabilidad: incorporación de una cámara}
 %\label{subsec:prueba-escalabilidad}
-%% ---------------------------------------------------------------------
 %% Se me ocurrió la verdad que no lo probé y puede ser interesante mirar si se puede añadir una camara en caliente al sistema. El problema es seguramente el algoritmo y la razón por la que no sé puede hacer porque si movemos las camaras todo explote. Lo que se puede probar es tener una zona del circuito que no sé puede ver y después lo que hacemos es añadir una camara en esa zona. El problema no sería en la camara pero si en el controlador porque no tengo forma de una vez en modo carrera poder cambiar y poner a guardar la información qeu te llega se podría hacer simplemente que si no lo tienes en el diccionario y estas en modo carrera entonces tienes que guardarlo pero solo para esa camara y cuando cruce la linea de meta poner a fcunionar pero solo esa parte no sé que tan complicado podría ser.
 
 
@@ -122,15 +92,11 @@
 %\paragraph{¿Qué?} Se mostrará el proceso de incorporación de la nueva cámara y el momento en que sus detecciones comienzan a integrarse en el sistema. Se documentará que no ha sido necesaria ninguna reconfiguración manual y el efecto sobre la cobertura del circuito.
 %
 
-% =====================================================================
 \section{Pruebas finales}
 \label{sec:pruebas-finales}
-% =====================================================================
 
-% ---------------------------------------------------------------------
 \subsection{Demostración del sistema completo}
 \label{subsec:prueba-final}
-% ---------------------------------------------------------------------
 
 \paragraph{¿Para qué?} El objetivo es demostrar el funcionamiento del sistema completo y comprobar que se adapta a circuitos distintos, consiguiendo funcionar correctamente en todos ellos.
 
