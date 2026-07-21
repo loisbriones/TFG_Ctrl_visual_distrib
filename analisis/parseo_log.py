@@ -162,6 +162,9 @@ class Carrera:
     """Contenedor simple de todo lo extraído del log (sin lógica).
 
     Atributos rellenados por parsear_log():
+      camara           cámara dueña del log (de su [INIT]); los números de
+                       frame son de su contador y no se comparan con los de
+                       otra cámara (ver NUMERACION_FRAMES.md)
       fecha            texto ISO de la cabecera del log (o "")
       params           dict {nombre: float} con los [INIT] (v_min, v_max...)
       celdas           DataFrame [celda, x, y, gigante, long_px, acum]
@@ -190,6 +193,7 @@ class Carrera:
     """
 
     def __init__(self):
+        self.camara = ""
         self.fecha = ""
         self.params = {}
         self.celdas = None
@@ -563,6 +567,10 @@ def parsear_log(ruta: Path) -> Carrera:
     c.celdas = pd.DataFrame(
         filas_celda, columns=["celda", "x", "y", "gigante", "long_px", "acum"]
     )
+    # Los números de frame del log son de ESTA cámara y solo tienen sentido
+    # dentro de su escala, así que la cámara acompaña al número en todos los
+    # textos que este módulo genera (avisos de anomalías, etiquetas)
+    c.camara = camara_del_log(ruta)
     return c
 
 
@@ -674,7 +682,7 @@ def detectar_anomalias(c: Carrera, zonas_fin_vuelta, vueltas):
             avisos.append(
                 f"Derrape SOSPECHOSO de {int(d['n_celdas'])} celdas "
                 f"({100 * d['n_celdas'] / n:.0f} % de la cadena) en la vuelta "
-                f"{int(d['vuelta'])}, frame {int(d['frame'])}: celdas "
+                f"{int(d['vuelta'])}, {c.camara} frame {int(d['frame'])}: celdas "
                 f"[{int(d['ini'])}, {int(d['fin'])}]. Un derrape real dura "
                 f"unas pocas celdas: revisar los saltos de celda de la "
                 f"trasera en esos frames (siguiente comprobación)."
@@ -684,13 +692,22 @@ def detectar_anomalias(c: Carrera, zonas_fin_vuelta, vueltas):
     # el derrape abierto: el mecanismo exacto por el que se estira el intervalo
     fr = c.frames
     dc_b = fr["c_b"].diff().abs()
-    consecutivos = fr["frame"].diff() <= 2  # tolera 1 frame descartado en medio
+    # Los números de frame son del contador de ESTA cámara y avanzan de uno en
+    # uno mientras publique, así que la diferencia mide de verdad "cuántos
+    # fotogramas han pasado". Un hueco significa que la cámara procesó ese
+    # fotograma pero no publicó (no vio el coche). Se toleran 2 para no perder
+    # el caso de un frame descartado en medio.
+    # (Antes el número era un contador global del controlador, con los mensajes
+    # de todas las cámaras mezclados: con dos cámaras la diferencia entre
+    # frames consecutivos de la misma ya era >= 2 y esta comprobación se
+    # quedaba sin casos. Ver NUMERACION_FRAMES.md.)
+    consecutivos = fr["frame"].diff() <= 2
     con_derrape = fr["derrapando"] & fr["derrapando"].shift(fill_value=False)
     saltos = fr[(dc_b > SALTO_CELDAS_TRASERA_ANOMALO) & con_derrape & consecutivos]
     for _, s in saltos.iterrows():
         avisos.append(
             f"Salto de celda de la TRASERA con derrape abierto en la vuelta "
-            f"{int(s['vuelta'])}, frame {int(s['frame'])}: pasó a la celda "
+            f"{int(s['vuelta'])}, {c.camara} frame {int(s['frame'])}: pasó a la celda "
             f"{int(s['c_b'])} ({int(dc_b.loc[s.name])} celdas de golpe) — el "
             f"derrape en curso se extiende hasta ahí."
         )

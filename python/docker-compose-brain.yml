@@ -10,7 +10,17 @@ services:
     environment:
       - ROS_DOMAIN_ID=42
       - ROS_LOCALHOST_ONLY=0
+      # Sin esto el contenedor va en UTC (ros:humble viene así) y las marcas
+      # de hora de los logs del algoritmo (derrapesLog_*.txt) salen
+      # desfasadas respecto al reloj del PC y respecto al análisis, que corre
+      # fuera del contenedor. Los stamps de los mensajes NO se ven afectados:
+      # son epochs y las restas entre ellos dan igual el huso
+      - TZ=Europe/Madrid
     volumes:
+      # La zona horaria del host, ya compilada: glibc la lee aunque la imagen
+      # no tuviese tzdata. Va junto a TZ porque cada mecanismo cubre un hueco
+      # del otro (ver comentario de arriba)
+      - /etc/localtime:/etc/localtime:ro
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
     command: >
       bash -c "source /opt/ros/humble/setup.bash && colcon build --symlink-install &&

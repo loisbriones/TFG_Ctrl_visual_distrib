@@ -41,12 +41,25 @@ el contenedor y traduce las rutas.
 | 0 | Resumen de la carrera y anomalías detectadas | — |
 | 1 | Derrape 3D sobre la trayectoria (fig. 5.12 de Mario) | acumulativo (vueltas 1..v) |
 | 2 | Trayectorias delantera y trasera (fig. 5.17) | una vuelta cada vez |
-| 3 | Distancia perpendicular de la trasera vs celda | una vuelta cada vez |
+| 3 | Distancia perpendicular de la trasera vs celda (del log) | una vuelta cada vez |
+| 3b | `dist_derrape` del bag vs tiempo de vuelta, con la cámara de cada muestra y el PWM aplicado; debajo, el resumen por vuelta (3c) | una vuelta cada vez, **también con ← →** |
 | 4 | El circuito con el PWM de cada celda como número | una vuelta cada vez |
 | 5 | Tabla de tiempos por vuelta + tendencia | — |
 | 6 | Zonas (6a), heatmap de PWM (6b), resumen 2×2 (6c) | — |
-| 7 | Visor de imágenes + vídeo mosaico descargable | por frame |
+| 7 | Visor de imágenes + vídeo mosaico descargable | por imagen del bag |
 | 8 | Descarga de todas las tablas en CSV | — |
+
+### Números de frame
+
+Los `[FRAME n]` del log son el contador de **fotogramas procesados de esa
+cámara**, el mismo número que va quemado arriba a la izquierda de sus imágenes de
+debug (`camara_XX #n hora`). Por eso las etiquetas del dashboard dicen
+"camara_02 frame 1234" y no solo "frame 1234": **los números de dos cámaras no
+son comparables entre sí** (cada contador empieza cuando arranca su nodo); para
+cruzar cámaras se usa la hora. Ojo también con el slider de la sección 7: recorre
+el índice de la imagen dentro del bag, que no es el número de frame (solo se
+publica imagen de debug de algunos fotogramas). Detalle completo en
+`../NUMERACION_FRAMES.md`.
 
 ## Descargas
 
@@ -65,7 +78,7 @@ el contenedor y traduce las rutas.
 |---|---|
 | `analisis.py` | CLI, ensamblado del HTML y servidor con sus endpoints |
 | `parseo_log.py` | regex y parser del log del algoritmo, derivados por vuelta |
-| `lectura_bag.py` | lectura del bag (rosbag2_py + respaldo mcap), imágenes |
+| `lectura_bag.py` | lectura del bag (rosbag2_py + respaldo mcap), imágenes, PWM aplicado |
 | `figuras.py` | todas las figuras plotly, colores y offsets del plano global |
 
 **Multicámara**: cada cámara ve el circuito en sus propios píxeles, así que

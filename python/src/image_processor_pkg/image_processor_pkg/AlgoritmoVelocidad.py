@@ -619,6 +619,33 @@ class EstrategiaPerfil:
     # ======================================================================
     # LOCALIZACIÓN
     # ======================================================================
+    
+    def _dist_a_curva_local(self, p, P_prev, P_curr, P_next, n_muescas=16):
+        """
+        Calcula la distancia ortogonal desde el punto `p` a una curva parabólica suave
+        (polinomio de Lagrange C^1) que pasa exactamente por P_prev, P_curr y P_next.
+        Evita la congelación en vértices y genera una curva de off-tracking limpia.
+        """
+        # Vector de parámetros u desde -1 (P_prev) hasta 1 (P_next) pasando por 0 (P_curr)
+        u = np.linspace(-1.0, 1.0, n_muescas, dtype=np.float32).reshape(-1, 1)
+
+        # Pesos vectorizados del polinomio de Lagrange
+        L_prev = 0.5 * u * (u - 1.0)
+        L_curr = 1.0 - (u**2)
+        L_next = 0.5 * u * (u + 1.0)
+
+        # Generación de la micro-curva suave (matriz de n_muescas x 2)
+        curva = L_prev * P_prev + L_curr * P_curr + L_next * P_next
+
+        # Proyección ortogonal sobre los micro-segmentos de la curva continua
+        mejor_dist = float("inf")
+        for i in range(len(curva) - 1):
+            dist = self._dist_a_segmento(p, curva[i], curva[i + 1])
+            if dist < mejor_dist:
+                mejor_dist = dist
+
+        return mejor_dist
+
     def _dist_a_segmento(self, p, A, B):
         """
         Distancia del punto p al segmento AB (proyección con t acotado a
@@ -642,16 +669,11 @@ class EstrategiaPerfil:
         devuelve (índice de celda, distancia perpendicular), o None si aún
         no hay trayectoria cargada.
 
-        Funciona igual que siempre, en dos pasos:
-          1. GRUESO: celda cuyo punto está más cerca (argmin vectorizado).
-          2. FINO: distancia a los dos segmentos adyacentes (celda de atrás
-             -> celda del medio y celda del medio -> celda de delante); la
-             menor es la distancia perpendicular real. Solo se usan vecinos
-             CONSECUTIVOS en la cadena (a través de una celda gigante no hay
-             segmento que proyectar).
-
-        El índice devuelto es siempre el de la celda más cercana: la
-        posición del coche se aproxima a la celda, sin longitud de arco.
+        Paso GRUESO: celda cuyo punto está más cerca (argmin vectorizado).
+        Paso FINO: intenta formar un trío de celdas consecutivas (anterior,
+                   actual, siguiente) para construir una curva local suave (C^1).
+                   Si hay cortes por celdas gigantes o extremos abiertos, recae
+                   con elegancia en la proyección por segmentos.
         """
         if self._puntos is None or len(self._puntos) == 0:
             return None
@@ -663,27 +685,55 @@ class EstrategiaPerfil:
         mejor_dist = math.sqrt(float(d2[fila]))
 
         n_filas = len(self._puntos)
-        # Segmentos hacia la celda de atrás y la de delante, solo si son
-        # celdas consecutivas (índices ±1: sin celda gigante por medio)
-        segmentos = []
-        if fila > 0 and self._celda_de_punto[fila - 1] == idx - 1:
-            segmentos.append((fila - 1, fila))
-        if fila < n_filas - 1 and self._celda_de_punto[fila + 1] == idx + 1:
-            segmentos.append((fila, fila + 1))
-        # En cadena cerrada, el segmento "fantasma" última->primera celda
-        # (solo si no hay una celda gigante en el cierre)
-        if (
-            self._cerrada
-            and (fila == 0 or fila == n_filas - 1)
-            and (int(self._celda_de_punto[-1]) + 1) % self.n_celdas
-            == int(self._celda_de_punto[0])
-        ):
-            segmentos.append((n_filas - 1, 0))
 
-        for fa, fb in segmentos:
-            dist = self._dist_a_segmento(p, self._puntos[fa], self._puntos[fb])
-            if dist < mejor_dist:
-                mejor_dist = dist
+        # Identificar índices de las filas vecina anterior y posterior
+        f_prev = fila - 1
+        f_next = fila + 1
+
+        # Gestión de envoltura en cadena cerrada
+        if self._cerrada:
+            if fila == 0 and (int(self._celda_de_punto[-1]) + 1) % self.n_celdas == int(
+                self._celda_de_punto[0]
+            ):
+                f_prev = n_filas - 1
+            if fila == n_filas - 1 and (
+                int(self._celda_de_punto[-1]) + 1
+            ) % self.n_celdas == int(self._celda_de_punto[0]):
+                f_next = 0
+
+        # Comprobar si existe continuidad lógica en la cuadrícula (sin celdas gigantes por medio)
+        tengo_prev = (
+            f_prev >= 0
+            and self._celda_de_punto[f_prev] == (idx - 1) % self.n_celdas
+        )
+        tengo_next = (
+            f_next < n_filas
+            and self._celda_de_punto[f_next] == (idx + 1) % self.n_celdas
+        )
+
+        # CASO IDEAL: Trío continuo -> Proyectamos sobre curva suave C^1
+        if tengo_prev and tengo_next:
+            mejor_dist = self._dist_a_curva_local(
+                p,
+                self._puntos[f_prev],
+                self._puntos[fila],
+                self._puntos[f_next],
+            )
+        else:
+            # CASO DE DEGRADACIÓN (extremos abiertos o junto a celda gigante):
+            # Recaemos en tu lógica original de segmentos adyacentes
+            segmentos = []
+            if tengo_prev:
+                segmentos.append((f_prev, fila))
+            if tengo_next:
+                segmentos.append((fila, f_next))
+
+            for fa, fb in segmentos:
+                dist = self._dist_a_segmento(
+                    p, self._puntos[fa], self._puntos[fb]
+                )
+                if dist < mejor_dist:
+                    mejor_dist = dist
 
         return idx, mejor_dist
 
@@ -696,6 +746,12 @@ class EstrategiaPerfil:
         posiciones de las dos pegatinas y devuelve el PWM a aplicar, o None
         si el fotograma se descarta (el controlador mantiene entonces la
         velocidad anterior).
+
+        `frame_count` es el contador de la CÁMARA dueña de esta instancia (el
+        campo n_frame del CarLocation), no un contador global del sistema: solo
+        se usa para etiquetar el log, y sus números casan con los que van
+        quemados en las imágenes de debug de esa cámara. Los números de dos
+        cámaras no son comparables entre sí (ver NUMERACION_FRAMES.md).
 
         Pasos:
           1. Localiza la pegatina FRONTAL (define la posición del coche).
@@ -802,6 +858,11 @@ class EstrategiaPerfil:
         Aviso del controlador: el coche dejó de verse por esta cámara (la
         cámara activa conmutó a otra). Si había un derrape abierto se cierra
         con lo que llevaba: no van a llegar más frames que lo extiendan.
+
+        `frame_count` tiene que ser el último frame que vio ESTA cámara, no el
+        del mensaje que disparó el aviso (que viene de la cámara nueva y está en
+        otra escala de numeración): el controlador lo saca de
+        ultimo_frame_camara justo por eso.
         """
         if self._estado_derrapando:
             self.saveLogFile(

@@ -120,6 +120,10 @@ def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
       vueltas     [{numero, tiempo, t}]           /telemetria/coche/time_per_lap
                   ("t" marca el FIN de la vuelta: el mensaje se publica al
                   cruzar meta, así que la vuelta ocupa [t - tiempo*1e9, t])
+      pwm         [{t, pwm}]                      /coche/pwd
+                  (la orden de PWM que el controlador mandó al puente; se
+                  publica una por posición procesada, así que sirve para
+                  saber con qué velocidad iba el coche en cada instante)
       imagenes    {camara: [(t, bytes jpeg)]}     /camara_XX/camara_debug
                   (solo si con_imagenes=True: es lo más pesado del bag)
     """
@@ -136,12 +140,14 @@ def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
     topic_pos = f"/{coche}/position"
     topic_tel = f"/telemetria/{coche}/car_control"
     topic_lap = f"/telemetria/{coche}/time_per_lap"
+    topic_pwm = f"/{coche}/pwd"
     tipos = {t.name: t.type for t in reader.get_all_topics_and_types()}
     # Los topics de imagen se descubren por patrón (hay uno por cámara)
     topics_img = sorted(t for t in tipos if re.fullmatch(r"/camara_[^/]+/camara_debug", t))
 
-    interesantes = [topic_pos, topic_tel, topic_lap] + (topics_img if con_imagenes else [])
-    faltan = [t for t in [topic_pos, topic_tel, topic_lap] if t not in tipos]
+    interesantes = ([topic_pos, topic_tel, topic_lap, topic_pwm]
+                    + (topics_img if con_imagenes else []))
+    faltan = [t for t in [topic_pos, topic_tel, topic_lap, topic_pwm] if t not in tipos]
     if topic_pos in faltan:
         sys.exit(f"ERROR: el bag no contiene {topic_pos} (topics: {sorted(tipos)})")
     if faltan:
@@ -154,7 +160,7 @@ def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
     clases = {t: get_message(tipos[t]) for t in presentes}
     decodificadores = None  # se construyen solo si una deserialización falla
 
-    posiciones, telemetria, vueltas = [], [], []
+    posiciones, telemetria, vueltas, pwm = [], [], [], []
     imagenes = {}
     while reader.has_next():
         topic, data, t_ns = reader.read_next()
@@ -189,6 +195,13 @@ def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
                     "fy": msg.front.center.y,
                     "bx": msg.back.center.x,
                     "by": msg.back.center.y,
+                    # Nº de frame del contador de esa cámara: es el número que
+                    # va quemado en su imagen de debug y el que el algoritmo
+                    # escribe en su log, así que permite casar las tres cosas.
+                    # getattr porque los bags grabados antes de que CarLocation
+                    # tuviera el campo se decodifican con el esquema embebido y
+                    # no lo traen (ver NUMERACION_FRAMES.md).
+                    "n_frame": getattr(msg, "n_frame", None),
                 }
             )
         elif topic == topic_tel:
@@ -201,6 +214,10 @@ def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
             )
         elif topic == topic_lap:
             vueltas.append({"numero": msg.lap_number, "tiempo": msg.lap_time, "t": t_ns})
+        elif topic == topic_pwm:
+            # El carril (msg.carril) no se guarda: ya se filtró por coche al
+            # elegir el topic, y el dashboard solo mira un coche cada vez
+            pwm.append({"t": t_ns, "pwm": int(msg.pwm)})
         else:  # imagen de debug: el nombre de cámara es el primer tramo del topic
             camara = topic.split("/")[1]
             imagenes.setdefault(camara, []).append((t_ns, bytes(msg.data)))
@@ -209,6 +226,7 @@ def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
         "posiciones": posiciones,
         "telemetria": telemetria,
         "vueltas": vueltas,
+        "pwm": pwm,
         "imagenes": imagenes,
     }
 
@@ -238,6 +256,23 @@ def emparejar_telemetria(telemetria, posiciones_validas):
         else:
             indices.append(None)
     return indices
+
+
+def pwm_en_instantes(tiempos_ns, pwm):
+    """PWM vigente en cada instante de `tiempos_ns`: el del último mensaje de
+    /coche/pwd anterior o igual a ese instante (una orden de PWM sigue en
+    vigor hasta que llega la siguiente).
+
+    Devuelve una lista paralela a tiempos_ns con el valor entero, o None si
+    ese instante es anterior a la primera orden grabada."""
+    if not pwm:
+        return [None] * len(tiempos_ns)
+    tiempos_pwm = [m["t"] for m in pwm]  # ordenados: el bag se lee en orden
+    resultado = []
+    for t in tiempos_ns:
+        i = bisect.bisect_right(tiempos_pwm, t) - 1
+        resultado.append(pwm[i]["pwm"] if i >= 0 else None)
+    return resultado
 
 
 def repartir_por_vueltas(tiempos_ns, vueltas):

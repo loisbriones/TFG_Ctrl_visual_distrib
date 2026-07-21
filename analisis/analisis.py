@@ -61,11 +61,13 @@ import figuras
 from figuras import (
     COL_GRID, COL_SERIE_1, COL_SUPERFICIE, COL_TINTA, COL_TINTA_2, FUENTE,
     PANELES_6C, _layout_base, grafica_1_derrape3d, grafica_2_trayectorias,
-    grafica_3_dist, grafica_4_circuito, grafica_6a_zonas, grafica_6b_heatmap,
+    grafica_3_dist, grafica_3b_derrape_bag, grafica_3c_resumen_derrape,
+    grafica_4_circuito, grafica_6a_zonas, grafica_6b_heatmap,
     grafica_6c_resumen, grafica_6c_subplot,
 )
 from lectura_bag import (
-    emparejar_telemetria, encontrar_bag, leer_bag, repartir_por_vueltas,
+    emparejar_telemetria, encontrar_bag, leer_bag, pwm_en_instantes,
+    repartir_por_vueltas,
 )
 from parseo_log import (
     camara_del_log, derivar_por_vuelta, detectar_anomalias, parsear_log,
@@ -80,12 +82,23 @@ PUERTO = 8988
 # múltiplo de la media (paradas, salidas de pista, relocalizaciones largas)
 FACTOR_VUELTA_ANOMALA = 2.0
 
+# Umbral de derrape que dibuja la sección 3b cuando no hay ningún log del
+# algoritmo del que leerlo (es el valor por defecto de EstrategiaPerfil)
+UMBRAL_DERRAPE_DEF = 8.0
+
+# id del <div> de la gráfica 3b: lo necesita el script que mueve la vuelta
+# con las flechas del teclado (ver seccion_3b_derrape_bag)
+ID_GRAFICA_3B = "g-derrape-bag"
+
 # fps del vídeo mosaico de la sección 7 (--vídeo, no --datos--: es solo para
 # revisar las cámaras, no hace falta que sea exacto). Las cámaras no están
 # sincronizadas por timestamp en el mosaico: se combinan por ÍNDICE de
-# frame (i-ésimo frame de cada cámara), que es una aproximación razonable
+# imagen (i-ésima imagen de cada cámara), que es una aproximación razonable
 # porque todas capturan a un ritmo similar (~30 Hz); si hace falta más
 # precisión, cambiar aquí a un montaje por timestamp más cercano.
+# Ese índice NO es el número de frame de la cámara: solo se publica imagen de
+# debug de algunos fotogramas. El número de frame va quemado dentro de cada
+# imagen y es el que casa con el log del algoritmo (ver NUMERACION_FRAMES.md).
 FPS_VIDEO = 20.0
 ALTO_VIDEO = 480  # px: todas las cámaras se reescalan a este alto para el mosaico
 
@@ -144,6 +157,154 @@ def buscar_logs(argumentos, carpeta_bag):
         else:
             sys.exit(f"ERROR: no existe {p}")
     return rutas
+
+
+# ---------------------------------------------------------------------------
+# Sección 3b: la distancia de derrape tal como quedó GRABADA en el bag
+# ---------------------------------------------------------------------------
+# La sección 3 cuenta la distancia perpendicular desde el log del algoritmo
+# (por cámara, contra la celda); esta la cuenta desde el bag y contra el
+# tiempo de la vuelta, que es lo que hace falta para responder a "¿por qué
+# esta vuelta tiene un pico de 60 px si el coche no derrapó?".
+# ---------------------------------------------------------------------------
+# Cuántas muestras seguidas se consideran "recién entradas" en una cámara.
+# Mientras la pegatina TRASERA va todavía por detrás del inicio de la cadena
+# de la cámara que acaba de coger el coche, localizar() devuelve la celda más
+# cercana (la 0) y una distancia que ya no es perpendicular sino
+# LONGITUDINAL: un pico falso que puede abrir un derrape donde no lo hay.
+# Con ~30 Hz y los circuitos de las pruebas, la cola termina de entrar en 3
+# fotogramas; subirlo marca más muestras como sospechosas.
+MUESTRAS_TRAS_CAMBIO_CAMARA = 3
+
+
+def marcar_tras_cambio_camara(df_tel):
+    """Serie booleana paralela a df_tel: True en las primeras
+    MUESTRAS_TRAS_CAMBIO_CAMARA muestras de cada tramo de cámara nueva."""
+    marca = []
+    cam_anterior = None
+    desde_cambio = 10 ** 6  # arranque: nadie viene de un cambio
+    for fila in df_tel.itertuples():
+        if fila.camara and fila.camara != cam_anterior:
+            desde_cambio = 0
+            cam_anterior = fila.camara
+        marca.append(desde_cambio < MUESTRAS_TRAS_CAMBIO_CAMARA)
+        desde_cambio += 1
+    return pd.Series(marca, index=df_tel.index)
+
+
+def anomalias_derrape_bag(df_tel, umbral):
+    """Avisos sobre la serie dist_derrape del bag para el resumen de la
+    cabecera. De momento uno solo, el que explica los picos que no se
+    corresponden con ningún derrape real: los que salen justo después de un
+    cambio de cámara."""
+    sobre = df_tel["dist"] > umbral
+    n_sobre = int(sobre.sum())
+    if not n_sobre:
+        return []
+    recien = sobre & marcar_tras_cambio_camara(df_tel)
+    n_recien = int(recien.sum())
+    if not n_recien:
+        return []
+    return [
+        f"3b: {n_recien} de las {n_sobre} muestras que pasan el umbral de "
+        f"derrape ({umbral:.0f} px) están en los {MUESTRAS_TRAS_CAMBIO_CAMARA} "
+        f"primeros frames tras un cambio de cámara, y llegan a "
+        f"{df_tel.loc[recien, 'dist'].max():.0f} px. Ahí la pegatina trasera "
+        f"todavía va por detrás del inicio de la cadena de la cámara que "
+        f"entra, así que localizar() devuelve la celda 0 y una distancia "
+        f"LONGITUDINAL, no perpendicular: son picos falsos."
+    ]
+
+
+def tabla_derrape_por_vuelta(df_tel, umbral):
+    """Un resumen por vuelta de la serie dist_derrape del bag: máximo,
+    percentil 95, mediana, cuántas muestras pasan el umbral, cuántas tenían
+    derrape abierto y el PWM medio aplicado. Alimenta la figura 3c."""
+    filas = []
+    for v, g in df_tel.groupby("vuelta"):
+        filas.append({
+            "vuelta": int(v),
+            "n_muestras": len(g),
+            "dist_max": g["dist"].max(),
+            "dist_p95": g["dist"].quantile(0.95),
+            "dist_mediana": g["dist"].median(),
+            "n_sobre_umbral": int((g["dist"] > umbral).sum()),
+            "n_derrapando": int(g["derrapando"].sum()),
+            "pwm_medio": g["pwm"].mean(),
+        })
+    return pd.DataFrame(filas)
+
+
+def seccion_3b_derrape_bag(fig_detalle, fig_resumen, primera):
+    """El HTML de la sección: la gráfica por vueltas (con el script de las
+    flechas) y debajo el resumen de toda la carrera.
+
+    Las flechas ←/→ solo actúan mientras el ratón está ENCIMA de la gráfica:
+    así no se roban las teclas al resto de la página (que se recorre con las
+    flechas como en cualquier sitio) y no hay que hacer clic en ningún sitio
+    para que funcionen."""
+    detalle = fig_detalle.to_html(
+        full_html=False, include_plotlyjs=primera, div_id=ID_GRAFICA_3B,
+        config={"displaylogo": False, "responsive": True},
+    )
+    resumen = fig_resumen.to_html(
+        full_html=False, include_plotlyjs=False,
+        config={"displaylogo": False, "responsive": True},
+    )
+    return f"""
+<section><h2>3b · Distancia de derrape del bag, vuelta a vuelta</h2>
+<p>El <code>dist_derrape</code> que publicó el controlador
+(<code>/telemetria/&lt;coche&gt;/car_control</code>), muestra a muestra, a lo
+largo de una vuelta. En gris el fondo con todas las vueltas; cada punto de la
+vuelta activa va del color de la <strong>cámara</strong> que envió la posición
+que lo originó y las líneas de puntos verticales marcan los cambios de cámara.
+El eje derecho (verde) es el PWM que se estaba aplicando en ese instante
+(<code>/&lt;coche&gt;/pwd</code>). El nombre de la vuelta en la leyenda lleva su
+máximo, el rango de PWM y cuántas muestras pasaron el umbral.</p>
+<p>Con el <strong>ratón encima de la gráfica</strong>, las flechas
+<strong>←</strong> y <strong>→</strong> cambian de vuelta (también se puede
+arrastrar el slider). El eje vertical está fijo para todas las vueltas: así se
+comparan de una a otra sin que el autoescalado engañe.</p>
+<p><strong>Qué mirar:</strong> un derrape de verdad es una subida y bajada
+suave en mitad de una curva, con el coche bien dentro del campo de una cámara.
+Un pico estrecho que arranca <em>justo en una línea de puntos</em> (cambio de
+cámara) y decae en dos o tres muestras no es un derrape: la pegatina trasera
+todavía va por detrás del inicio de la cadena de la cámara que entra, así que
+<code>localizar()</code> la asigna a la celda 0 y devuelve una distancia
+<em>longitudinal</em>, no perpendicular. La delantera está filtrada por
+<code>max_dist_ruta</code>, pero la trasera no.</p>
+{detalle}
+<script>
+(function() {{
+  const gd = document.getElementById("{ID_GRAFICA_3B}");
+  if (!gd) return;
+  let encima = false;
+  gd.addEventListener("mouseenter", function() {{ encima = true; }});
+  gd.addEventListener("mouseleave", function() {{ encima = false; }});
+  document.addEventListener("keydown", function(ev) {{
+    if (!encima) return;
+    let paso = 0;
+    if (ev.key === "ArrowRight") paso = 1;
+    else if (ev.key === "ArrowLeft") paso = -1;
+    else return;
+    ev.preventDefault();  // que la página no se desplace con las flechas
+    const slider = gd.layout.sliders[0];
+    const actual = slider.active || 0;
+    const k = Math.min(slider.steps.length - 1, Math.max(0, actual + paso));
+    if (k === actual) return;
+    // El paso del slider ya lleva el array de visibilidad de esa vuelta:
+    // se aplica igual que si se hubiera pinchado en él
+    Plotly.update(gd, slider.steps[k].args[0], {{"sliders[0].active": k}});
+  }});
+}})();
+</script>
+<div class="descargas">{boton_pdf("3b", "Descargar gráfica (PDF)")}
+{boton_csv("derrape_bag", "Descargar muestras (CSV)")}</div>
+{resumen}
+<div class="descargas">{boton_pdf("3c", "Descargar resumen (PDF)")}
+{boton_csv("derrape_por_vuelta", "Descargar resumen (CSV)")}</div>
+</section>
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -311,16 +472,23 @@ def seccion_7_visor(imagenes, t0_ns):
     return f"""
 <section><h2>7 · Visor de imágenes de las cámaras</h2>
 <p>Los fotogramas de depuración que grabó cada cámara en el bag
-({', '.join(f'{html.escape(c)}: {n_frames[c]}' for c in camaras)} frames).
+({', '.join(f'{html.escape(c)}: {n_frames[c]}' for c in camaras)} imágenes).
 Las imágenes se piden al servidor según se mueve el slider (no van dentro
 del HTML: pesarían cientos de MB). Las cámaras se combinan por índice de
-frame, no por timestamp exacto.</p>
+imagen, no por timestamp exacto.</p>
+<p><b>El índice del slider NO es el número de frame.</b> Cada cámara solo
+publica imagen de debug de algunos de los fotogramas que procesa, así que la
+i-ésima imagen del bag no es el frame i. El número bueno es el que va quemado
+arriba a la izquierda de cada imagen (<code>camara_XX #N hora</code>): ese es el
+que aparece en las líneas <code>[FRAME N]</code> del log de esa cámara. Los
+números de dos cámaras distintas no son comparables entre sí: para cruzarlas se
+usa la hora.</p>
 <div class="visor">
   <div class="visor-controles">
     <button id="visor-ant">◀ anterior</button>
     <input type="range" id="visor-slider" min="0" max="{n_max - 1}" value="0">
     <button id="visor-sig">siguiente ▶</button>
-    <span id="visor-pos">frame 0 / {n_max - 1}</span>
+    <span id="visor-pos">imagen 0 / {n_max - 1}</span>
   </div>
   <div class="visor-rejilla">{celdas}</div>
   <div class="visor-descargas">
@@ -340,16 +508,17 @@ frame, no por timestamp exacto.</p>
   const pos = document.getElementById("visor-pos");
   function pintar() {{
     const i = parseInt(slider.value, 10);
-    pos.textContent = "frame " + i + " / " + slider.max;
+    pos.textContent = "imagen " + i + " / " + slider.max;
     for (const cam of camaras) {{
-      // Cada cámara tiene su propio número de frames: si esta se queda
-      // corta se muestra su último frame disponible
+      // Cada cámara tiene su propio número de imágenes: si esta se queda
+      // corta se muestra su última imagen disponible. Es un índice dentro
+      // del bag, no el nº de frame (ese va quemado en la propia imagen)
       const ult = tiempos[cam].length - 1;
       const j = Math.min(i, ult);
       document.getElementById("img-" + cam).src =
         "/frames/" + encodeURIComponent(cam) + "/" + j + ".jpg";
       document.getElementById("cap-" + cam).textContent =
-        "frame " + j + " · t = " + tiempos[cam][j] + " s";
+        "imagen " + j + " · t = " + tiempos[cam][j] + " s";
     }}
     // La descarga del frame actual usa la primera cámara marcada
     const marcada = document.querySelector(".orden-cam:checked");
@@ -743,12 +912,47 @@ def main():
           f"telemetrías emparejadas: {sum(1 for i in indices_tel if i is not None)}"
           f"/{len(telemetria)}")
 
+    # El DataFrame de la sección 3b: una fila por TELEMETRÍA caída dentro de
+    # una vuelta, con el instante relativo al cruce de meta que la abrió, la
+    # cámara y la pegatina trasera que la originaron (emparejadas arriba) y
+    # el PWM que estaba en vigor en ese momento
+    umbral_derrape = next(
+        (d["c"].params["umbral_derrape"] for d in logs.values()
+         if "umbral_derrape" in d["c"].params), UMBRAL_DERRAPE_DEF)
+    vuelta_de_tel = repartir_por_vueltas([m["t"] for m in telemetria], vueltas)
+    pwm_de_tel = pwm_en_instantes([m["t"] for m in telemetria], bag["pwm"])
+    # Inicio de cada vuelta: el mensaje time_per_lap se publica al CERRARLA,
+    # así que la vuelta empezó lap_time segundos antes de ese instante
+    inicio_vuelta = {v["numero"]: v["t"] - int(v["tiempo"] * 1e9) for v in vueltas}
+    filas_tel = []
+    for m, i_pos, v, pwm in zip(telemetria, indices_tel, vuelta_de_tel, pwm_de_tel):
+        if v is None:
+            continue  # calibración o hueco entre vueltas: no va en la figura
+        p = pos_validas[i_pos] if i_pos is not None else None
+        filas_tel.append({
+            "vuelta": v,
+            "t_vuelta": (m["t"] - inicio_vuelta[v]) / 1e9,
+            "dist": m["dist"],
+            "derrapando": m["derrapando"],
+            "camara": p["camara"] if p else None,
+            "bx": p["bx"] if p else np.nan,
+            "by": p["by"] if p else np.nan,
+            "pwm": pwm,
+        })
+    df_tel = pd.DataFrame(filas_tel)
+    print(f"Telemetrías dentro de vueltas: {len(df_tel)}"
+          + (f" · dist máx {df_tel['dist'].max():.1f} px · "
+             f"{int((df_tel['dist'] > umbral_derrape).sum())} muestras sobre el "
+             f"umbral ({umbral_derrape:.0f} px)" if len(df_tel) else ""))
+
     # --- Resumen + anomalías -----------------------------------------------
     avisos = []
     for camara, d in logs.items():
         avisos += [f"[{camara}] {a}" if varias else a
                    for a in detectar_anomalias(d["c"], d["zonas_fin_vuelta"],
                                                d["vueltas"])]
+    if len(df_tel):
+        avisos += anomalias_derrape_bag(df_tel, umbral_derrape)
     lista_avisos = "".join(f"<li>{html.escape(a)}</li>" for a in avisos) or \
         "<li>Sin anomalías detectadas.</li>"
     resumen_logs = "".join(
@@ -838,6 +1042,28 @@ def main():
         ))
         primera = False
 
+    # --- 3b: la misma distancia, pero la que quedó grabada en el bag -------
+    # Va aquí (y no dentro del `if logs`) porque no necesita el log: sale de
+    # la telemetría del propio bag
+    if len(df_tel):
+        TABLAS["derrape_bag"] = df_tel
+        tabla_3c = tabla_derrape_por_vuelta(df_tel, umbral_derrape)
+        TABLAS["derrape_por_vuelta"] = tabla_3c
+        FIGURAS["3b"] = grafica_3b_derrape_bag(df_tel, umbral_derrape)
+        FIGURAS["3c"] = grafica_3c_resumen_derrape(tabla_3c, umbral_derrape)
+        partes.append(seccion_3b_derrape_bag(FIGURAS["3b"], FIGURAS["3c"], primera))
+        primera = False
+    else:
+        partes.append(
+            "<section><h2>3b · Distancia de derrape del bag, vuelta a "
+            "vuelta</h2><p>El bag no trae telemetría del controlador "
+            "(<code>/telemetria/&lt;coche&gt;/car_control</code>) dentro de "
+            "vueltas cronometradas, así que no hay <code>dist_derrape</code> "
+            "que dibujar. Es lo que pasa con las grabaciones hechas sin el "
+            "algoritmo (PWM manual): solo llevan posiciones, órdenes de PWM y "
+            "tiempos de vuelta.</p></section>")
+
+    if logs:
         FIGURAS["4"] = grafica_4_circuito(logs)
         partes.append(seccion(
             "4 · El circuito con el PWM de cada celda",

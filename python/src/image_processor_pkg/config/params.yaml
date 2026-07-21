@@ -18,7 +18,7 @@
       # Tamaño del kernel que vamos a usar para generar la mascara 
       mascara_kernel_size: 25 
       # Parametro que controla si estamos en modo debug o no, en caso de estar en bug se envia la imagen de lo que ve la camara
-      debug: False
+      debug: True 
 
       # Parametros para el modulo de deteccion 
       detection:
@@ -36,16 +36,15 @@
     # Parámetros para el controlador
     controller:
       # Velocidad minima a la que podemos ir
-      minimum_speed: 75 
+      minimum_speed: 70 
       # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
-      maximum_speed: 100 
+      maximum_speed: 90 
       distancia_nodos_trayectoria: 15.0
       umbral_control_trayectoria_correcta: 60.0 
       umbral_derrape_peligro: 10.0
       umbral_derrape_seguro: 9.0
       latencia_min_nodos: 1
       latencia_max_nodos: 10
-      debounce_meta: 1.0
 
     # Parámetros para el Arduino
     arduino:

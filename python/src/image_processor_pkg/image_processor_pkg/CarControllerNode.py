@@ -66,30 +66,50 @@ class CarControllerNode(Node):
         self.trayectoria_base = {}
         self.algoritmos = {}
         self.vueltas = 0
-        self.frame_count = 0
         self.derrapes_ultima_vuelta = 0
 
         self.finish_line = {"camara_id": None, "coordenadas": None}
-        self.tiempo_ultima_vuelta = None
-        self.declare_parameter("controller.debounce_meta", 1.0)
-        self.debounce_meta = self.get_parameter("controller.debounce_meta").value
 
-        # --- INTERPOLACIÓN DEL INSTANTE DE PASO POR META ---
-        # A ~30 Hz el cruce real ocurre ENTRE dos frames: asignarle el stamp
-        # del frame que lo detecta mete hasta ~33 ms de error por vuelta.
-        # Igual que hacía Mario en su TFG, interpolamos linealmente el
-        # instante exacto entre el frame anterior (delantera aún sin cruzar)
-        # y el actual, proporcionalmente a la distancia perpendicular de
-        # cada uno a la recta de meta. Los tiempos son stamps de CAPTURA de
-        # la cámara que ve la meta: como el tiempo de vuelta es la
-        # diferencia de dos stamps de la MISMA Raspberry, el desfase de
-        # reloj entre máquinas se cancela (no hace falta NTP).
+        # --- DETECCIÓN E INSTANTE DEL PASO POR META ---
+        # El cruce se detecta con la pegatina DELANTERA sola: se mide su
+        # distancia perpendicular CON SIGNO a la recta de meta (el signo
+        # dice de qué lado de la recta está) y se da la meta por cruzada
+        # cuando ese signo cambia entre dos fotogramas. Frente a cortar el
+        # segmento delantera->trasera contra el de meta (el método del TFG
+        # de Adrián, que sigue disponible en crosses_segment):
+        #   - Es un FLANCO por naturaleza: un coche parado a caballo de la
+        #     línea tiene signo constante y no cuenta vueltas. Con el corte
+        #     de segmentos la condición era cierta de forma continua y hacía
+        #     falta un debounce temporal, que contaba una vuelta por segundo
+        #     con el coche quieto encima de la meta.
+        #   - Detectar e interpolar pasan a ser el MISMO evento: si se
+        #     detecta porque la delantera cambió de lado, el instante exacto
+        #     del cruce cae por definición entre esos dos fotogramas.
+        #   - No necesita la trasera, así que la cámara puede publicar en
+        #     calibración aunque solo vea la delantera (más puntos para la
+        #     trayectoria base) sin provocar cruces falsos.
         #
-        # (punto_front, stamp_ns) del mensaje ANTERIOR de la cámara de meta
+        # Interpolar importa porque a ~30 Hz el cruce real ocurre ENTRE dos
+        # fotogramas: quedarse con el stamp del que lo detecta mete hasta
+        # ~33 ms de error por vuelta. Es la idea de Mario en su TFG
+        # (getTiempoVuelta), con distancia perpendicular real en vez de la
+        # aproximación por el eje dominante de la meta. Los tiempos son
+        # stamps de CAPTURA de la cámara que ve la meta: como el tiempo de
+        # vuelta es la diferencia de dos stamps de la MISMA Raspberry, el
+        # desfase de reloj entre máquinas se cancela (no hace falta NTP).
+        #
+        # (punto_front, stamp_ns, distancia_con_signo) del mensaje ANTERIOR
+        # de la cámara de meta
         self.front_meta_anterior = None
         # Instante interpolado (ns, reloj de la Raspberry de meta) del
-        # último cruce; la diferencia entre dos de estos es el lap_time
+        # último cruce; la diferencia entre dos de estos es el lap_time, y
+        # que siga a None marca que aún no hemos pasado por meta ninguna vez
         self.t_meta_anterior = None
+        # Tolerancia (px) para dar un cambio de signo por bueno: el punto de
+        # cruce interpolado cae sobre la RECTA de meta, pero la meta es un
+        # SEGMENTO; si su prolongación corta la pista en otro sitio, el
+        # cambio de signo de allí se descarta por esta distancia
+        self.umbral_meta = 30.0
 
         # --- ORDEN SECUENCIAL DE CÁMARAS ---
         # El coche recorre las cámaras siempre en el mismo orden (se va por
@@ -111,6 +131,13 @@ class CarControllerNode(Node):
         # {cámara: cámara anterior en el orden de paso}: se rellena en cada
         # conmutación y tras una vuelta completa queda el ciclo entero
         self.camara_precedente = {}
+        # {cámara: último n_frame recibido de ella}. El controlador ya no lleva
+        # ningún contador propio: el número de fotograma lo pone cada cámara
+        # (msg.n_frame) y solo tiene sentido dentro de su propia escala. Esto
+        # guarda el último de cada una para poder etiquetar eventos que se
+        # escriben en el log de una cámara pero los dispara un mensaje de otra
+        # (ver la llamada a notificar_perdida_vision más abajo).
+        self.ultimo_frame_camara = {}
 
         self.sub_car_position = self.create_subscription(
             CarLocation,
@@ -193,17 +220,18 @@ class CarControllerNode(Node):
             self.camara_activa = None
             self.t_ultimo_frame_valido = None
             self.camara_precedente.clear()
+            # Los nodos cámara NO reinician su contador al reiniciar la
+            # calibración (siguen corriendo), pero los números guardados aquí
+            # son de la carrera anterior: mejor vaciarlos que arrastrarlos
+            self.ultimo_frame_camara.clear()
             # El cronómetro de meta también parte de cero
             self.front_meta_anterior = None
             self.t_meta_anterior = None
-            self.tiempo_ultima_vuelta = None
             self.publicar_velocidad(0)
             self.get_logger().warn("⚠️ Reiniciando calibración.")
 
 
     def callback_posicion(self, msg: CarLocation):
-        self.frame_count += 1
-
         if self.en_calibracion:
             self.recolectar_datos_calibracion(msg)
         else:
@@ -221,19 +249,27 @@ class CarControllerNode(Node):
 
         punto_front = np.array([fx, fy], dtype=np.float32)
 
-        if camara not in self.puntos_crudos:
-            self.puntos_crudos[camara] = []
+        # Solo se graba la vuelta que va del PRIMER paso por meta al
+        # segundo: todo lo anterior (colocar el coche, arrancar, las vueltas
+        # que dé mientras se lanza el resto del sistema) se descarta. Así la
+        # trayectoria base es exactamente UNA vuelta y empieza en la meta,
+        # en vez de la vuelta y pico con cola duplicada de antes.
+        # La trasera puede llegar como (0, 0) si la cámara no la vio: da
+        # igual, ni la trayectoria ni la detección de meta la usan.
+        if self.t_meta_anterior is not None:
+            if camara not in self.puntos_crudos:
+                self.puntos_crudos[camara] = []
 
-        self.puntos_crudos[camara].append((fx, fy))
+            self.puntos_crudos[camara].append((fx, fy))
 
         punto_back = np.array([bx, by], dtype=np.float32)
         # Como ya dimos una vuelta podemos terminar la calibración
         if self.verificar_linea_meta(camara, punto_front, punto_back, msg.stamp):
-            msg = Bool()
-            msg.data = False
-            self.pub_modo_calibracion.publish(msg)
+            msg_fin_calibracion = Bool()
+            msg_fin_calibracion.data = False
+            self.pub_modo_calibracion.publish(msg_fin_calibracion)
             self.get_logger().info(
-                "¡Flag activado! Se ha publicado: True en /modo_calibracion"
+                "🏁 Vuelta de calibración completada: publicado False en /modo_calibracion"
             )
 
     def procesar_trayectorias(self):
@@ -276,6 +312,18 @@ class CarControllerNode(Node):
                 f"✅ {camara}: Ruta base con {len(ruta_limpia)} nodos. Algoritmo de perfil inyectado."
             )
 
+            # Una vuelta entera vista por una cámara da del orden de cientos
+            # de nodos separados 15 px. Si salen cuatro, la vuelta de
+            # calibración fue un espejismo (cruce de meta falso) o la cámara
+            # apenas vio el coche: el perfil de PWM no puede funcionar y es
+            # mejor enterarse aquí que tras media carrera sin acelerar.
+            if len(ruta_limpia) < 20:
+                self.get_logger().error(
+                    f"❌ {camara}: la ruta base tiene solo {len(ruta_limpia)} nodos. "
+                    "La vuelta de calibración no es válida: repítela antes de "
+                    "dar valor a nada de lo que venga después."
+                )
+
         # 3. Guardamos en disco la trayectoria de puntos por cámara
         try:
             with open(self.cache_file, "w") as f:
@@ -284,6 +332,13 @@ class CarControllerNode(Node):
             self.get_logger().info(f"💾 Trayectoria del controlador guardada en {self.cache_file}")
         except Exception as e:
             self.get_logger().error(f"❌ Error guardando caché del controlador: {e}")
+
+        # La carrera empieza AQUÍ: el cruce de meta que acaba de cerrar la
+        # calibración es también el inicio de la vuelta 1, y t_meta_anterior
+        # ya apunta a ese instante, así que el tiempo de la primera vuelta
+        # sale bien sin tocar nada más. Las vueltas de la calibración no se
+        # cuentan: antes la numeración de la carrera empezaba en 2 o en 3.
+        self.vueltas = 0
 
         self.get_logger().info("🚗 ¡Mapa mental listo! Pasando a MODO CARRERA.")
 
@@ -307,8 +362,14 @@ class CarControllerNode(Node):
         if self.verificar_linea_meta(camara, punto_front, punto_back, msg.stamp):
             self.registrar_vuelta_algoritmos()
 
+        # El número de fotograma lo pone la cámara emisora y se guarda por
+        # cámara: la instancia del algoritmo de esta cámara escribe su log en la
+        # misma escala, así que sus líneas [FRAME n] casan con la imagen de
+        # debug que lleva ese mismo número quemado
+        self.ultimo_frame_camara[camara] = msg.n_frame
+
         # 🏎️ MAGIA: el algoritmo se encarga de detectar el derrape y pedir la velocidad
-        nueva_vel = self.algoritmos[camara].actualizar_estado(punto_front, punto_back, self.frame_count, self.vueltas)
+        nueva_vel = self.algoritmos[camara].actualizar_estado(punto_front, punto_back, msg.n_frame, self.vueltas)
 
         # Si el algoritmo nos dice que ignoremos el frame por ruido, nueva_vel será None
         if nueva_vel is not None:
@@ -334,9 +395,26 @@ class CarControllerNode(Node):
                 if sin_activa > self.timeout_camara_activa:
                     # La activa dejó de ver el coche: conmutamos. Se cierra
                     # cualquier derrape que tuviera abierto (no van a llegar
-                    # más frames que lo extiendan) y se apunta el orden
+                    # más frames que lo extiendan) y se apunta el orden.
+                    #
+                    # OJO con el número de frame: este es el ÚNICO sitio donde
+                    # el evento lo dispara un mensaje de una cámara (la nueva)
+                    # pero se escribe en el log de OTRA (la activa, que es la
+                    # dueña de esta instancia del algoritmo). Cada cámara tiene
+                    # su propia numeración, empezada a contar cuando arrancó su
+                    # nodo, así que meter aquí msg.n_frame dejaría en el log de
+                    # la cámara antigua un número de otra escala — y no se
+                    # queda en la línea del aviso: _cerrar_derrape reusa ese
+                    # mismo número para la línea CERRADO, que el análisis mete
+                    # en la tabla de derrapes y dibuja sobre el eje de frames.
+                    # El derrape cerrado por conmutación (justo el caso
+                    # interesante del sistema distribuido) acabaría marcado en
+                    # una posición inventada. Se pasa el último frame que la
+                    # cámara que pierde el coche vio de verdad, que además es
+                    # lo que el evento describe. Desarrollado en
+                    # NUMERACION_FRAMES.md.
                     self.algoritmos[self.camara_activa].notificar_perdida_vision(
-                        self.vueltas, self.frame_count
+                        self.vueltas, self.ultimo_frame_camara[self.camara_activa]
                     )
                     self.camara_precedente[camara] = self.camara_activa
                     self.get_logger().info(
@@ -430,6 +508,16 @@ class CarControllerNode(Node):
         self.pub_time_per_lap.publish(msg_time_per_lap)
 
     def crosses_segment(self, p1, p2, A, B):
+        # MÉTODO ALTERNATIVO DE PASO POR META (el del TFG de Adrián), hoy
+        # sin usar: ¿se cortan el segmento p1-p2 (delantera->trasera) y el
+        # segmento A-B (la meta)? Test clásico de orientaciones con los
+        # casos colineales, más un filtro previo de distancia para descartar
+        # rápido. Se conserva por si se quiere volver a él, pero tiene dos
+        # inconvenientes que llevaron a detectar el cruce con el cambio de
+        # signo de la delantera (ver verificar_linea_meta): necesita ver las
+        # DOS pegatinas, y es cierto durante toda la pasada en vez de en un
+        # instante, así que un coche parado sobre la línea lo cumple
+        # indefinidamente.
         thr = 30.0
         d1 = self.distancia_punto_segmento(p1, A, B)
         d2 = self.distancia_punto_segmento(p2, A, B)
@@ -465,53 +553,30 @@ class CarControllerNode(Node):
 
         return False
 
-    def interpolar_instante_meta(self, p_curr, t_curr, A, B):
-        # Instante exacto (ns) en el que la delantera cruzó la recta de meta,
-        # interpolando linealmente entre el frame anterior (front_meta_anterior)
-        # y el actual. Se llama SOLO en el frame en el que el cruce cuenta
-        # (primer cruce o vuelta que pasa el debounce): la detección ya la
-        # hizo crosses_segment; aquí solo se reparte el tiempo.
-        if self.front_meta_anterior is None:
-            self.get_logger().warn(
-                "🏁 Cruce de meta sin frame anterior guardado: "
-                "se usa el stamp del frame actual sin interpolar"
-            )
-            return t_curr
-        p_prev, t_prev = self.front_meta_anterior
-
-        # d(P) = cross(B-A, P-A) / |B-A| es la distancia perpendicular CON
-        # SIGNO a la recta (el signo dice de qué lado está P). Es la fórmula
-        # del TFG de Mario (getTiempoVuelta) pero con distancia perpendicular
-        # real en vez de la aproximación por el eje dominante de la meta.
-        # Producto cruzado 2D escrito a mano (np.cross con vectores 2D está
-        # retirado en NumPy 2.x)
+    def distancia_con_signo(self, P, A, B):
+        # Distancia perpendicular de P a la RECTA que pasa por A y B, con
+        # signo: el signo dice de qué lado de la recta cae P, y por eso un
+        # cambio de signo entre dos fotogramas significa que el coche cruzó.
+        # d(P) = cross(B-A, P-A) / |B-A|, con el producto cruzado 2D escrito
+        # a mano (np.cross con vectores 2D está retirado en NumPy 2.x)
         AB = B - A
-        norma = float(np.linalg.norm(AB))
-        AP_prev = p_prev - A
-        AP_curr = p_curr - A
-        d_prev = float(AB[0] * AP_prev[1] - AB[1] * AP_prev[0]) / norma
-        d_curr = float(AB[0] * AP_curr[1] - AB[1] * AP_curr[0]) / norma
-
-        if d_prev * d_curr >= 0:
-            # Guard de VALIDEZ, no re-detección: interpolar entre t_prev y
-            # t_curr solo tiene sentido si el cruce cayó dentro de ese
-            # intervalo, es decir, si la delantera cambió de lado entre esos
-            # dos frames. Caso raro NO soportado (p. ej. se perdió el frame
-            # justo antes del cruce y el anterior ya estaba pasado): se usa
-            # el stamp de captura del frame actual tal cual, que sigue siendo
-            # mejor que el reloj del controlador.
-            self.get_logger().warn(
-                "🏁 Interpolación de meta sin cambio de lado "
-                f"(d_prev={d_prev:.1f}, d_curr={d_curr:.1f}): "
-                "se usa el stamp del frame actual sin interpolar"
-            )
-            return t_curr
-
-        # Fracción del intervalo entre frames recorrida hasta tocar la recta
-        s = abs(d_prev) / (abs(d_prev) + abs(d_curr))
-        return t_prev + s * (t_curr - t_prev)
+        AP = P - A
+        return float(AB[0] * AP[1] - AB[1] * AP[0]) / float(np.linalg.norm(AB))
 
     def verificar_linea_meta(self, camara_id, p_front, p_back, stamp):
+        """
+        Procesa un mensaje de la cámara que ve la meta y devuelve True si
+        con él se ha completado una vuelta.
+
+        El cruce es el CAMBIO DE SIGNO de la distancia de la pegatina
+        delantera a la recta de meta entre el fotograma anterior y este
+        (ver el bloque de comentarios del __init__). Si lo hay, el instante
+        exacto se interpola dentro de ese intervalo, proporcionalmente a lo
+        cerca que estaba la delantera de la recta en cada extremo.
+
+        `p_back` no se usa: sigue en la firma porque es lo que necesita el
+        método alternativo (crosses_segment) si se quiere volver a él.
+        """
         if (
             self.finish_line["camara_id"] is None
             or camara_id != self.finish_line["camara_id"]
@@ -525,57 +590,82 @@ class CarControllerNode(Node):
         A_np = np.array(A, dtype=np.float32)
         B_np = np.array(B, dtype=np.float32)
 
-        esta_cruzando = self.crosses_segment(p_front, p_back, A_np, B_np)
+        d_curr = self.distancia_con_signo(p_front, A_np, B_np)
 
         vuelta_completada = False
 
-        if esta_cruzando:
-            ahora = self.get_clock().now()
+        if self.front_meta_anterior is None:
+            # Primer mensaje de la cámara de meta: no hay "antes" con el que
+            # comparar el signo. Se avisa una sola vez y se guarda abajo.
+            self.get_logger().info(
+                "🏁 Primer fotograma de la cámara de meta recibido: "
+                "empieza la vigilancia del cruce de la línea."
+            )
+        else:
+            p_prev, t_prev, d_prev = self.front_meta_anterior
 
-            # OJO: la interpolación se calcula SOLO dentro de las dos ramas
-            # que consumen el instante (primer cruce y vuelta que pasa el
-            # debounce). El coche está a caballo de la meta varios frames
-            # seguidos y en los frames que el debounce descarta la delantera
-            # ya está pasada de línea: interpolar ahí no tendría sentido.
+            # d == 0 es la delantera JUSTO encima de la recta, y pasa de
+            # verdad: el centro de la pegatina es x + w/2 del boundingRect,
+            # o sea múltiplos de 0,5, los extremos de la meta son enteros
+            # (find_finish_line los saca con //2) y la meta suele quedar casi
+            # vertical u horizontal, así que en cuanto la delantera cae en
+            # esa columna el producto da 0 exacto. Por eso el cambio de lado
+            # se comprueba con <= 0 (tocar la línea ya
+            # cuenta como cruce, con s=1, o sea este mismo fotograma) y se
+            # exige d_prev != 0 para que el fotograma siguiente no lo cuente
+            # otra vez. Con < 0 estricto, un fotograma sobre la línea hacía
+            # desaparecer la vuelta entera sin dejar rastro.
+            if d_prev != 0.0 and d_prev * d_curr <= 0.0:
+                # La delantera cambió de lado: cruzó la recta de meta en
+                # algún punto entre el fotograma anterior y este.
+                # Fracción del intervalo recorrida hasta tocar la recta
+                # (0 = justo en el anterior, 1 = justo en este)
+                s = abs(d_prev) / (abs(d_prev) + abs(d_curr))
+                # Punto donde tocó la recta. La meta es un SEGMENTO, no una
+                # recta infinita: si el punto de cruce cae lejos de él, el
+                # coche cruzó la prolongación de la línea por otra parte del
+                # circuito y esto NO es un paso por meta. Como el punto está
+                # sobre la recta, su distancia al segmento es 0 mientras
+                # caiga dentro y umbral_meta actúa solo como tolerancia más
+                # allá de los extremos.
+                p_cruce = p_prev + s * (p_front - p_prev)
+                dist_meta = self.distancia_punto_segmento(p_cruce, A_np, B_np)
 
-            # Devolvemos False porque es la primera vez que cruza
-            if self.tiempo_ultima_vuelta is None:
-                self.tiempo_ultima_vuelta = ahora
-                self.t_meta_anterior = self.interpolar_instante_meta(
-                    p_front, t_stamp, A_np, B_np
-                )
-                self.get_logger().info(
-                    "🏁 Primera pasada por meta. Iniciando cronómetro..."
-                )
-            else:
-                # El debounce sigue con el reloj del controlador (mide "hace
-                # cuánto detectamos el cruce anterior", no necesita precisión)
-                diferencia_segundos = (
-                    ahora - self.tiempo_ultima_vuelta
-                ).nanoseconds / 1e9
-
-                # Devolvemos True porque es la segunda vez que cruza ahora empezo la carrera
-                if diferencia_segundos > self.debounce_meta:
-                    self.vueltas += 1
-                    # El tiempo de vuelta publicado es la diferencia entre
-                    # los dos instantes INTERPOLADOS de paso por meta
-                    t_meta = self.interpolar_instante_meta(
-                        p_front, t_stamp, A_np, B_np
+                if dist_meta > self.umbral_meta:
+                    self.get_logger().warn(
+                        f"🏁 Cambio de lado a {dist_meta:.0f} px del segmento de "
+                        f"meta (> {self.umbral_meta:.0f}): el coche cruzó la "
+                        "prolongación de la línea, no la meta. No cuenta."
                     )
-                    lap_time = (t_meta - self.t_meta_anterior) / 1e9
-                    self.publicar_time_lap(lap_time, self.vueltas)
-                    self.get_logger().info(
-                        f"⏱️ ¡VUELTA {self.vueltas} COMPLETADA! Tiempo: {lap_time:.3f} s"
-                    )
-                    self.tiempo_ultima_vuelta = ahora
+                else:
+                    # Instante exacto del cruce, interpolado entre los stamps
+                    # de CAPTURA de los dos fotogramas
+                    t_meta = t_prev + s * (t_stamp - t_prev)
+
+                    if self.t_meta_anterior is None:
+                        # Primera pasada: solo arranca el cronómetro. En
+                        # calibración es además el punto donde empieza a
+                        # grabarse la trayectoria base.
+                        self.get_logger().info(
+                            "🏁 Primera pasada por meta. Iniciando cronómetro..."
+                        )
+                    else:
+                        # El tiempo de vuelta es la diferencia entre los dos
+                        # instantes INTERPOLADOS de paso por meta
+                        self.vueltas += 1
+                        lap_time = (t_meta - self.t_meta_anterior) / 1e9
+                        self.publicar_time_lap(lap_time, self.vueltas)
+                        self.get_logger().info(
+                            f"⏱️ ¡VUELTA {self.vueltas} COMPLETADA! Tiempo: {lap_time:.3f} s"
+                        )
+                        vuelta_completada = True
+
                     self.t_meta_anterior = t_meta
 
-                    vuelta_completada = True
-
-        # Guardamos SIEMPRE el último punto/stamp de la cámara de meta: en el
-        # próximo cruce será el punto "pre-meta" de la interpolación (el
+        # Guardamos SIEMPRE los datos de la delantera: en el próximo
+        # fotograma serán el "antes" con el que comparar el signo (el
         # equivalente a trayectoria[-1] en el código de Mario)
-        self.front_meta_anterior = (p_front.copy(), t_stamp)
+        self.front_meta_anterior = (p_front.copy(), t_stamp, d_curr)
 
         return vuelta_completada
 

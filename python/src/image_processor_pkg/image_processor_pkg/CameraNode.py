@@ -135,10 +135,43 @@ class ImageProcessor(Node):
         # ---- DEBUG ----
         self.declare_parameter("camera.debug", False)
         self.debug = self.get_parameter("camera.debug").value
+        # (frame copiado, stamp de captura, nº de frame) que le toca dibujar a
+        # _tarea_debug
         self.next_debug_frame = None
         self.puntos_for_debug = {}
-        # Para controlar el cuando hay datos de debug y cuando no
-        self.save_data = False
+        # Para controlar el cuando hay datos de debug y cuando no. Es el
+        # handshake entre los dos timers, que están en callback groups
+        # distintos y por tanto corren en paralelo:
+        #   True  -> "hacen falta datos nuevos": process_frame copia el frame
+        #            y los hilos de tarea_por_coche rellenan puntos_for_debug
+        #   False -> "los datos ya están listos": _tarea_debug los dibuja,
+        #            publica la imagen y vuelve a pedir poniéndolo a True
+        # Como cada lado solo toca los datos en su mitad del ciclo, no hacen
+        # falta locks. Arranca valiendo lo mismo que debug porque eso es
+        # justo una petición pendiente: si empezara en False con
+        # next_debug_frame a None, _tarea_debug saldría sin llegar a pedir
+        # nada y process_frame no capturaría nunca, los dos esperándose para
+        # siempre (era lo que hacía que arrancar con debug: True no publicase
+        # ni una imagen). Es lo mismo que hace parameters_callback cuando se
+        # activa el debug en caliente.
+        self.save_data = self.debug
+
+        # ---- CONTADOR DE FRAMES ----
+        # Cuenta los fotogramas que PROCESA este nodo (los que consume
+        # process_frame, no los que el hilo de captura saca del hardware). Ese
+        # número identifica el fotograma en los tres sitios donde puede acabar:
+        # quemado en la imagen de debug, dentro del CarLocation publicado y, vía
+        # controlador, en las líneas [FRAME n] del log del algoritmo. Con él, una
+        # línea de log, un mensaje del bag y una imagen del visor se pueden casar.
+        #
+        # Es un contador LOCAL a esta cámara y empieza en 0 al arrancar el nodo:
+        # los números de dos cámaras NO son comparables entre sí (cada Raspberry
+        # arranca cuando arranca). Sincronizar un contador único entre nodos
+        # exigiría un topic de reloj lógico, y no hace falta: el stamp de captura
+        # que ya viaja en el mensaje es lo que permite cruzar cámaras. La regla,
+        # desarrollada en NUMERACION_FRAMES.md, es: dentro de una cámara se
+        # compara por número de frame; entre cámaras, por stamp.
+        self.n_frame = 0
 
         # ---- ACTUALIZACION PARAMETROS ----
         self.add_on_set_parameters_callback(self.parameters_callback)
@@ -336,16 +369,16 @@ class ImageProcessor(Node):
                     result.successful = False
                     result.reason = "El kernel_size debe ser un número impar"
                 else:
-                    # Para que tenga efecto es necesario poner el modo calibracion por seguridad
-                    self.mascara_kernel_size = param.value
+                    self.kernel_size = param.value
+                    self.actualizar_detector()
 
             elif param.name == "camera.mascara_kernel_size":
                 if param.value % 2 == 0:
                     result.successful = False
                     result.reason = "El kernel_size debe ser un número impar"
                 else:
-                    self.kernel_size = param.value
-                    self.actualizar_detector()
+                    # Para que tenga efecto es necesario poner el modo calibracion por seguridad
+                    self.mascara_kernel_size = param.value
 
             elif param.name == "camera.debug":
                 self.debug = param.value
@@ -381,7 +414,7 @@ class ImageProcessor(Node):
         """Función auxiliar para re-instanciar el detector con los nuevos valores."""
         self.color_detector = ColorDetector(self.stiker_front, self.stiker_back, self.kernel_size)
 
-    def publish_car_position(self, detections, proc_duration, x, y, car_name, frame_stamp):
+    def publish_car_position(self, detections, proc_duration, x, y, car_name, frame_stamp, n_frame):
         object_location_msg = CarLocation()
         object_bounding_rect_front = BoundingRect() 
         object_bounding_rect_back = BoundingRect()
@@ -431,6 +464,11 @@ class ImageProcessor(Node):
         # Raspberry, el desfase de reloj entre máquinas se cancela solo.
         object_location_msg.stamp = frame_stamp
 
+        # Nº de frame de ESTA cámara: es lo que el controlador le pasa al
+        # algoritmo para que sus líneas [FRAME n] del log apunten al mismo
+        # fotograma que lleva el número quemado en la imagen de debug
+        object_location_msg.n_frame = n_frame
+
         self.publisher_coche[car_name].publish(object_location_msg)
 
     def process_frame(self):
@@ -451,10 +489,22 @@ class ImageProcessor(Node):
         if current_frame is None:
             return
 
+        # Este fotograma sí se procesa: le toca número. Se cuenta AQUÍ y no en
+        # _capture_loop para que la numeración sea consecutiva y un hueco en el
+        # log signifique una sola cosa ("esta cámara no publicó ese frame"), en
+        # vez de mezclar eso con los frames que el timer de 30 Hz descarta. No
+        # necesita lock: solo lo toca este timer, que está en un callback group
+        # mutuamente exclusivo y además protegido por is_processing.
+        self.n_frame += 1
+
         self.is_processing = True
         try:
             if self.debug and self.save_data:
-                self.next_debug_frame = current_frame.copy()
+                # El frame, su stamp y su número viajan juntos en la misma tupla
+                # (igual que latest_frame en _capture_loop): así la imagen de
+                # debug no puede acabar publicada con el stamp ni con el número
+                # de otro fotograma
+                self.next_debug_frame = (current_frame.copy(), frame_stamp, self.n_frame)
 
             futures = []
             for car_name in self.coches:
@@ -463,6 +513,7 @@ class ImageProcessor(Node):
                         self.tarea_por_coche,
                         current_frame,
                         frame_stamp,
+                        self.n_frame,
                         car_name,
                         self.info_coches[car_name],
                     )
@@ -515,7 +566,7 @@ class ImageProcessor(Node):
     """
     Funcion que ejecutan los threads que se encargan de buscar los Stikers de los coches en el frame
     """
-    def tarea_por_coche(self, frame, frame_stamp, car_name, info):
+    def tarea_por_coche(self, frame, frame_stamp, n_frame, car_name, info):
 
         # --- MODO CALIBRACIÓN ---
         if self.modo_calibracion:
@@ -524,7 +575,7 @@ class ImageProcessor(Node):
                 info["puntos_trayectoria"].append((detections["front"]["cx"], detections["front"]["cy"]))
                 # Usamos 0,0 como offset porque es el frame completo
                 # Solo publicamos en calibración si hemos detectado algo
-                self.publish_car_position(detections, 0.0, 0, 0, car_name, frame_stamp)
+                self.publish_car_position(detections, 0.0, 0, 0, car_name, frame_stamp, n_frame)
             return
 
         # --- MODO OPERACION---
@@ -561,7 +612,7 @@ class ImageProcessor(Node):
             info["roi_size"] = 150  # Resetear tamaño de búsqueda
 
             # 5. Publicar (Solo lo hacemos si hemos encontrado el coche)
-            self.publish_car_position(detections, duration, x1, y1, car_name, frame_stamp)
+            self.publish_car_position(detections, duration, x1, y1, car_name, frame_stamp, n_frame)
 
             if self.debug and self.save_data:
                 # Restauramos la estructura del diccionario si venimos de perder el coche
@@ -584,49 +635,124 @@ class ImageProcessor(Node):
             # Evitamos que la información de debug se quede dibujando "fantasmas"
             self.puntos_for_debug[car_name] = None
 
+    def _dibujar_marca(self, frame, stamp, n_frame):
+        """
+        Quema la identidad del fotograma en la esquina superior izquierda, como
+        el reloj de una cámara de vigilancia: qué cámara, qué número de frame y
+        la hora de CAPTURA. Las tres cosas viajan también en los mensajes, pero
+        ahí se pierden en cuanto la imagen se guarda suelta o se mira fuera de
+        ROS; dentro del píxel van siempre con ella.
+
+        El número es lo que permite decir "esta imagen es el frame 1234 del
+        log": es el mismo que el CarLocation de ese fotograma lleva en n_frame
+        y el que el algoritmo escribe en sus líneas [FRAME n]. Ojo: solo se
+        publica imagen de debug de algunos fotogramas (el handshake save_data
+        pide una imagen nueva cuando termina de dibujar la anterior), así que
+        estos números avanzan a saltos. El índice de una imagen dentro del bag
+        NO es el número de frame; el bueno es este.
+        """
+        # stamp es un builtin_interfaces/Time (sec + nanosec) tomado con el
+        # reloj del nodo justo al leer el frame del hardware, en _capture_loop.
+        # La hora se formatea en el huso del CONTENEDOR, que los
+        # docker-compose igualan al del host con TZ + /etc/localtime (sin eso
+        # ros:humble va en UTC y la marca sale con horas de desfase respecto
+        # al reloj de la máquina). El huso se pinta al lado justamente para
+        # que se note si alguna Raspberry se despliega mal configurada: ahí
+        # pondría UTC en vez de la hora local.
+        # Se saca un único struct_time y se formatea dos veces: llamar dos
+        # veces a localtime podría caer a los dos lados de un cambio de hora.
+        local = time.localtime(stamp.sec)
+        texto = (
+            f"{self.camara_id} #{n_frame} "
+            f"{time.strftime('%H:%M:%S', local)}.{stamp.nanosec // 1_000_000:03d} "
+            f"{time.strftime('%Z', local)}"
+        )
+
+        origen = (10, 25)  # esquina superior izquierda, ya dentro del frame
+        fuente = cv.FONT_HERSHEY_SIMPLEX
+        escala = 0.5
+        # Recuadro negro de fondo para que el texto se lea igual sobre pista
+        # clara que sobre pista oscura. El truco habitual de escribir dos
+        # veces (contorno grueso negro + relleno fino blanco) NO vale aquí:
+        # el grosor cambia el avance entre letras, así que las dos pasadas
+        # salen desplazadas y el texto se ve doble.
+        (ancho, alto), base = cv.getTextSize(texto, fuente, escala, 1)
+        cv.rectangle(
+            frame,
+            (origen[0] - 4, origen[1] - alto - 4),
+            (origen[0] + ancho + 4, origen[1] + base),
+            (0, 0, 0),
+            -1,
+        )
+        cv.putText(frame, texto, origen, fuente, escala, (255, 255, 255), 1, cv.LINE_AA)
+
     def _tarea_debug(self):
-        if not self.debug or self.save_data or self.next_debug_frame is None:
+        if not self.debug or self.save_data:
             return
+
+        # Referencia local: en cuanto save_data vuelva a True (lo pone
+        # parameters_callback desde otro hilo) process_frame puede reasignar
+        # next_debug_frame, y leerlo varias veces daría una imagen mezcla de
+        # dos fotogramas. Coger el nombre una sola vez es atómico en Python.
+        datos = self.next_debug_frame
+        if datos is None:
+            return
+        frame_debug, stamp_debug, n_frame_debug = datos
 
         # Dibujamos los puntos de TODOS los coches que estén en el diccionario
         for car_name in self.coches:
-            if self.puntos_for_debug[car_name] is not None:
-                debug_x = self.puntos_for_debug[car_name]["debug_x"]
-                debug_y = self.puntos_for_debug[car_name]["debug_y"]
-                for p in self.puntos_for_debug[car_name]["debug_points"]:
-                    # Coordenadas globales del bounding rect y del centro
-                    gx = int(debug_x + p["x"])
-                    gy = int(debug_y + p["y"])
-                    gw = int(gx + p["w"])
-                    gh = int(gy + p["h"])
-                    gcx = int(debug_x + p["cx"])
-                    gcy = int(debug_y + p["cy"])
+            # Otra referencia local, y por un motivo más serio: la rama de
+            # "coche no encontrado" de tarea_por_coche pone esta entrada a
+            # None desde un hilo del pool. Si eso se colara entre el "is not
+            # None" y el acceso, el callback petaría con un TypeError y se
+            # llevaría el nodo por delante.
+            puntos = self.puntos_for_debug[car_name]
+            if puntos is None:
+                continue
 
-                    # Cadena de ifs para contraste según el color detectado (en BGR)
-                    if p["color"] in ["rojo", "naranja"]:
-                        rect_color = (255, 255, 0)  # Cian
-                    elif p["color"] == "verde":
-                        rect_color = (255, 0, 255)  # Magenta
-                    elif p["color"] == "azul":
-                        rect_color = (0, 255, 255)  # Amarillo
-                    else:
-                        rect_color = (255, 255, 0)  # Cian por defecto
+            debug_x = puntos["debug_x"]
+            debug_y = puntos["debug_y"]
+            for p in puntos["debug_points"]:
+                # Coordenadas globales del bounding rect y del centro
+                gx = int(debug_x + p["x"])
+                gy = int(debug_y + p["y"])
+                gw = int(gx + p["w"])
+                gh = int(gy + p["h"])
+                gcx = int(debug_x + p["cx"])
+                gcy = int(debug_y + p["cy"])
 
-                    # 1. Dibujamos los bordes del rectángulo
-                    cv.rectangle(self.next_debug_frame, (gx, gy), (gw, gh), rect_color, 2)
+                # Cadena de ifs para contraste según el color detectado (en BGR)
+                if p["color"] in ["rojo", "naranja"]:
+                    rect_color = (255, 255, 0)  # Cian
+                elif p["color"] == "verde":
+                    rect_color = (255, 0, 255)  # Magenta
+                elif p["color"] == "azul":
+                    rect_color = (0, 255, 255)  # Amarillo
+                else:
+                    rect_color = (255, 255, 0)  # Cian por defecto
 
-                    # 2. Dibujamos la cruceta en el centro exacto (reemplaza al cv.circle)
-                    c_size = 3  # Tamaño del aspa de la cruz
-                    cv.line(self.next_debug_frame, (gcx - c_size, gcy), (gcx + c_size, gcy), (0, 255, 255), 1)
-                    cv.line(self.next_debug_frame, (gcx, gcy - c_size), (gcx, gcy + c_size), (0, 255, 255), 1)
+                # 1. Dibujamos los bordes del rectángulo
+                cv.rectangle(frame_debug, (gx, gy), (gw, gh), rect_color, 2)
+
+                # 2. Dibujamos la cruceta en el centro exacto (reemplaza al cv.circle)
+                c_size = 3  # Tamaño del aspa de la cruz
+                cv.line(frame_debug, (gcx - c_size, gcy), (gcx + c_size, gcy), (0, 255, 255), 1)
+                cv.line(frame_debug, (gcx, gcy - c_size), (gcx, gcy + c_size), (0, 255, 255), 1)
+
+        # Lo último antes de comprimir: cámara, nº de frame y hora de captura
+        # quemados en la imagen
+        self._dibujar_marca(frame_debug, stamp_debug, n_frame_debug)
 
         # Comprimir y publicar
         success, buffer = cv.imencode(
-            ".jpg", self.next_debug_frame, [cv.IMWRITE_JPEG_QUALITY, 70]
+            ".jpg", frame_debug, [cv.IMWRITE_JPEG_QUALITY, 70]
         )
         if success:
             msg = CompressedImage()
-            msg.header.stamp = self.get_clock().now().to_msg()
+            # Instante de CAPTURA del frame, no el de publicación: es lo que
+            # permite casar cada imagen con la posición que el coche tenía en
+            # ese momento al analizar el bag
+            msg.header.stamp = stamp_debug
             msg.format = "jpeg"
             msg.data = buffer.tobytes()
             self.debug_publisher.publish(msg)

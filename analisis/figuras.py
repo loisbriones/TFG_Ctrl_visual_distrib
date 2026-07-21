@@ -164,7 +164,7 @@ def grafica_6a_zonas(c: Carrera, vueltas, zonas_fin_vuelta):
     px_uno, py_uno, t_uno = [], [], []
     for _, d in c.derrapes.iterrows():
         texto = (
-            f"derrape v{int(d['vuelta'])} frame {int(d['frame'])}"
+            f"derrape v{int(d['vuelta'])} · {c.camara} frame {int(d['frame'])}"
             f"<br>celdas [{int(d['ini'])}, {int(d['fin'])}] "
             f"({int(d['n_celdas'])} celdas)"
         )
@@ -218,7 +218,7 @@ def grafica_6a_zonas(c: Carrera, vueltas, zonas_fin_vuelta):
             mode="markers", name="ignorado (zona muerta)",
             marker=dict(symbol="circle-open", size=6, color=COL_MUTED),
             text=[
-                f"v{e['vuelta']} frame {e['frame']}: dist={e['dist']:.1f} > "
+                f"v{e['vuelta']} · {c.camara} frame {e['frame']}: dist={e['dist']:.1f} > "
                 f"umbral pero la celda {e['celda']} está en zona muerta"
                 for e in c.zona_muerta
             ],
@@ -378,7 +378,8 @@ def grafica_3_dist(c: Carrera, vueltas):
             if c_prev is not None and abs(r["c_b"] - c_prev) > 5:
                 xs.append(None); ys.append(None); textos.append("")
             xs.append(r["c_b"]); ys.append(r["d_b"])
-            textos.append(f"frame {int(r['frame'])} · celda {int(r['c_b'])} · "
+            textos.append(f"{c.camara} frame {int(r['frame'])} · "
+                          f"celda {int(r['c_b'])} · "
                           f"d={r['d_b']:.1f} px · pwm={int(r['pwm'])}")
             c_prev = r["c_b"]
         derr = fr[fr["derrapando"]]
@@ -396,7 +397,7 @@ def grafica_3_dist(c: Carrera, vueltas):
                 x=derr["c_b"], y=derr["d_b"], mode="markers",
                 name="derrape abierto",
                 marker=dict(symbol="x", size=7, color=COL_CRITICO),
-                text=[f"frame {int(f)}" for f in derr["frame"]],
+                text=[f"{c.camara} frame {int(f)}" for f in derr["frame"]],
                 hovertemplate="derrapando · %{text}<br>celda=%{x} "
                               "d=%{y:.1f}<extra></extra>",
                 visible=visible,
@@ -427,6 +428,226 @@ def grafica_3_dist(c: Carrera, vueltas):
         "vuelta a vuelta",
         520,
     )
+
+
+# ===========================================================================
+# FIGURA 3b: la distancia de derrape DEL BAG, vuelta a vuelta
+# ===========================================================================
+# Lo que la 3 cuenta desde el log (por cámara y contra la celda), esta lo
+# cuenta desde el BAG y contra el TIEMPO: el dist_derrape que publicó el
+# controlador en /telemetria/<coche>/car_control, muestra a muestra, dentro
+# de una vuelta. Sirve para ver de un vistazo si la distancia sube y baja
+# como debe (plana en las primeras vueltas, con picos según sube el PWM) o
+# si hay picos que no se corresponden con ningún derrape real.
+#
+# Cada punto va coloreado según la CÁMARA que envió la posición que originó
+# esa telemetría, y una línea vertical discontinua marca cada cambio de
+# cámara: los picos que aparecen justo en un cambio son sospechosos (la
+# pegatina trasera todavía está fuera de la cadena de la cámara que entra,
+# así que su "distancia perpendicular" es en realidad longitudinal).
+#
+# El eje derecho lleva el PWM que se estaba aplicando (topic /<coche>/pwd),
+# escalonado: la orden vale hasta que llega la siguiente.
+#
+# df: DataFrame con una fila por telemetría dentro de una vuelta y columnas
+#     [vuelta, t_vuelta, dist, derrapando, camara, bx, by, pwm]
+# ===========================================================================
+# Color de cada cámara en esta figura (la primera repite el azul de serie 1;
+# con más de cuatro cámaras se reciclan, cosa que no va a pasar)
+COLORES_CAMARA = [COL_SERIE_1, COL_SERIE_2, "#7b5ea7", COL_AVISO]
+
+
+def _color_por_camara(camaras):
+    return {cam: COLORES_CAMARA[i % len(COLORES_CAMARA)]
+            for i, cam in enumerate(sorted(camaras))}
+
+
+def grafica_3b_derrape_bag(df, umbral):
+    vueltas = sorted(df["vuelta"].unique())
+    # isinstance(str): una telemetría que no se pudo emparejar con ninguna
+    # posición se queda sin cámara (None), y esa no es una cámara más
+    camaras = sorted(c for c in df["camara"].unique() if isinstance(c, str))
+    color_cam = _color_por_camara(camaras)
+    # Rango del eje Y FIJO para todas las vueltas: si cada vuelta se
+    # autoescalara, una vuelta plana de 3 px se vería igual de "picuda" que
+    # una con un pico de 60 y no se podría comparar pasando de una a otra
+    y_max = max(float(df["dist"].max()) * 1.05, umbral * 1.5)
+
+    fig = go.Figure()
+
+    # Contexto: todas las muestras de todas las vueltas (siempre visible)
+    fig.add_trace(go.Scatter(
+        x=df["t_vuelta"], y=df["dist"], mode="markers",
+        name="todas las vueltas", marker=dict(size=3, color=COL_CONTEXTO),
+        opacity=0.45, hoverinfo="skip",
+    ))
+    # Trazas fantasma que sostienen la leyenda de cámaras: si el color de
+    # cámara lo explicaran las trazas de una vuelta, la leyenda cambiaría al
+    # mover el slider
+    for cam in camaras:
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="markers", name=cam,
+            marker=dict(size=7, color=color_cam[cam]), hoverinfo="skip",
+        ))
+    n_estaticas = 1 + len(camaras)
+
+    for v in vueltas:
+        fr = df[df["vuelta"] == v].sort_values("t_vuelta")
+        visible = v == vueltas[0]
+        pwms = [p for p in fr["pwm"] if p is not None and not pd.isna(p)]
+        n_sobre = int((fr["dist"] > umbral).sum())
+        # El nombre de la traza es el resumen de la vuelta: como la leyenda
+        # solo enseña las trazas visibles, al cambiar de vuelta con el slider
+        # (o con las flechas) el resumen se actualiza solo
+        etiqueta = f"vuelta {int(v)} · máx {fr['dist'].max():.0f} px"
+        if pwms:
+            etiqueta += (f" · pwm {int(min(pwms))}" if min(pwms) == max(pwms)
+                         else f" · pwm {int(min(pwms))}-{int(max(pwms))}")
+        if n_sobre:
+            etiqueta += f" · {n_sobre} sobre el umbral"
+        fig.add_trace(go.Scatter(
+            x=fr["t_vuelta"], y=fr["dist"], mode="lines+markers", name=etiqueta,
+            # La línea solo une los puntos (gris): el color lo llevan los
+            # marcadores, que es donde se lee de qué cámara viene cada muestra
+            line=dict(color=COL_MUTED, width=1),
+            marker=dict(size=6, color=[color_cam.get(c, COL_MUTED)
+                                       for c in fr["camara"]]),
+            # customdata como lista de listas, no np.stack: al apilar textos
+            # (la cámara) con números, numpy lo convertiría todo a texto y el
+            # formato numérico del hover (%{...:.0f}) dejaría de aplicarse
+            customdata=[[f.camara or "?", f.bx, f.by, f.pwm]
+                        for f in fr.itertuples()],
+            hovertemplate=(
+                "t=%{x:.2f} s · dist=%{y:.1f} px<br>%{customdata[0]}"
+                "<br>trasera=(%{customdata[1]:.0f}, %{customdata[2]:.0f})"
+                "<br>pwm=%{customdata[3]:.0f}<extra></extra>"
+            ),
+            visible=visible,
+        ))
+        # Muestras en las que el controlador tenía un derrape ABIERTO
+        derr = fr[fr["derrapando"]]
+        fig.add_trace(go.Scatter(
+            x=derr["t_vuelta"], y=derr["dist"], mode="markers",
+            name="derrape abierto", showlegend=False,
+            marker=dict(symbol="x", size=9, color=COL_CRITICO),
+            hovertemplate="derrapando · t=%{x:.2f} s · %{y:.1f} px<extra></extra>",
+            visible=visible,
+        ))
+        # PWM aplicado, escalonado, en el eje de la derecha
+        fig.add_trace(go.Scatter(
+            x=fr["t_vuelta"], y=fr["pwm"], mode="lines", name="PWM aplicado",
+            showlegend=False, yaxis="y2",
+            line=dict(color=COL_BUENO, width=1.5, shape="hv"),
+            hovertemplate="t=%{x:.2f} s · pwm=%{y:.0f}<extra></extra>",
+            visible=visible,
+        ))
+        # Cambios de cámara: línea vertical en el punto medio entre la última
+        # muestra de una cámara y la primera de la siguiente
+        xs, textos = [], []
+        filas = list(fr.itertuples())
+        for anterior, actual in zip(filas, filas[1:]):
+            if actual.camara and anterior.camara and actual.camara != anterior.camara:
+                xc = (anterior.t_vuelta + actual.t_vuelta) / 2
+                xs += [xc, xc, None]
+                textos += [f"{anterior.camara} → {actual.camara}"] * 2 + [""]
+        fig.add_trace(go.Scatter(
+            x=xs, y=[0, y_max, None] * (len(xs) // 3), mode="lines",
+            name="cambio de cámara", showlegend=False,
+            line=dict(color=COL_MUTED, width=1, dash="dot"),
+            text=textos, hovertemplate="%{text}<extra></extra>",
+            visible=visible,
+        ))
+
+    fig.add_hline(y=umbral, line=dict(color=COL_TINTA, width=1),
+                  annotation_text=f"umbral_derrape = {umbral:.0f} px",
+                  annotation_font_color=COL_TINTA_2)
+
+    # Slider instantáneo: las estáticas siempre visibles + las 4 trazas de
+    # la vuelta (distancia, derrapes, PWM y cambios de cámara)
+    pasos = []
+    for k, v in enumerate(vueltas):
+        visibles = [True] * n_estaticas + [False] * (4 * len(vueltas))
+        for j in range(4):
+            visibles[n_estaticas + 4 * k + j] = True
+        pasos.append(dict(label=str(int(v)), method="update",
+                          args=[{"visible": visibles}]))
+    # Rango del eje de PWM: el de toda la carrera, también fijo, para que la
+    # escalera se pueda comparar entre vueltas (y con margen, si no la línea
+    # se pega al borde de la figura)
+    pwms = [p for p in df["pwm"] if p is not None and not pd.isna(p)]
+    rango_pwm = ([min(pwms) - 2, max(pwms) + 2] if pwms else None)
+
+    # Los ejes se fijan por update_layout y NO con update_xaxes/update_yaxes:
+    # esas dos aplican a TODOS los ejes de la figura, así que le pondrían al
+    # eje del PWM el título y el rango de la distancia (y la escalera de PWM
+    # desaparecería fuera de rango)
+    fig.update_layout(
+        sliders=[dict(active=0, currentvalue=dict(prefix="Vuelta "),
+                      pad=dict(t=30), steps=pasos)],
+        xaxis=dict(title_text="tiempo dentro de la vuelta (s)",
+                   rangemode="tozero"),
+        yaxis=dict(title_text="dist_derrape del bag (px)", range=[0, y_max]),
+        # Eje derecho para el PWM que se estaba aplicando
+        yaxis2=dict(
+            title=dict(text="PWM aplicado", font=dict(color=COL_BUENO)),
+            tickfont=dict(color=COL_BUENO), overlaying="y", side="right",
+            showgrid=False, range=rango_pwm,
+        ),
+    )
+    return _layout_base(
+        fig,
+        "3b · Distancia de derrape grabada en el bag, vuelta a vuelta "
+        "(color = cámara; línea de puntos = cambio de cámara)",
+        560,
+    )
+
+
+# ===========================================================================
+# FIGURA 3c: resumen por vuelta de la distancia del bag
+# ===========================================================================
+# La misma serie de la 3b resumida a un número por vuelta, para ver la
+# tendencia de toda la carrera de golpe: si las primeras vueltas son planas
+# y los picos aparecen según sube el PWM, o si el máximo está disparado
+# desde la primera vuelta (señal de que la distancia se calcula mal).
+#
+# tabla: DataFrame con una fila por vuelta y columnas
+#        [vuelta, dist_max, dist_p95, dist_mediana, n_sobre_umbral, pwm_medio]
+# ===========================================================================
+def grafica_3c_resumen_derrape(tabla, umbral):
+    fig = go.Figure()
+    series = [
+        ("dist_max", "máximo", COL_CRITICO),
+        ("dist_p95", "percentil 95", COL_SERIO),
+        ("dist_mediana", "mediana", COL_SERIE_1),
+    ]
+    for columna, nombre, color in series:
+        fig.add_trace(go.Scatter(
+            x=tabla["vuelta"], y=tabla[columna], mode="lines+markers",
+            name=nombre, line=dict(color=color, width=2), marker=dict(size=5),
+            hovertemplate=f"v%{{x}}: %{{y:.1f}} px<extra>{nombre}</extra>",
+        ))
+    fig.add_trace(go.Scatter(
+        x=tabla["vuelta"], y=tabla["pwm_medio"], mode="lines",
+        name="PWM medio", yaxis="y2",
+        line=dict(color=COL_BUENO, width=2, shape="hv"),
+        hovertemplate="v%{x}: pwm %{y:.1f}<extra></extra>",
+    ))
+    fig.add_hline(y=umbral, line=dict(color=COL_TINTA, width=1),
+                  annotation_text=f"umbral_derrape = {umbral:.0f} px",
+                  annotation_font_color=COL_TINTA_2)
+    # Por ejes con nombre, no con update_yaxes: si no, el eje del PWM también
+    # se llevaría el título y el rango de la distancia (ver la 3b)
+    fig.update_layout(
+        xaxis=dict(title_text="vuelta", dtick=5),
+        yaxis=dict(title_text="dist_derrape (px)", rangemode="tozero"),
+        yaxis2=dict(
+            title=dict(text="PWM medio", font=dict(color=COL_BUENO)),
+            tickfont=dict(color=COL_BUENO), overlaying="y", side="right",
+            showgrid=False,
+        ),
+    )
+    return _layout_base(
+        fig, "3c · Resumen por vuelta de la distancia de derrape del bag", 440)
 
 
 # ===========================================================================
