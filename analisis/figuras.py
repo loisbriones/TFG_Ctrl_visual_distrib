@@ -2,17 +2,19 @@
 """
 Todas las figuras plotly del dashboard unificado (analisis.py).
 
-Las figuras 6a/6b/3/6c (zonas, heatmap de PWM, distancia perpendicular y
-resumen por vuelta) están movidas TAL CUAL de analizar_log_algoritmo.py;
-solo cambió el número de sección en el título. Las nuevas (circuito con PWM,
-derrape 3D, trayectorias) siguen el mismo estilo: paleta validada del skill
-dataviz, chrome común en _layout_base y sliders por vuelta.
+Las figuras 6b/6c (heatmap de PWM y resumen por vuelta) vienen de
+analizar_log_algoritmo.py; solo cambió el número de sección en el título. El
+resto (circuito con PWM, derrape 3D, trayectorias, distancia del bag) sigue
+el mismo estilo: paleta validada del skill dataviz, chrome común en
+_layout_base y sliders por vuelta.
 
-Convención de sliders del dashboard:
-  - INSTANTÁNEO: cada paso muestra SOLO su vuelta (figuras 2, 3 y 4).
-  - ACUMULATIVO: el paso v muestra las vueltas 1..v superpuestas (figura 1).
-Ambos se implementan con arrays de visibilidad: las trazas "estáticas"
-(fondos, trayectorias) siempre visibles y un bloque de trazas por vuelta.
+TODOS los sliders por vuelta son INSTANTÁNEOS: cada paso muestra SOLO su
+vuelta (figuras 1, 2, 3b y 4). Se implementan con arrays de visibilidad: las
+trazas "estáticas" (fondos, trayectorias, fantasmas de leyenda) siempre
+visibles y un bloque de trazas por vuelta. Además las figuras con plano
+(1, 2) llevan los EJES FIJOS, calculados sobre toda la carrera: si cada
+vuelta se autoescalara, el circuito se estiraría o achataría según por dónde
+pasó el coche y dos vueltas dejarían de ser comparables a ojo.
 """
 
 import numpy as np
@@ -75,6 +77,176 @@ def offset_camara(camara, indice):
     if camara in OFFSETS_CAMARAS:
         return OFFSETS_CAMARAS[camara]
     return (indice * ANCHO_PLAZA_CAMARA, 0.0)
+
+
+# ---------------------------------------------------------------------------
+# SENTIDO DE LA MARCHA: una sola flecha, FUERA del trazado y a la altura de meta
+# ---------------------------------------------------------------------------
+# Quien mire una figura del plano (1, 2 y 4) no tiene por qué saber hacia dónde
+# iba el coche. Se indica con UNA flecha a la altura del inicio de meta, no con
+# una hilera de flechas por todo el trazado: la figura 2 ya lleva tres
+# trayectorias superpuestas y otra capa más la haría ilegible.
+#
+# La flecha se dibuja SEPARADA hacia fuera del circuito (por el lado contrario
+# al centro), no encima de la trayectoria: puesta sobre el trazado se pierde
+# entre los marcadores de las pegatinas y no se distingue. Fuera, en el hueco
+# vacío del margen, se ve de un vistazo. Va del ámbar de la estrella de inicio
+# (COL_INICIO_VUELTA) para que las dos marcas se lean como una sola cosa.
+# ---------------------------------------------------------------------------
+# Cuánto se avanza desde la meta para sacar la dirección de salida. Se mide en
+# PÍXELES y no en muestras porque el número de posiciones por vuelta depende de
+# la velocidad y del circuito (en el óvalo de las pruebas una vuelta son ~56
+# muestras, así que "8 muestras" ya es un séptimo de vuelta y la flecha se iría
+# lejísimos de la meta). 40 px es un tramo corto —la flecha queda a la altura de
+# la estrella— pero suficiente para que el ruido de detección (unos pocos
+# píxeles) no tuerza la punta.
+DIST_TANGENTE_SENTIDO = 40.0
+# Tope de muestras que se miran buscando esos 40 px: si el coche iba muy lento
+# (o parado en meta) no se sigue avanzando media vuelta, se usa lo que haya.
+MAX_MUESTRAS_TANGENTE = 12
+# Cuánto se aparta la flecha del trazado, en fracción del lado mayor del
+# circuito. Tiene que sacarla del ancho de la pista (las dos pegatinas y la
+# trayectoria base van a unos pocos píxeles unas de otras) sin mandarla al otro
+# extremo de la figura: 0,07 la deja claramente fuera pero al lado.
+SEPARACION_FLECHA_SENTIDO = 0.07
+
+
+def _tangente_meta(fr, camaras, centro=None, separacion=0.0):
+    """(p0, p1) en coordenadas del plano global: el primer punto de la vuelta
+    (pegatina DELANTERA, el mismo que marca la estrella de inicio) y el primero
+    que se aleja de él DIST_TANGENTE_SENTIDO píxeles. Es lo que orienta la
+    flecha del sentido de la marcha, que se dibuja en p1.
+
+    Con `centro` (el del circuito) y `separacion` (en píxeles) el par se
+    desplaza esa distancia en PERPENDICULAR a la marcha, hacia el lado
+    contrario al centro: la flecha sale así fuera del trazado, donde se ve. Los
+    dos puntos se desplazan igual, así que la dirección no cambia.
+
+    Se corta en cuanto cambia la cámara: dos cámaras entran en el plano global
+    con offsets distintos, así que un cambio dentro de la ventana metería un
+    salto y la flecha apuntaría a cualquier sitio. Devuelve None si la vuelta
+    no da dos puntos utilizables (caso raro: entonces no se dibuja flecha).
+
+    fr: filas de UNA vuelta, en orden de grabación."""
+    if len(fr) < 2:
+        return None
+    indice = {c: i for i, c in enumerate(camaras)}
+    filas = fr.iloc[:MAX_MUESTRAS_TANGENTE + 1]
+    cam = filas.iloc[0]["camara"]
+    dx, dy = offset_camara(cam, indice.get(cam, 0))
+    a = filas.iloc[0]
+    p0 = np.array([a["fx"] + dx, a["fy"] + dy], dtype=float)
+    p1 = None
+    for i in range(1, len(filas)):
+        fila = filas.iloc[i]
+        if fila["camara"] != cam:
+            break
+        p = np.array([fila["fx"] + dx, fila["fy"] + dy], dtype=float)
+        p1 = p
+        if np.linalg.norm(p - p0) >= DIST_TANGENTE_SENTIDO:
+            break
+    if p1 is None or np.allclose(p0, p1):
+        return None  # el coche estaba parado en meta: no hay dirección
+    if centro is not None and separacion:
+        u = (p1 - p0) / np.linalg.norm(p1 - p0)
+        n = np.array([-u[1], u[0]])           # perpendicular a la marcha
+        medio = (p0 + p1) / 2
+        if np.dot(n, medio - np.asarray(centro, dtype=float)) < 0:
+            n = -n                            # el lado que se aleja del centro
+        p0, p1 = p0 + separacion * n, p1 + separacion * n
+    return p0, p1
+
+
+def _posicion_etiqueta_flecha(p, centro):
+    """Dónde colgar el texto "sentido de la marcha" de la flecha: SIEMPRE hacia
+    el lado contrario al centro del circuito, para que la etiqueta no se meta
+    dentro del trazado. Ojo con el eje Y: en estas figuras va invertido (coor-
+    denadas de imagen), así que una Y de dato mayor que la del centro cae MÁS
+    ABAJO en pantalla."""
+    if centro is None:
+        return "middle right"
+    d = np.asarray(p, dtype=float) - np.asarray(centro, dtype=float)
+    if abs(d[0]) >= abs(d[1]):
+        return "middle right" if d[0] > 0 else "middle left"
+    return "bottom center" if d[1] > 0 else "top center"
+
+
+def _puntos_con_holgura(traza, centro, holgura=1.15):
+    """Los puntos (Nx2) de una traza de flecha MÁS una copia un poco más lejos
+    del centro del circuito. Se usan para acotar los ejes de las figuras de
+    rango fijo (1 y 2): si se acotan solo con la flecha, esta queda pegada al
+    borde y su ETIQUETA se sale del área de dibujo y se corta contra la
+    leyenda. Con la copia se reserva ese hueco."""
+    pts = np.column_stack([traza.x, traza.y]).astype(float)
+    c = np.asarray(centro, dtype=float)
+    return np.vstack([pts, c + (pts - c) * holgura])
+
+
+def _flecha_sentido_2d(tangente, visible=True, centro=None):
+    """Traza de la flecha del sentido de la marcha para las figuras 2D.
+
+    Son los DOS puntos de la tangente con marcador de punta de flecha y
+    `angleref="previous"`: plotly orienta cada punta según el vector que la
+    trae del punto anterior, y lo hace en coordenadas de PANTALLA, así que el
+    eje Y invertido de estas figuras no lo despista y no hace falta calcular
+    ángulos a mano. El primer punto solo es la referencia del ángulo: va con
+    opacidad 0.
+
+    La flecha va GRANDE y con la etiqueta al lado: como está fuera del trazado
+    no molesta a nadie, y así se entiende sin tener que buscar la leyenda."""
+    p0, p1 = tangente
+    return go.Scatter(
+        x=[p0[0], p1[0]], y=[p0[1], p1[1]], mode="markers+text",
+        name="Sentido de la marcha", showlegend=False,
+        marker=dict(symbol="arrow", angleref="previous", size=28,
+                    color=COL_INICIO_VUELTA, opacity=[0.0, 1.0],
+                    line=dict(color=COL_SUPERFICIE, width=1)),
+        text=["", "sentido de la marcha"],
+        textposition=_posicion_etiqueta_flecha(p1, centro),
+        textfont=dict(color=COL_INICIO_VUELTA, size=11),
+        # Sin recorte: la etiqueta cae fuera del trazado y, si la flecha está
+        # cerca del borde, se saldría del área de dibujo y quedaría cortada.
+        # Con cliponaxis=False se pinta encima del margen de la figura.
+        cliponaxis=False,
+        hovertemplate="sentido de la marcha<extra></extra>",
+        visible=visible,
+    )
+
+
+def _flecha_sentido_3d(tangente, largo, visible=True, centro=None):
+    """La misma flecha para la figura 1, dibujada como una línea en el plano
+    z=0: el astil (p0 -> p1) y las dos alas de la punta. No se usa go.Cone a
+    propósito: el cono se dimensiona en unidades de datos y el eje Z de la
+    figura 1 va exagerado (ALTURA_RELATIVA_Z), así que un cono de 30 px de
+    radio taparía media caja. `largo` es lo que miden las alas, en píxeles del
+    plano.
+
+    Se dibuja de un trazo (astil, un ala, vuelta a la punta y la otra ala): en
+    3D repasar un segmento no se nota y así todo cabe en una sola traza."""
+    p0, p1 = tangente
+    u = (p1 - p0) / np.linalg.norm(p1 - p0)
+    alas = []
+    for grados in (150.0, -150.0):
+        t = np.radians(grados)
+        r = np.array([u[0] * np.cos(t) - u[1] * np.sin(t),
+                      u[0] * np.sin(t) + u[1] * np.cos(t)])
+        alas.append(p1 + largo * r)
+    puntos = [p0, p1, alas[0], p1, alas[1]]
+    return go.Scatter3d(
+        x=[p[0] for p in puntos], y=[p[1] for p in puntos],
+        z=[0] * len(puntos), mode="lines+text",
+        name="Sentido de la marcha", showlegend=False,
+        line=dict(color=COL_INICIO_VUELTA, width=8),
+        # La etiqueta va en el arranque del astil, para que no se monte con la
+        # punta ni con el trazado
+        text=["sentido de la marcha", "", "", "", ""],
+        textposition=_posicion_etiqueta_flecha(p0, centro),
+        textfont=dict(color=COL_INICIO_VUELTA, size=11),
+        hovertemplate="sentido de la marcha<extra></extra>",
+        visible=visible,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Aspecto común de las figuras
 # ---------------------------------------------------------------------------
@@ -93,180 +265,6 @@ def _layout_base(fig, titulo, alto):
     fig.update_xaxes(gridcolor=COL_GRID, zeroline=False, linecolor=COL_CONTEXTO)
     fig.update_yaxes(gridcolor=COL_GRID, zeroline=False, linecolor=COL_CONTEXTO)
     return fig
-
-
-def _celda_fisica(c: Carrera, celda):
-    """Posición (x, y) de una celda para el hover (None si es gigante)."""
-    if c.celdas is None or c.celdas.empty:
-        return None
-    sel = c.celdas[c.celdas["celda"] == celda]
-    if sel.empty or bool(sel.iloc[0]["gigante"]):
-        return None
-    return sel.iloc[0]
-
-
-# ===========================================================================
-# FIGURA 6a: evolución de las zonas (la central del análisis)
-# ===========================================================================
-# Eje X = celda de la cadena, eje Y = vuelta (la primera arriba: se lee hacia
-# abajo como el propio log). En cada fila (vuelta) se dibuja:
-#   - barra naranja gruesa  = cada zona de DERRAPE tal como queda al terminar
-#     esa vuelta, con su PWM en el hover
-#   - banda ámbar           = las celdas gigantes (fijas todas las vueltas)
-#   - segmento/rombo rojo   = cada derrape individual de esa vuelta
-#   - estrella roja         = una fusión (el hover lista las zonas absorbidas)
-#   - círculo gris          = apertura ignorada por la zona muerta
-#   - triángulo ámbar       = derrame de reducción hacia la cámara precedente
-# ===========================================================================
-def grafica_6a_zonas(c: Carrera, vueltas, zonas_fin_vuelta):
-    fig = go.Figure()
-
-    # Bandas verticales fijas en las celdas gigantes
-    gigantes = c.celdas[c.celdas["gigante"]] if c.celdas is not None else []
-    if len(gigantes):
-        for _, g in gigantes.iterrows():
-            fig.add_vrect(
-                x0=g["celda"] - 0.5, x1=g["celda"] + 0.5,
-                fillcolor=COL_AVISO, opacity=0.15, line_width=0,
-            )
-
-    # Zonas de derrape al cierre de cada vuelta: una única traza con
-    # segmentos separados por None (ligero); el hover lleva pwm e historial
-    xs, ys, textos = [], [], []
-    for v in vueltas:
-        for z in zonas_fin_vuelta[v]:
-            if z["tipo"] != "derrape":
-                continue
-            # El historial de vueltas solo viene en los volcados [ZONA] (los
-            # [PERFIL] no lo llevan): puede no estar disponible
-            hist = z.get("vueltas")
-            texto = (
-                f"zona [{z['ini']}, {z['fin']}] ({z['fin'] - z['ini'] + 1} celdas)"
-                f"<br>pwm={z['pwm']}"
-                + (f"<br>derrapes en vueltas: {hist}" if hist is not None else "")
-            )
-            xs += [z["ini"], z["fin"], None]
-            ys += [v, v, None]
-            textos += [texto, texto, ""]
-    fig.add_trace(
-        go.Scatter(
-            # lines+markers: los marcadores hacen visibles las zonas de 1 celda
-            x=xs, y=ys, mode="lines+markers", name="zona de derrape",
-            line=dict(color=COL_SERIO, width=7),
-            marker=dict(size=5, color=COL_SERIO),
-            text=textos, hovertemplate="%{text}<extra></extra>",
-        )
-    )
-
-    # Derrapes individuales de cada vuelta (eventos CERRADO), medio carril
-    # por debajo de la fila para no pisar la barra de la zona
-    xs, ys, textos = [], [], []
-    px_uno, py_uno, t_uno = [], [], []
-    for _, d in c.derrapes.iterrows():
-        texto = (
-            f"derrape v{int(d['vuelta'])} · {c.camara} frame {int(d['frame'])}"
-            f"<br>celdas [{int(d['ini'])}, {int(d['fin'])}] "
-            f"({int(d['n_celdas'])} celdas)"
-        )
-        if d["n_celdas"] <= 1:
-            px_uno.append(d["ini"])
-            py_uno.append(d["vuelta"] - 0.30)
-            t_uno.append(texto + "<br>(1 sola celda)")
-        else:
-            xs += [d["ini"], d["fin"], None]
-            ys += [d["vuelta"] - 0.30, d["vuelta"] - 0.30, None]
-            textos += [texto, texto, ""]
-    fig.add_trace(
-        go.Scatter(
-            x=xs, y=ys, mode="lines", name="derrape (evento)",
-            line=dict(color=COL_CRITICO, width=3),
-            text=textos, hovertemplate="%{text}<extra></extra>",
-        )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=px_uno, y=py_uno, mode="markers", name="derrape de 1 celda",
-            marker=dict(symbol="diamond", size=7, color=COL_CRITICO),
-            text=t_uno, hovertemplate="%{text}<extra></extra>",
-        )
-    )
-
-    # Fusiones: estrella en el centro del carveo que absorbió zonas
-    fus = [k for k in c.carveos if k["tipo"] == "fusion"]
-    fig.add_trace(
-        go.Scatter(
-            x=[(k["ini"] + k["fin"]) / 2 for k in fus],
-            y=[k["vuelta"] - 0.30 for k in fus],
-            mode="markers", name="fusión de zonas",
-            marker=dict(symbol="star", size=13, color=COL_CRITICO,
-                        line=dict(color=COL_SUPERFICIE, width=1)),
-            text=[
-                f"FUSIÓN en v{k['vuelta']}: la zona pasa a "
-                f"[{k['ini']}, {k['fin']}] pwm={k['pwm']}<br>absorbe: "
-                + ", ".join(f"[{a}-{b}]" for a, b in k["absorbidas"])
-                for k in fus
-            ],
-            hovertemplate="%{text}<extra></extra>",
-        )
-    )
-
-    # Aperturas ignoradas por la zona muerta (contexto en gris)
-    fig.add_trace(
-        go.Scatter(
-            x=[e["celda"] for e in c.zona_muerta],
-            y=[e["vuelta"] - 0.30 for e in c.zona_muerta],
-            mode="markers", name="ignorado (zona muerta)",
-            marker=dict(symbol="circle-open", size=6, color=COL_MUTED),
-            text=[
-                f"v{e['vuelta']} · {c.camara} frame {e['frame']}: dist={e['dist']:.1f} > "
-                f"umbral pero la celda {e['celda']} está en zona muerta"
-                for e in c.zona_muerta
-            ],
-            hovertemplate="%{text}<extra></extra>",
-        )
-    )
-
-    # Derrames hacia la cámara precedente (salen por la celda 0) y
-    # reducciones externas recibidas (entran por la última celda)
-    fig.add_trace(
-        go.Scatter(
-            x=[0] * len(c.derrames),
-            y=[d["vuelta"] - 0.30 for d in c.derrames],
-            mode="markers", name="derrame a la precedente",
-            marker=dict(symbol="triangle-left", size=11, color=COL_AVISO),
-            text=[f"v{d['vuelta']}: se derraman {d['px']:.0f} px hacia la "
-                  f"cámara precedente" for d in c.derrames],
-            hovertemplate="%{text}<extra></extra>",
-        )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=[max(c.n_celdas - 1, 0)] * len(c.externas),
-            y=[d["vuelta"] - 0.30 for d in c.externas],
-            mode="markers", name="reducción externa recibida",
-            marker=dict(symbol="triangle-right", size=11, color=COL_AVISO),
-            text=[f"v{d['vuelta']}: la cámara siguiente pide reducir "
-                  f"{d['px']:.0f} px al final" for d in c.externas],
-            hovertemplate="%{text}<extra></extra>",
-        )
-    )
-
-    fig.update_xaxes(
-        title_text="celda de la cadena",
-        range=[-1.5, c.n_celdas + 0.5],
-    )
-    fig.update_yaxes(
-        title_text="vuelta", range=[vueltas[-1] + 0.8, vueltas[0] - 0.8],
-        dtick=1,
-    )
-    alto = max(500, 130 + 22 * len(vueltas))
-    return _layout_base(
-        fig,
-        "6a · Evolución de las zonas de derrape "
-        "(estado al cerrar cada vuelta + eventos de esa vuelta; "
-        "banda ámbar = celda gigante)",
-        alto,
-    )
 
 
 # ===========================================================================
@@ -349,87 +347,6 @@ def grafica_6b_heatmap(c: Carrera, vueltas, perfil_vuelta):
         f"(claro={v_min:.0f}, oscuro={v_max:.0f})",
         alto,
     )
-# ===========================================================================
-# FIGURA 3: distancia perpendicular de la trasera frente a su celda
-# ===========================================================================
-# La serie con la que trabaja la máquina de derrapes: d(celda) de la pegatina
-# trasera. Slider para aislar cada vuelta; de fondo (gris) todas las vueltas.
-# Los puntos con derrape abierto van en rojo. La línea negra es el umbral.
-# ===========================================================================
-def grafica_3_dist(c: Carrera, vueltas):
-    umbral = c.params.get("umbral_derrape", 8.0)
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=c.frames["c_b"], y=c.frames["d_b"], mode="markers",
-            name="todas las vueltas",
-            marker=dict(size=3, color=COL_CONTEXTO), opacity=0.5,
-            hoverinfo="skip",
-        )
-    )
-    for v in vueltas:
-        fr = c.frames[c.frames["vuelta"] == v].sort_values("frame")
-        # None donde la trasera salta mucho: que la línea no cruce la figura
-        xs, ys, textos = [], [], []
-        c_prev = None
-        for _, r in fr.iterrows():
-            if r["c_b"] < 0 or pd.isna(r["d_b"]):
-                continue
-            if c_prev is not None and abs(r["c_b"] - c_prev) > 5:
-                xs.append(None); ys.append(None); textos.append("")
-            xs.append(r["c_b"]); ys.append(r["d_b"])
-            textos.append(f"{c.camara} frame {int(r['frame'])} · "
-                          f"celda {int(r['c_b'])} · "
-                          f"d={r['d_b']:.1f} px · pwm={int(r['pwm'])}")
-            c_prev = r["c_b"]
-        derr = fr[fr["derrapando"]]
-        visible = v == vueltas[0]
-        fig.add_trace(
-            go.Scatter(
-                x=xs, y=ys, mode="lines+markers", name=f"vuelta {v}",
-                line=dict(color=COL_SERIE_1, width=1.5), marker=dict(size=4),
-                text=textos, hovertemplate="%{text}<extra></extra>",
-                visible=visible,
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=derr["c_b"], y=derr["d_b"], mode="markers",
-                name="derrape abierto",
-                marker=dict(symbol="x", size=7, color=COL_CRITICO),
-                text=[f"{c.camara} frame {int(f)}" for f in derr["frame"]],
-                hovertemplate="derrapando · %{text}<br>celda=%{x} "
-                              "d=%{y:.1f}<extra></extra>",
-                visible=visible,
-            )
-        )
-    fig.add_hline(y=umbral, line=dict(color=COL_TINTA, width=1),
-                  annotation_text=f"umbral_derrape = {umbral:.0f} px",
-                  annotation_font_color=COL_TINTA_2)
-
-    # Slider: la traza 0 (fondo gris) siempre visible; por cada vuelta se
-    # activan sus dos trazas (línea azul + aspas rojas)
-    pasos = []
-    for i, v in enumerate(vueltas):
-        visibles = [True] + [False] * (2 * len(vueltas))
-        visibles[1 + 2 * i] = visibles[2 + 2 * i] = True
-        pasos.append(dict(label=str(v), method="update",
-                          args=[{"visible": visibles}]))
-    fig.update_layout(
-        sliders=[dict(active=0, currentvalue=dict(prefix="Vuelta "),
-                      pad=dict(t=30), steps=pasos)],
-    )
-    fig.update_xaxes(title_text="celda de la pegatina trasera")
-    fig.update_yaxes(title_text="distancia perpendicular (px)",
-                     rangemode="tozero")
-    return _layout_base(
-        fig,
-        "3 · Distancia perpendicular de la pegatina trasera a la trayectoria, "
-        "vuelta a vuelta",
-        520,
-    )
-
-
 # ===========================================================================
 # FIGURA 3b: la distancia de derrape DEL BAG, vuelta a vuelta
 # ===========================================================================
@@ -651,6 +568,68 @@ def grafica_3c_resumen_derrape(tabla, umbral):
 
 
 # ===========================================================================
+# FIGURA 5c: la comparativa derrape <-> tiempo por vuelta
+# ===========================================================================
+# Es la que ilustra la tesis del algoritmo: subir el PWM aparta al coche de la
+# trayectoria (más derrape) y baja el tiempo, hasta que el derrape pasa del
+# umbral y el tiempo EMPEORA (el coche patina, se sale o hay que castigar la
+# zona). Va en orden cronológico (X = vuelta), la distribución del derrape en
+# cajas y el tiempo por encima: es hermana de la 3c y se lee igual.
+#
+# Hubo también una 5b (una vuelta = un punto, derrape en X y tiempo en Y, para
+# ver la forma de U): se retiró porque con 40 vueltas la nube de puntos y sus
+# bigotes se solapaban y no había quien la leyera.
+#
+# Las dos fuentes comparten numeración de vuelta: la tabla de derrape y los
+# tiempos salen del MISMO bag (ventanas de time_per_lap), así que basta cruzar
+# por el número de vuelta y quedarse con las que estén en las dos.
+# ===========================================================================
+def grafica_5c_cajas_derrape(df_tel, tiempos_por_vuelta, umbral):
+    """df_tel: una fila por telemetría dentro de una vuelta (la de la 3b).
+    Una caja por vuelta con TODAS sus muestras de dist_derrape y, en el eje
+    derecho, el tiempo que se tardó en esa vuelta."""
+    datos = df_tel[df_tel["vuelta"].isin(tiempos_por_vuelta)]
+    fig = go.Figure()
+    fig.add_trace(go.Box(
+        x=datos["vuelta"], y=datos["dist"], name="dist_derrape",
+        # La caja son los cuartiles (el derrape "normal" de la vuelta) y los
+        # puntos sueltos los valores atípicos: los picos que abren un derrape
+        boxpoints="outliers", showlegend=False,
+        line=dict(color=COL_SERIE_1, width=1.5),
+        fillcolor="rgba(42, 120, 214, 0.15)",
+        # Con boxpoints="outliers" los ÚNICOS puntos que se dibujan son los
+        # atípicos, así que marker.color es el color de los atípicos (rojo, que
+        # es lo que son: los picos que abren un derrape). marker.outliercolor
+        # NO vale aquí: solo lo mira boxpoints="suspectedoutliers".
+        marker=dict(color=COL_CRITICO, size=4),
+    ))
+    vs = sorted(tiempos_por_vuelta)
+    fig.add_trace(go.Scatter(
+        x=vs, y=[tiempos_por_vuelta[v] for v in vs], mode="lines+markers",
+        name="tiempo de vuelta", yaxis="y2",
+        line=dict(color=COL_SERIO, width=2), marker=dict(size=5),
+        hovertemplate="v%{x}: %{y:.3f} s<extra>tiempo</extra>",
+    ))
+    fig.add_hline(y=umbral, line=dict(color=COL_TINTA, width=1),
+                  annotation_text=f"umbral_derrape = {umbral:.0f} px",
+                  annotation_font_color=COL_TINTA_2)
+    # Ejes con nombre, no update_yaxes: si no, el eje del tiempo heredaría el
+    # título y el rango del derrape (mismo motivo que en la 3b y la 3c)
+    fig.update_layout(
+        xaxis=dict(title_text="vuelta", dtick=5),
+        yaxis=dict(title_text="dist_derrape (px)", rangemode="tozero"),
+        yaxis2=dict(
+            title=dict(text="tiempo de vuelta (s)", font=dict(color=COL_SERIO)),
+            tickfont=dict(color=COL_SERIO), overlaying="y", side="right",
+            showgrid=False,
+        ),
+    )
+    return _layout_base(
+        fig, "5c · Distribución del derrape y tiempo, vuelta a vuelta "
+             "(caja = cuartiles; puntos rojos = valores atípicos)", 460)
+
+
+# ===========================================================================
 # FIGURA 6c: resumen por vuelta (4 paneles)
 # ===========================================================================
 #   1. nº de derrapes por vuelta (barras rojas: son el evento "malo")
@@ -771,24 +750,57 @@ def grafica_6c_subplot(tabla: pd.DataFrame, panel: str):
 # FIGURA 4 (la más importante): el circuito con el PWM de cada celda
 # ===========================================================================
 # Todas las cámaras en el MISMO plano (plano global, ver OFFSETS_CAMARAS):
-# la trayectoria de fondo en gris tenue y encima cada celda como un punto
-# con su PWM escrito DENTRO como número (pedido por Lois: los cambios de
-# valor se ven mucho mejor en el número que en un color). El anillo rojo
-# marca las celdas dentro de una zona de derrape al EMPEZAR la vuelta del
-# slider. Slider INSTANTÁNEO: cada paso enseña el estado de esa vuelta.
+# la trayectoria de fondo en gris tenue y encima cada celda pintada del COLOR
+# DE SU VALOR DE PWM, con la leyenda al lado diciendo qué valor es cada color.
+#
+# Colorear por valor es colorear por ZONA: dentro del algoritmo todas las
+# celdas de una zona comparten PWM, así que un bloque de un solo color ES una
+# zona y un cambio de color ES una frontera entre zonas. Como el slider es
+# INSTANTÁNEO (cada paso pinta el perfil con el que se corrió esa vuelta), las
+# zonas se ven nacer, crecer y desaparecer al pasar de vuelta, en vez de
+# quedar marcadas para siempre como con el anillo rojo de antes.
 #
 # datos_camaras: {camara: {"c": Carrera, "vueltas": [v...],
 #                          "perfil_vuelta": {v: array PWM por celda},
 #                          "zonas_ini_vuelta": {v: [zona]}}}
 # ===========================================================================
-def grafica_4_circuito(datos_camaras):
+# Paleta categórica del PWM: colores MUY distintos entre sí, para que dos
+# zonas con valores parecidos (80 y 78) no se confundan. El color sale del
+# propio valor (pwm % nº de colores), así que un mismo PWM lleva SIEMPRE el
+# mismo color: en todas las vueltas y también entre grabaciones distintas.
+# Valores separados por 12 unidades comparten color, pero eso solo confunde si
+# coincidieran en la misma vuelta, y para eso una zona tendría que haber caído
+# 12 unidades por debajo de otra (seis reincidencias de derrape); aun así la
+# leyenda lleva el número al lado y lo desambigua.
+PALETA_PWM = [
+    "#2a78d6",  # azul
+    "#b58324",  # ámbar
+    "#1baf7a",  # aqua
+    "#d03b3b",  # rojo
+    "#7b5ea7",  # violeta
+    "#ec835a",  # naranja
+    "#0ca30c",  # verde
+    "#c2185b",  # magenta oscuro
+    "#00838f",  # teal oscuro
+    "#8d6e63",  # marrón
+    "#5c6bc0",  # índigo
+    "#9e9d24",  # oliva
+]
+
+
+def grafica_4_circuito(datos_camaras, df_pos=None):
     camaras = sorted(datos_camaras)
+    indice = {c: i for i, c in enumerate(camaras)}
     # Eje de vueltas del slider: la unión de las vueltas de todas las
     # cámaras (con varias cámaras alguna puede perderse una vuelta)
     vueltas_global = sorted({v for d in datos_camaras.values() for v in d["vueltas"]})
 
     fig = go.Figure()
     n_estaticas = 0  # trazas siempre visibles (fondos), van primero
+    # Todos los puntos del trazado (de todas las cámaras): con ellos se sitúa
+    # el centro del circuito y su tamaño, que es lo que decide hacia dónde y
+    # cuánto se aparta la flecha del sentido de la marcha
+    trazado_x, trazado_y = [], []
 
     # --- Fondos por cámara: trayectoria gris + huecos tapados (gigantes) ---
     for i, cam in enumerate(camaras):
@@ -831,9 +843,29 @@ def grafica_4_circuito(datos_camaras):
             showlegend=(i == 0 and len(gx) > 0), legendgroup="gigante",
         ))
         n_estaticas += 2
+        trazado_x += [x for x in tx if x is not None]
+        trazado_y += [y for y in ty if y is not None]
 
-    # --- Un bloque de trazas por vuelta (una traza por cámara) ---
+    # Centro y tamaño del circuito, para apartar la flecha de sentido hacia
+    # fuera del trazado. Aquí los ejes se autoescalan, así que no hay que
+    # reajustar rangos: plotly ya deja sitio a la flecha.
+    centro_trazado = ((min(trazado_x) + max(trazado_x)) / 2,
+                      (min(trazado_y) + max(trazado_y)) / 2) \
+        if trazado_x else (0.0, 0.0)
+    separacion_flecha = (max(max(trazado_x) - min(trazado_x),
+                             max(trazado_y) - min(trazado_y))
+                         * SEPARACION_FLECHA_SENTIDO) if trazado_x else 0.0
+
+    # --- Un bloque de trazas por vuelta: UNA TRAZA POR VALOR DE PWM --------
+    # Agrupar por valor (y no por cámara) es lo que hace que la leyenda diga
+    # "PWM 80 / PWM 78" con los valores de la vuelta que se está mirando: la
+    # leyenda solo lista las trazas visibles, así que se actualiza sola con el
+    # slider. Cada traza junta las celdas de TODAS las cámaras con ese valor.
+    # El número de trazas cambia de una vuelta a otra (cada vuelta tiene sus
+    # valores), así que se apuntan los índices para armar luego el slider.
+    indices_por_vuelta = {}
     for v in vueltas_global:
+        grupos = {}  # pwm (int o None) -> {"x": [], "y": [], "hover": []}
         for i, cam in enumerate(camaras):
             d = datos_camaras[cam]
             dx, dy = offset_camara(cam, i)
@@ -841,45 +873,92 @@ def grafica_4_circuito(datos_camaras):
             # Si esta cámara no tiene datos de la vuelta v se usa la última
             # vuelta anterior que sí tenga (el perfil sigue vigente)
             v_datos = max((u for u in d["vueltas"] if u <= v), default=None)
-            xs, ys, textos, hovers, anchos, colores_borde = [], [], [], [], [], []
-            if v_datos is not None:
-                perfil = d["perfil_vuelta"][v_datos]
-                zonas = d["zonas_ini_vuelta"].get(v_datos, [])
-                for _, cd in normales.iterrows():
-                    idx = int(cd["celda"])
-                    pwm = perfil[idx] if idx < len(perfil) and not np.isnan(perfil[idx]) else None
-                    en_zona = any(z["tipo"] == "derrape" and z["ini"] <= idx <= z["fin"]
-                                  for z in zonas)
-                    xs.append(cd["x"] + dx)
-                    ys.append(cd["y"] + dy)
-                    textos.append("" if pwm is None else f"{pwm:.0f}")
-                    anchos.append(2.5 if en_zona else 1)
-                    colores_borde.append(COL_CRITICO if en_zona else COL_CONTEXTO)
-                    hovers.append(
-                        f"{cam} · celda {idx}<br>PWM {pwm:.0f}" if pwm is not None
-                        else f"{cam} · celda {idx}<br>PWM ?"
-                    )
-                    if en_zona:
-                        hovers[-1] += "<br><b>dentro de zona de derrape</b>"
-            fig.add_trace(go.Scatter(
-                x=xs, y=ys, mode="markers+text", name=f"celdas {cam}",
-                # El número va DENTRO del punto: el marcador es un disco
-                # claro con borde (rojo si la celda está en zona de derrape)
-                marker=dict(size=17, color=COL_SUPERFICIE,
-                            line=dict(color=colores_borde, width=anchos)),
-                text=textos, textposition="middle center",
-                textfont=dict(size=8, color=COL_TINTA),
-                customdata=hovers, hovertemplate="%{customdata}<extra></extra>",
-                visible=(v == vueltas_global[0]), showlegend=False,
-            ))
+            if v_datos is None:
+                continue
+            perfil = d["perfil_vuelta"][v_datos]
+            zonas = d["zonas_ini_vuelta"].get(v_datos, [])
+            for _, cd in normales.iterrows():
+                idx = int(cd["celda"])
+                bruto = perfil[idx] if idx < len(perfil) else np.nan
+                pwm = None if np.isnan(bruto) else int(bruto)
+                zona_txt = ""
+                for z in zonas:
+                    if z["ini"] <= idx <= z["fin"]:
+                        zona_txt = (f"<br>zona [{z['ini']}-{z['fin']}] "
+                                    f"({z['tipo']})")
+                        break
+                g = grupos.setdefault(pwm, {"x": [], "y": [], "hover": []})
+                g["x"].append(cd["x"] + dx)
+                g["y"].append(cd["y"] + dy)
+                g["hover"].append(
+                    f"{cam} · celda {idx}"
+                    f"<br>PWM {'?' if pwm is None else pwm}{zona_txt}")
 
-    # Slider instantáneo: fondos siempre visibles + el bloque de su vuelta
+        indices = []
+        # Ascendente y con el "sin dato" al final, para que la leyenda se lea
+        # de la zona más lenta a la más rápida
+        for pwm in sorted(grupos, key=lambda p: (p is None, p)):
+            g = grupos[pwm]
+            color = COL_MUTED if pwm is None else PALETA_PWM[pwm % len(PALETA_PWM)]
+            fig.add_trace(go.Scatter(
+                x=g["x"], y=g["y"], mode="markers",
+                name="PWM ?" if pwm is None else f"PWM {pwm}",
+                marker=dict(size=11, color=color,
+                            line=dict(color=COL_SUPERFICIE, width=1)),
+                customdata=g["hover"],
+                hovertemplate="%{customdata}<extra></extra>",
+                visible=(v == vueltas_global[0]),
+            ))
+            indices.append(len(fig.data) - 1)
+
+        # Inicio de meta: el primer punto capturado de la vuelta sobre el
+        # circuito (mismo criterio que la estrella de la g2), para orientar
+        # por dónde arranca. Se busca en las posiciones del bag. La numeración
+        # de vueltas del log y la del bag (time_per_lap) pueden no coincidir
+        # (p.ej. el log arranca en la vuelta 0 y el bag no la cronometró); si
+        # la vuelta exacta no está, se cae a la PRIMERA posición del bag: la
+        # meta es un punto ~fijo del circuito, así que el marcador sirve igual
+        # de referencia y la vista por defecto nunca se queda sin él.
+        if df_pos is not None and len(df_pos):
+            fr = df_pos[df_pos["vuelta"] == v]
+            primera = (fr if len(fr) else df_pos).iloc[0]
+            dx, dy = offset_camara(
+                primera["camara"], indice.get(primera["camara"], 0))
+            fig.add_trace(go.Scatter(
+                x=[primera["fx"] + dx], y=[primera["fy"] + dy],
+                mode="markers", name="inicio de vuelta", showlegend=False,
+                marker=dict(symbol="star", size=15, color=COL_INICIO_VUELTA,
+                            line=dict(color=COL_SUPERFICIE, width=1)),
+                text=[f"v{int(v)} · inicio de meta"],
+                hovertemplate="%{text}<extra></extra>",
+                visible=(v == vueltas_global[0]),
+            ))
+            indices.append(len(fig.data) - 1)
+
+            # Y a su altura, apartada hacia fuera del circuito, la flecha del
+            # sentido de la marcha (misma reserva de vuelta que la estrella).
+            # Aquí el bloque por vuelta no es de tamaño fijo —se apuntan los
+            # índices uno a uno—, así que si no hay tangente basta con no
+            # añadirla.
+            tangente = _tangente_meta(
+                fr if len(fr) else df_pos, camaras, centro_trazado,
+                separacion_flecha)
+            if tangente is not None:
+                fig.add_trace(_flecha_sentido_2d(
+                    tangente, visible=(v == vueltas_global[0]),
+                    centro=centro_trazado))
+                indices.append(len(fig.data) - 1)
+        indices_por_vuelta[v] = indices
+
+    # Slider instantáneo: fondos siempre visibles + las trazas de su vuelta
+    n_total = len(fig.data)
     pasos = []
-    n_cam = len(camaras)
-    for k, v in enumerate(vueltas_global):
-        visibles = [True] * n_estaticas + [False] * (len(vueltas_global) * n_cam)
-        for i in range(n_cam):
-            visibles[n_estaticas + k * n_cam + i] = True
+    for v in vueltas_global:
+        visibles = [False] * n_total
+        for i in range(n_estaticas):
+            visibles[i] = True
+        for idx in indices_por_vuelta[v]:
+            visibles[idx] = True
         pasos.append(dict(label=str(v), method="update",
                           args=[{"visible": visibles}]))
     fig.update_layout(
@@ -894,8 +973,7 @@ def grafica_4_circuito(datos_camaras):
     return _layout_base(
         fig,
         "4 · El circuito con el PWM de cada celda "
-        "(número = PWM del perfil; anillo rojo = celda dentro de una zona "
-        "de derrape)",
+        "(un color por valor de PWM: un bloque de color es una zona)",
         720,
     )
 
@@ -907,6 +985,12 @@ def grafica_4_circuito(datos_camaras):
 COL_ETIQ_DELANTERA = "#009E73"  # verde etiqueta delantera (fig. 5.17)
 COL_ETIQ_TRASERA = "#CC00CC"    # magenta etiqueta trasera (fig. 5.17)
 COL_TRAY_BASE_3D = "#9400D3"    # violeta de la línea "Posicion" (fig. 5.12)
+# Azul de serie para la trayectoria BASE aprendida (las celdas del log): es
+# la referencia del algoritmo, y en azul no se confunde con el magenta de la
+# trasera ni con el verde de la delantera
+COL_TRAY_BASE = COL_SERIE_1
+# Ámbar para el punto de arranque de la vuelta (el que sigue al cruce de meta)
+COL_INICIO_VUELTA = COL_AVISO
 
 # Salto en píxeles entre dos posiciones consecutivas a partir del cual la
 # línea de trayectoria se corta (None) en vez de unirlas: o es un cambio de
@@ -943,6 +1027,73 @@ def _con_cortes(df, col_x, col_y, camaras):
     return xs, ys
 
 
+def _rangos_globales(df, camaras, extra=()):
+    """(x_min, x_max, y_min, y_max) del plano global, con un 2 % de margen.
+
+    Recorre las DOS pegatinas de todas las cámaras aplicando su offset, más
+    los arrays `extra` (Nx2, ya en coordenadas globales) que haya que acotar
+    (la trayectoria base). Fijar los ejes con estos rangos es lo que hace que
+    el encuadre NO cambie al pasar de vuelta: si cada vuelta se autoescalara,
+    el circuito se estiraría o achataría según por dónde pasó el coche y dos
+    vueltas dejarían de ser comparables a ojo."""
+    xs, ys = [], []
+    for i, cam in enumerate(camaras):
+        dx, dy = offset_camara(cam, i)
+        sub = df[df["camara"] == cam]
+        xs += list(pd.concat([sub["fx"], sub["bx"]]).dropna() + dx)
+        ys += list(pd.concat([sub["fy"], sub["by"]]).dropna() + dy)
+    for pts in extra:
+        xs += list(pts[:, 0])
+        ys += list(pts[:, 1])
+    if not xs:
+        return 0.0, 1.0, 0.0, 1.0
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+    margen_x = (x_max - x_min) * 0.02 or 1.0
+    margen_y = (y_max - y_min) * 0.02 or 1.0
+    return x_min - margen_x, x_max + margen_x, y_min - margen_y, y_max + margen_y
+
+
+def _pie_perpendicular(p, pts, cerrada=False):
+    """Pie de la perpendicular de `p` sobre la polilínea `pts` (Nx2) y su
+    distancia, replicando el PASO FINO de `localizar()` del algoritmo:
+    punto más cercano (argmin) y luego proyección acotada sobre los dos
+    segmentos adyacentes (`_dist_a_segmento` en AlgoritmoVelocidad.py).
+
+    `cerrada` replica la envoltura de la cadena cerrada: sin ella, un punto
+    que caiga justo en la COSTURA (entre la última celda y la primera) se
+    quedaría sin uno de sus dos segmentos y la distancia saldría de más —
+    medida a un extremo en vez de al tramo que de verdad tiene al lado.
+
+    OJO: cuando `localizar` puede formar un trío de celdas consecutivas usa
+    una curva local C¹ en vez de los segmentos rectos, así que su valor puede
+    diferir en décimas del que se dibuja aquí. Justo por eso interesa ver los
+    dos números juntos (el calculado aquí y el dist_derrape que el
+    controlador publicó en el bag): si se separan mucho, el cálculo del
+    algoritmo es lo que hay que mirar."""
+    n = len(pts)
+    d2 = np.sum((pts - p) ** 2, axis=1)
+    i = int(np.argmin(d2))
+    mejor = float(np.sqrt(d2[i]))
+    pie = pts[i]
+    for a, b in ((i - 1, i), (i, i + 1)):
+        if cerrada:
+            a, b = a % n, b % n
+        elif a < 0 or b >= n:
+            continue
+        A, B = pts[a], pts[b]
+        AB = B - A
+        l2 = float(np.dot(AB, AB))
+        if l2 == 0.0:
+            continue
+        t = max(0.0, min(1.0, float(np.dot(p - A, AB)) / l2))
+        proyeccion = A + t * AB
+        d = float(np.linalg.norm(p - proyeccion))
+        if d < mejor:
+            mejor, pie = d, proyeccion
+    return pie, mejor
+
+
 # ===========================================================================
 # FIGURA 1: evolución 3D del derrape sobre la trayectoria (fig. 5.12 de
 # la memoria de Mario)
@@ -952,10 +1103,10 @@ def _con_cortes(df, col_x, col_y, camaras):
 # Eje Z y color = distancia de derrape de la pegatina TRASERA en cada punto
 # (el dist_derrape de la telemetría emparejado con su posición).
 #
-# Slider ACUMULATIVO: el paso "inicio" enseña solo la línea base; el paso v
-# superpone los puntos de las vueltas 1..v sin borrar los anteriores, para
-# ver cómo van creciendo las zonas de derrape con las vueltas. La vista se
-# puede rotar/orbitar con el ratón (scatter3d).
+# Slider INSTANTÁNEO: cada paso enseña SOLO los puntos de esa vuelta (la
+# línea base delantera queda siempre visible). Los ejes tienen rango FIJO
+# (calculado de toda la carrera): la caja no cambia de tamaño ni de posición
+# al pasar de vuelta, así se comparan. La vista se rota con el ratón.
 #
 # df: DataFrame ordenado por t con columnas
 #     [t, vuelta, camara, fx, fy, bx, by, dist]  (dist NaN si la telemetría
@@ -978,7 +1129,23 @@ def grafica_1_derrape3d(df):
         line=dict(color=COL_TRAY_BASE_3D, width=3), hoverinfo="skip",
     ))
 
-    # Un bloque de puntos por vuelta (pegatina trasera, z = dist derrape)
+    # Rangos del plano: aquí arriba se usan para dimensionar y colocar la
+    # flecha de sentido (tamaño y separación salen del lado mayor del
+    # circuito, y el desplazamiento hacia fuera, del centro). Los rangos
+    # DEFINITIVOS de la caja se recalculan al final incluyendo las flechas,
+    # que caen fuera del trazado y si no quedarían recortadas.
+    gx_min, gx_max, gy_min, gy_max = _rangos_globales(df, camaras)
+    mayor_plano = max(gx_max - gx_min, gy_max - gy_min)
+    largo_flecha = mayor_plano * 0.03
+    centro_plano = ((gx_min + gx_max) / 2, (gy_min + gy_max) / 2)
+    puntos_flecha = []
+
+    # Un bloque de TRAZAS por vuelta: los puntos de derrape y, encima, la
+    # ESTRELLA de inicio de meta (mismo criterio que la g2: el primer punto
+    # capturado de la vuelta, sobre el plano base en z=0) con su FLECHA de
+    # sentido de la marcha. Son 3 trazas por vuelta; el slider las enciende
+    # juntas.
+    TRAZAS_POR_VUELTA_1 = 3
     con_dist = df[df["dist"].notna() & df["vuelta"].notna()]
     z_max = max(float(con_dist["dist"].max()) if len(con_dist) else 1.0, 1.0)
     for v in vueltas:
@@ -1000,43 +1167,79 @@ def grafica_1_derrape3d(df):
             text=[f"v{int(v)} · {f.camara}<br>dist={f.dist:.1f} px"
                   for f in fr.itertuples()],
             hovertemplate="%{text}<extra></extra>",
-            visible=False,
+            visible=(v == vueltas[0]),
         ))
 
-    # Slider acumulativo: paso 0 = solo la base; el paso k enseña las
-    # vueltas 1..k (la traza 0, la base, siempre visible)
-    pasos = [dict(label="inicio", method="update",
-                  args=[{"visible": [True] + [False] * len(vueltas)}])]
+        # Inicio de meta: el primer punto capturado de la vuelta (todo el df,
+        # no solo los que tienen dist), dibujado a z=0 sobre el plano base
+        # para orientar por dónde arranca el trazado.
+        fr_vuelta = df[df["vuelta"] == v]
+        primera = fr_vuelta.iloc[0]
+        dx, dy = offset_camara(primera["camara"], indice[primera["camara"]])
+        fig.add_trace(go.Scatter3d(
+            x=[primera["fx"] + dx], y=[primera["fy"] + dy], z=[0],
+            mode="markers", name="inicio de vuelta", showlegend=False,
+            marker=dict(symbol="diamond", size=6, color=COL_INICIO_VUELTA,
+                        line=dict(color=COL_SUPERFICIE, width=1)),
+            text=[f"v{int(v)} · inicio de meta"],
+            hovertemplate="%{text}<extra></extra>",
+            visible=(v == vueltas[0]),
+        ))
+
+        # Y la flecha del sentido de la marcha, a la altura de la estrella pero
+        # apartada hacia fuera del circuito. Si la vuelta no da tangente se
+        # mete una traza vacía: el bloque por vuelta tiene que medir siempre
+        # TRAZAS_POR_VUELTA_1 porque el slider direcciona las trazas por índice.
+        tangente = _tangente_meta(
+            fr_vuelta, camaras, centro_plano,
+            mayor_plano * SEPARACION_FLECHA_SENTIDO)
+        if tangente is None:
+            fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode="lines",
+                                       showlegend=False, hoverinfo="skip"))
+        else:
+            traza = _flecha_sentido_3d(
+                tangente, largo_flecha, visible=(v == vueltas[0]),
+                centro=centro_plano)
+            fig.add_trace(traza)
+            puntos_flecha.append(_puntos_con_holgura(traza, centro_plano))
+
+    # Slider instantáneo: cada paso enseña SOLO su vuelta (la traza 0, la
+    # línea base delantera, siempre visible; detrás, los trazos de la vuelta)
+    pasos = []
     for k, v in enumerate(vueltas):
-        visibles = [True] + [i <= k for i in range(len(vueltas))]
+        visibles = [True] + [False] * (TRAZAS_POR_VUELTA_1 * len(vueltas))
+        for j in range(TRAZAS_POR_VUELTA_1):
+            visibles[1 + TRAZAS_POR_VUELTA_1 * k + j] = True
         pasos.append(dict(label=str(int(v)), method="update",
                           args=[{"visible": visibles}]))
+
+    # Rangos FIJOS de la caja, ya con las flechas dentro: así el encuadre no
+    # cambia al pasar de vuelta y las vueltas se pueden comparar
+    gx_min, gx_max, gy_min, gy_max = _rangos_globales(
+        df, camaras, extra=puntos_flecha)
+
     # Proporción de la caja 3D: x e y guardan la proporción real del plano
     # (el circuito no sale deformado) y z se lleva ALTURA_RELATIVA_Z del lado
     # mayor. Con aspectmode="data" el eje z (0..~20 px de derrape) quedaría
     # aplastado contra un plano de más de mil píxeles de ancho y no se vería
     # el relieve, que es justo lo que cuenta esta figura.
-    rango_x = float(df["fx"].max() - df["fx"].min()) or 1.0
-    rango_y = float(df["fy"].max() - df["fy"].min()) or 1.0
-    # A los rangos hay que sumarles la separación entre cámaras en el plano
-    # global (cada una entra desplazada por su offset)
-    desplazamientos = [offset_camara(c, i) for i, c in enumerate(camaras)]
-    rango_x += max(d[0] for d in desplazamientos) - min(d[0] for d in desplazamientos)
-    rango_y += max(d[1] for d in desplazamientos) - min(d[1] for d in desplazamientos)
+    rango_x = (gx_max - gx_min) or 1.0
+    rango_y = (gy_max - gy_min) or 1.0
     mayor = max(rango_x, rango_y)
 
     fig.update_layout(
-        sliders=[dict(active=0, currentvalue=dict(prefix="Hasta la vuelta "),
+        sliders=[dict(active=0, currentvalue=dict(prefix="Vuelta "),
                       pad=dict(t=10), steps=pasos)],
         scene=dict(
             xaxis_title="x (px del plano global)",
             yaxis_title="y (px del plano global)",
             zaxis_title="dist. derrape (px)",
-            # Y invertida para que el circuito se vea como en la imagen de
-            # la cámara. nticks bajo: el eje y es el lado corto de la caja y
-            # sus marcas se amontonarían unas sobre otras
-            yaxis=dict(autorange="reversed", nticks=5),
-            xaxis=dict(nticks=8),
+            # Rangos FIJOS. La Y va invertida (de mayor a menor) para que el
+            # circuito se vea como en la imagen de la cámara. nticks bajo en
+            # Y: es el lado corto de la caja y sus marcas se amontonarían
+            xaxis=dict(range=[gx_min, gx_max], nticks=8),
+            yaxis=dict(range=[gy_max, gy_min], nticks=5),
+            zaxis=dict(range=[0, z_max * 1.05]),
             aspectmode="manual",
             aspectratio=dict(x=rango_x / mayor, y=rango_y / mayor,
                              z=ALTURA_RELATIVA_Z),
@@ -1053,7 +1256,7 @@ def grafica_1_derrape3d(df):
     fig = _layout_base(
         fig,
         "1 · Valor de derrape en cada punto del recorrido "
-        "(acumulado hasta la vuelta del slider; arrastrar para rotar)",
+        "(una vuelta cada vez, ejes fijos; arrastrar para rotar)",
         720,
     )
     # Los márgenes de _layout_base son para figuras 2D (dejan sitio al
@@ -1066,64 +1269,294 @@ def grafica_1_derrape3d(df):
 # FIGURA 2: trayectorias de la etiqueta delantera y trasera (fig. 5.17 de
 # la memoria de Mario)
 # ===========================================================================
-# Vista 2D del plano global con las dos trayectorias superpuestas, cada una
-# con su color y su leyenda. Slider INSTANTÁNEO (decidido con Lois): cada
-# paso enseña SOLO la vuelta seleccionada, así se ve cómo cambia la
-# trayectoria al pasar de una vuelta a la siguiente (dónde se dispersa y
-# dónde se estabiliza).
+# Vista 2D del plano global. Slider INSTANTÁNEO: cada paso enseña SOLO la
+# vuelta seleccionada, y con los EJES FIJOS (misma escala en todas), así se
+# ve cómo cambia el trazado de una vuelta a la siguiente sin que el
+# autoescalado engañe estirando o achatando el circuito.
+#
+# Qué lleva la vuelta activa (todo visible por defecto; los CHECKBOXES del
+# HTML quitan/ponen cada capa, el JS de la sección 2 en analisis.py usa los
+# índices de traza que van en layout.meta):
+#   - TRAYECTORIA BASE (azul): las celdas aprendidas, la referencia contra la
+#     que el algoritmo mide de verdad
+#   - pegatina DELANTERA (verde) y pegatina TRASERA (magenta): las dos a la vez
+#   - INICIO de la vuelta (estrella ámbar, SIN checkbox): el primer punto tras
+#     el cruce de meta, para saber por dónde empieza a leerse el trazado, con
+#     la FLECHA del sentido de la marcha al lado (también sin checkbox)
+#   - DISTANCIA DE DERRAPE (rojo): un segmento de la trasera al pie de su
+#     perpendicular sobre la trayectoria base, calculado COMO LO CALCULA el
+#     algoritmo (ver _pie_perpendicular). El valor (MAGNITUD, sin signo) va
+#     SIEMPRE en el hover de la recta y sus extremos, junto al dist_derrape que
+#     el controlador publicó en el bag, que es con quien se contrasta.
+#
+# Todas las series van con MARCADOR además de la línea: la polilínea sola no
+# deja ver los puntos reales, que son con los que trabaja el controlador.
 #
 # df: el mismo DataFrame de grafica_1_derrape3d.
+# celdas_por_camara: {camara: DataFrame de celdas del log}, o None si no hay
+#     logs (entonces no hay trayectoria base: ni su checkbox ni las
+#     perpendiculares).
+# cerradas: {camara: bool} con si la cadena de esa cámara es cerrada; hace
+#     falta para medir bien en la costura (ver _pie_perpendicular).
+# umbral: umbral_derrape (px). Ya no decide nada visual (el valor va siempre
+#     en el hover); se conserva por compatibilidad de la llamada.
+# max_dist_ruta: px; los frames cuya DELANTERA esté más lejos de la ruta se
+#     saltan, porque el algoritmo los descarta enteros (paso 1 de
+#     actualizar_estado) y nunca llegan a producir un dist_derrape. Sin este
+#     filtro la figura se llena de segmentos larguísimos hacia detecciones
+#     falsas que el controlador ni miró.
 # ===========================================================================
-def grafica_2_trayectorias(df):
+# Trazas que lleva CADA vuelta, en este orden: trasera, delantera, inicio,
+# perpendiculares y flecha de sentido. El bloque es de tamaño fijo (aunque
+# alguna vaya vacía) porque el slider y el JS de los checkboxes direccionan las
+# trazas por índice; por eso la flecha se añadió AL FINAL, para no mover los
+# índices que ya usaban las capas con checkbox.
+TRAZAS_POR_VUELTA_2 = 5
+
+
+def grafica_2_trayectorias(df, celdas_por_camara=None, cerradas=None,
+                           umbral=None, max_dist_ruta=None):
     camaras = sorted(df["camara"].unique())
     vueltas = sorted(df.loc[df["vuelta"].notna(), "vuelta"].unique())
+    indice = {c: i for i, c in enumerate(camaras)}
+
+    # --- Trayectoria base aprendida (celdas del log) en el plano global ----
+    # Es la referencia CONTRA LA QUE el algoritmo mide la distancia de la
+    # trasera, así que sirve para las dos cosas: dibujarla y calcular las
+    # perpendiculares. Las celdas gigantes no tienen punto (x/y NaN).
+    base_por_camara = {}
+    for cam in camaras:
+        celdas = (celdas_por_camara or {}).get(cam)
+        if celdas is None or celdas.empty:
+            continue
+        normales = celdas[~celdas["gigante"]].sort_values("celda")
+        if len(normales) < 2:
+            continue
+        dx, dy = offset_camara(cam, indice[cam])
+        base_por_camara[cam] = np.column_stack([
+            normales["x"].to_numpy(dtype=float) + dx,
+            normales["y"].to_numpy(dtype=float) + dy,
+        ])
+    cerrada_de = cerradas or {}
+    hay_base = bool(base_por_camara)
 
     fig = go.Figure()
-    # Dos trazas "fantasma" siempre visibles que sostienen la leyenda: si la
-    # llevaran las trazas de una vuelta, la leyenda desaparecería al mover
-    # el slider a otra vuelta
-    series = [
-        ("bx", "by", "Etiq. trasera", COL_ETIQ_TRASERA),
-        ("fx", "fy", "Etiq. delantera", COL_ETIQ_DELANTERA),
+
+    # --- Estáticas: fantasmas de leyenda + la trayectoria base -------------
+    # Las trazas de cada vuelta van con showlegend=False y la leyenda la
+    # sostienen estos fantasmas: si la llevaran ellas, cambiaría al mover el
+    # slider a otra vuelta.
+    fantasmas = [
+        ("Etiq. trasera", COL_ETIQ_TRASERA, "lines+markers"),
+        ("Etiq. delantera", COL_ETIQ_DELANTERA, "lines+markers"),
+        ("Inicio de vuelta y sentido", COL_INICIO_VUELTA, "markers"),
     ]
-    for _, _, nombre, color in series:
+    if hay_base:
+        fantasmas.append(("Dist. derrape (perpendicular)", COL_CRITICO, "lines"))
+        fantasmas.append(("Trayectoria base (celdas)", COL_TRAY_BASE,
+                          "lines+markers"))
+    for nombre, color, modo in fantasmas:
         fig.add_trace(go.Scatter(
-            x=[None], y=[None], mode="lines", name=nombre,
-            line=dict(color=color, width=1.5), legendgroup=nombre,
-            showlegend=True, hoverinfo="skip",
+            x=[None], y=[None], mode=modo, name=nombre,
+            line=dict(color=color, width=1.5),
+            marker=dict(size=8, color=color), hoverinfo="skip",
         ))
+    # Índices de los fantasmas de leyenda, para que cada checkbox del HTML
+    # apague/encienda también su entrada de leyenda (orden de la lista de
+    # arriba). Los de la base solo existen si hay_base.
+    idx_fantasma_trasera = 0
+    idx_fantasma_delantera = 1
+    idx_fantasma_perp = 3 if hay_base else -1
+    idx_fantasma_base = len(fantasmas) - 1 if hay_base else -1
+
+    if hay_base:
+        # La línea se CORTA en las celdas gigantes (huecos tapados: ahí no hay
+        # puntos aprendidos) y entre cámaras. Es importante que el hueco se
+        # vea: dentro de él la celda más cercana está lejísimos, así que la
+        # perpendicular sale enorme, y sin el corte parecería un error de
+        # cálculo en vez de "aquí la trayectoria base no existe".
+        bxs, bys = [], []
+        for cam in camaras:
+            if cam not in base_por_camara:
+                continue
+            if bxs:  # None entre cámaras: no se unen dos porciones distintas
+                bxs.append(None)
+                bys.append(None)
+            celdas = celdas_por_camara[cam].sort_values("celda")
+            dx, dy = offset_camara(cam, indice[cam])
+            for _, cd in celdas.iterrows():
+                if cd["gigante"]:
+                    bxs.append(None)
+                    bys.append(None)
+                else:
+                    bxs.append(cd["x"] + dx)
+                    bys.append(cd["y"] + dy)
+        fig.add_trace(go.Scatter(
+            x=bxs, y=bys, mode="lines+markers",
+            name="Trayectoria base (celdas)",
+            line=dict(color=COL_TRAY_BASE, width=1.5),
+            marker=dict(size=6, color=COL_TRAY_BASE), showlegend=False,
+            hovertemplate="celda base · (%{x:.0f}, %{y:.0f})<extra></extra>",
+            # Arranca VISIBLE: por defecto se enseñan las tres capas a la vez
+            # (base + delantera + trasera) y los checkboxes del HTML las quitan.
+            visible=True,
+        ))
+    idx_base = len(fantasmas) if hay_base else -1
+    n_estaticas = len(fantasmas) + (1 if hay_base else 0)
+
+    # Para colocar la flecha de sentido fuera del trazado hacen falta el centro
+    # del circuito y su tamaño; los rangos definitivos de los ejes se calculan
+    # al final incluyendo las propias flechas, que si no quedarían recortadas
+    x0, x1, y0, y1 = _rangos_globales(
+        df, camaras, extra=list(base_por_camara.values()))
+    centro_plano = ((x0 + x1) / 2, (y0 + y1) / 2)
+    separacion = max(x1 - x0, y1 - y0) * SEPARACION_FLECHA_SENTIDO
+    puntos_flecha = []
+
+    # --- Un bloque de TRAZAS_POR_VUELTA_2 trazas por vuelta ----------------
     for v in vueltas:
         fr = df[df["vuelta"] == v]
-        for col_x, col_y, nombre, color in series:
+        visible = v == vueltas[0]
+
+        for col_x, col_y, nombre, color in (
+            ("bx", "by", "Etiq. trasera", COL_ETIQ_TRASERA),
+            ("fx", "fy", "Etiq. delantera", COL_ETIQ_DELANTERA),
+        ):
             xs, ys = _con_cortes(fr, col_x, col_y, camaras)
             fig.add_trace(go.Scatter(
-                x=xs, y=ys, mode="lines", name=nombre,
+                x=xs, y=ys, mode="lines+markers", name=nombre,
                 line=dict(color=color, width=1.5),
-                legendgroup=nombre, showlegend=False,
+                # Marcadores grandes con borde: los nodos reales (con los que
+                # trabaja el controlador) tienen que verse sobre la polilínea
+                marker=dict(size=8, color=color,
+                            line=dict(color=COL_SUPERFICIE, width=1)),
+                showlegend=False,
                 hovertemplate=f"{nombre} · v{int(v)}<br>" +
                               "(%{x:.0f}, %{y:.0f})<extra></extra>",
-                visible=(v == vueltas[0]),
+                visible=visible,
             ))
 
-    # Slider instantáneo: dos trazas (trasera + delantera) por vuelta, tras
-    # las dos fantasma de la leyenda (siempre visibles)
+        # Inicio de la vuelta: el primer punto que llegó tras cruzar meta
+        # (df viene en orden de grabación), en las dos pegatinas
+        primera = fr.iloc[0]
+        dx, dy = offset_camara(primera["camara"], indice[primera["camara"]])
+        fig.add_trace(go.Scatter(
+            x=[primera["fx"] + dx, primera["bx"] + dx],
+            y=[primera["fy"] + dy, primera["by"] + dy],
+            mode="markers", name="Inicio de vuelta", showlegend=False,
+            marker=dict(symbol="star", size=14, color=COL_INICIO_VUELTA,
+                        line=dict(color=COL_SUPERFICIE, width=1)),
+            text=["inicio (delantera)", "inicio (trasera)"],
+            hovertemplate=f"v{int(v)} · %{{text}}<extra></extra>",
+            visible=visible,
+        ))
+
+        # Perpendiculares de la trasera a la trayectoria base: un segmento
+        # por punto, todos en una traza separados por None. El VALOR ya no se
+        # escribe al lado (saturaba la figura): va SIEMPRE en el hover, tanto
+        # en la recta como en sus dos extremos (marcadores), que son diana
+        # fácil para el ratón. Es una MAGNITUD, sin signo: el algoritmo mide
+        # cuánto se aparta la trasera, no de qué lado (ver _dist_a_segmento).
+        px, py, hovers = [], [], []
+        for fila in fr.itertuples():
+            pts = base_por_camara.get(fila.camara)
+            if pts is None:
+                continue
+            dx, dy = offset_camara(fila.camara, indice[fila.camara])
+            # Mismo filtro que el algoritmo: si la DELANTERA está a más de
+            # max_dist_ruta de la ruta, el frame entero se descarta y nunca
+            # llega a medirse el derrape. Dibujar esos puntos llenaría la
+            # figura de segmentos larguísimos hacia detecciones falsas.
+            if max_dist_ruta is not None:
+                _, d_front = _pie_perpendicular(
+                    np.array([fila.fx + dx, fila.fy + dy], dtype=float), pts,
+                    cerrada_de.get(fila.camara, False))
+                if d_front > max_dist_ruta:
+                    continue
+            p = np.array([fila.bx + dx, fila.by + dy], dtype=float)
+            pie, d = _pie_perpendicular(
+                p, pts, cerrada_de.get(fila.camara, False))
+            texto = f"v{int(v)} · d calculada = {d:.1f} px (sin signo)"
+            if not pd.isna(fila.dist):
+                texto += f"<br>dist_derrape del bag = {fila.dist:.1f} px"
+            px += [p[0], pie[0], None]
+            py += [p[1], pie[1], None]
+            hovers += [texto, texto, ""]
+        fig.add_trace(go.Scatter(
+            x=px, y=py, mode="lines+markers", name="Dist. derrape",
+            line=dict(color=COL_CRITICO, width=1.5),
+            marker=dict(size=4, color=COL_CRITICO), showlegend=False,
+            customdata=hovers, hovertemplate="%{customdata}<extra></extra>",
+            visible=visible,
+        ))
+
+        # Flecha del sentido de la marcha, a la altura de la estrella de inicio
+        # pero apartada hacia fuera del circuito (encima del trazado se pierde
+        # entre los marcadores de las pegatinas). Va sin checkbox (como la
+        # estrella) y siempre ocupa su hueco del bloque: si la vuelta no da
+        # tangente, entra una traza vacía.
+        tangente = _tangente_meta(fr, camaras, centro_plano, separacion)
+        if tangente is None:
+            fig.add_trace(go.Scatter(x=[], y=[], mode="markers",
+                                     showlegend=False, hoverinfo="skip"))
+        else:
+            traza = _flecha_sentido_2d(
+                tangente, visible=visible, centro=centro_plano)
+            fig.add_trace(traza)
+            puntos_flecha.append(_puntos_con_holgura(traza, centro_plano))
+
+    # --- Slider instantáneo ------------------------------------------------
+    # El paso enciende TODAS las estáticas y las trazas de la vuelta activa:
+    # el estado por defecto es "todo visible". Justo después, el JS de los
+    # checkboxes re-aplica lo que el usuario tenga marcado (por eso hace falta
+    # re-aplicar tras cada cambio de vuelta: el paso reactiva capas ocultas).
     pasos = []
     for k, v in enumerate(vueltas):
-        visibles = [True, True] + [False] * (2 * len(vueltas))
-        visibles[2 + 2 * k] = visibles[3 + 2 * k] = True
+        visibles = ([True] * n_estaticas
+                    + [False] * (TRAZAS_POR_VUELTA_2 * len(vueltas)))
+        for j in range(TRAZAS_POR_VUELTA_2):
+            visibles[n_estaticas + TRAZAS_POR_VUELTA_2 * k + j] = True
         pasos.append(dict(label=str(int(v)), method="update",
                           args=[{"visible": visibles}]))
+
+    # Índices de las trazas por vuelta, por categoría (orden del bloque:
+    # trasera j=0, delantera j=1, inicio j=2, perpendiculares j=3, flecha de
+    # sentido j=4). El inicio de vuelta y la flecha no llevan checkbox (van
+    # siempre visibles).
+    def idx_por_vuelta(j):
+        return [n_estaticas + TRAZAS_POR_VUELTA_2 * k + j
+                for k in range(len(vueltas))]
+
+    x_min, x_max, y_min, y_max = _rangos_globales(
+        df, camaras, extra=list(base_por_camara.values()) + puntos_flecha)
     fig.update_layout(
         sliders=[dict(active=0, currentvalue=dict(prefix="Vuelta "),
                       pad=dict(t=30), steps=pasos)],
+        # Los índices de traza que necesita el JS de los checkboxes. Van en
+        # layout.meta, el sitio de plotly para datos propios que viajan con la
+        # figura hasta el HTML. Cada categoría lleva su lista por vuelta (o el
+        # índice de la estática, en el caso de la base) y su fantasma de
+        # leyenda, para poder apagar/encender capa + leyenda a la vez.
+        meta=dict(
+            idx_base=idx_base,                        # estática única
+            idx_fantasma_base=idx_fantasma_base,
+            idx_fantasma_delantera=idx_fantasma_delantera,
+            idx_fantasma_trasera=idx_fantasma_trasera,
+            idx_fantasma_perp=idx_fantasma_perp,
+            idx_trasera=idx_por_vuelta(0),
+            idx_delantera=idx_por_vuelta(1),
+            idx_perp=idx_por_vuelta(3),
+        ),
     )
-    # Coordenadas de imagen: Y invertida y escala 1:1
-    fig.update_yaxes(autorange="reversed", scaleanchor="x", scaleratio=1,
+    # Coordenadas de imagen: Y invertida (rango de mayor a menor), escala 1:1
+    # y rangos FIJOS para que todas las vueltas se dibujen a la misma escala
+    fig.update_yaxes(range=[y_max, y_min], scaleanchor="x", scaleratio=1,
                      title_text="y (px del plano global)")
-    fig.update_xaxes(title_text="x (px del plano global)")
+    fig.update_xaxes(range=[x_min, x_max],
+                     title_text="x (px del plano global)")
     return _layout_base(
         fig,
         "2 · Trayectorias de la etiqueta delantera y trasera "
-        "(una vuelta cada vez)",
+        "(una vuelta cada vez, ejes fijos)",
         680,
     )

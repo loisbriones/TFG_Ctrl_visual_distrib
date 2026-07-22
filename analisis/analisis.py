@@ -23,16 +23,23 @@ El HTML se escribe junto a los datos como <nombre_bag>_analisis.html (las
 gráficas funcionan abriéndolo con doble clic; los botones de PDF/CSV y el
 visor de imágenes necesitan el servidor) y se sirve en http://localhost:8988.
 
+Todos los sliders por vuelta son INSTANTÁNEOS (cada paso enseña SOLO su
+vuelta) y con los ejes fijos, para poder comparar vueltas entre sí. Los de la
+2 y la 3b van además sincronizados entre ellos.
+
 Secciones del dashboard:
-  0  Resumen de la carrera + anomalías detectadas
-  1  Derrape 3D sobre la trayectoria (slider ACUMULATIVO por vueltas)
-  2  Trayectorias de las dos pegatinas (slider INSTANTÁNEO: una vuelta)
-  3  Distancia perpendicular de la trasera vs celda (INSTANTÁNEO)
-  4  El circuito con el PWM de cada celda (todas las cámaras en un plano)
-  5  Tabla de tiempos por vuelta + tendencia
-  6  Análisis del algoritmo: zonas (6a), heatmap de PWM (6b), resumen (6c)
-  7  Visor de imágenes de las cámaras + vídeo mosaico descargable
-  8  Descarga de todas las tablas en CSV
+  0   Resumen de la carrera + anomalías detectadas
+  1   Derrape 3D sobre la trayectoria
+  2   Trayectorias de las dos pegatinas, con la trayectoria base y las
+      perpendiculares de derrape (checkboxes para quitar/poner cada capa)
+  3b  Distancia de derrape del bag, vuelta a vuelta; 3c su resumen
+  4   El circuito con el PWM de cada celda por color (todas las cámaras en
+      un plano): un bloque de color es una zona
+  5   Tabla de tiempos por vuelta + tendencia y, debajo, la comparativa
+      derrape frente a tiempo en cajas por vuelta (5c)
+  6   Análisis del algoritmo: heatmap de PWM (6b), resumen por vuelta (6c)
+  7   Visor de imágenes de las cámaras + vídeo mosaico descargable
+  8   Descarga de todas las tablas en CSV
 
 Endpoints del servidor (los usan los botones del HTML):
   /pdf?fig=<clave>[&vuelta=N]  PDF vectorial de una figura, en el estado de
@@ -61,8 +68,8 @@ import figuras
 from figuras import (
     COL_GRID, COL_SERIE_1, COL_SUPERFICIE, COL_TINTA, COL_TINTA_2, FUENTE,
     PANELES_6C, _layout_base, grafica_1_derrape3d, grafica_2_trayectorias,
-    grafica_3_dist, grafica_3b_derrape_bag, grafica_3c_resumen_derrape,
-    grafica_4_circuito, grafica_6a_zonas, grafica_6b_heatmap,
+    grafica_3b_derrape_bag, grafica_3c_resumen_derrape,
+    grafica_4_circuito, grafica_5c_cajas_derrape, grafica_6b_heatmap,
     grafica_6c_resumen, grafica_6c_subplot,
 )
 from lectura_bag import (
@@ -86,9 +93,21 @@ FACTOR_VUELTA_ANOMALA = 2.0
 # algoritmo del que leerlo (es el valor por defecto de EstrategiaPerfil)
 UMBRAL_DERRAPE_DEF = 8.0
 
+# Ídem para max_dist_ruta: la distancia a la ruta por encima de la cual el
+# algoritmo DESCARTA el fotograma entero (detección falsa de la delantera).
+# La sección 2 lo usa para no dibujar perpendiculares de frames que el
+# controlador ni llegó a mirar.
+MAX_DIST_RUTA_DEF = 80.0
+
 # id del <div> de la gráfica 3b: lo necesita el script que mueve la vuelta
 # con las flechas del teclado (ver seccion_3b_derrape_bag)
 ID_GRAFICA_3B = "g-derrape-bag"
+
+# id del <div> de la gráfica 2: lo necesitan los checkboxes que quitan/ponen
+# cada capa (base, delantera, trasera, perpendiculares; ver
+# seccion_2_trayectorias) y el script que mantiene su vuelta sincronizada con
+# la de la 3b
+ID_GRAFICA_2 = "g-trayectorias"
 
 # fps del vídeo mosaico de la sección 7 (--vídeo, no --datos--: es solo para
 # revisar las cámaras, no hace falta que sea exacto). Las cámaras no están
@@ -157,6 +176,178 @@ def buscar_logs(argumentos, carpeta_bag):
         else:
             sys.exit(f"ERROR: no existe {p}")
     return rutas
+
+
+# ---------------------------------------------------------------------------
+# Sección 2: trayectorias, con los checkboxes que enseñan/quitan cada capa
+# ---------------------------------------------------------------------------
+# La figura enseña a la vez (por defecto) tres capas: la TRAYECTORIA BASE
+# aprendida (las celdas del log, la referencia contra la que el algoritmo mide),
+# la pegatina DELANTERA y la pegatina TRASERA. Un bloque de checkboxes quita o
+# pone cada una para poder aislar lo que interese. Son checkboxes HTML y no un
+# `updatemenus` de plotly porque los dos controles tocan lo mismo (`visible`) y
+# se pisan: el slider de vueltas volvería a encender una capa que el checkbox
+# acaba de apagar. Con JS se RE-APLICA el estado de los checkboxes después de
+# cada cambio de vuelta, y ese mismo `gd.__reaplicar` lo reutiliza el script de
+# sincronización con la 3b.
+#
+# Los índices de traza que el JS necesita viajan en `layout.meta` (los pone
+# grafica_2_trayectorias): así el HTML no tiene que saber cómo está montada
+# la figura. Cada categoría lleva su lista de índices por vuelta (o el índice
+# de la estática, para la base) y el de su fantasma de leyenda.
+# ---------------------------------------------------------------------------
+def seccion_2_trayectorias(fig, hay_base):
+    cuerpo = fig.to_html(
+        full_html=False, include_plotlyjs=False, div_id=ID_GRAFICA_2,
+        config={"displaylogo": False, "responsive": True},
+    )
+    # Un checkbox por capa. La delantera y la trasera siempre están; la base y
+    # sus perpendiculares solo si hay logs (si no, no hay trayectoria base).
+    def check(serie, etiqueta):
+        return (f'<label><input type="checkbox" data-serie="{serie}" checked> '
+                f"{etiqueta}</label>")
+    checks = [check("delantera", "Etiq. delantera"),
+              check("trasera", "Etiq. trasera")]
+    if hay_base:
+        checks.insert(0, check("base", "Trayectoria base"))
+        checks.append(check("perp", "Dist. derrape"))
+    checks_html = (f'<div class="checks-tray" id="checks-tray-2">'
+                   f'{"".join(checks)}</div>')
+
+    explica_base = (
+        "<p>Las tres capas salen a la vez y los <strong>checkboxes</strong> "
+        "quitan o ponen cada una. La <strong>trayectoria base</strong> "
+        "(azul) es la aprendida en calibración (las celdas del log), la "
+        "referencia contra la que el algoritmo mide de verdad. Los segmentos "
+        "rojos (<strong>Dist. derrape</strong>) son esa medida: van de la "
+        "trasera al pie de su perpendicular sobre la base, calculados igual que "
+        "en <code>localizar()</code>. El valor sale al <strong>pasar el ratón "
+        "por la recta</strong> (o por sus extremos), junto al "
+        "<code>dist_derrape</code> que el controlador publicó en el bag, que es "
+        "con quien hay que contrastarlo; es una <strong>magnitud, sin signo</"
+        "strong> (el algoritmo mide cuánto se aparta la trasera, no de qué "
+        "lado). Los fotogramas que el algoritmo <strong>descarta</strong> (la "
+        "delantera a más de <code>max_dist_ruta</code> de la ruta) no llevan "
+        "perpendicular, porque tampoco llegan a producir un "
+        "<code>dist_derrape</code>.</p>"
+        if hay_base else
+        "<p>Sin logs del algoritmo no hay trayectoria base que dibujar, así que "
+        "esta vez no salen ni su checkbox ni las perpendiculares de derrape.</p>"
+    )
+    script = f"""
+<script>
+(function() {{
+  const gd = document.getElementById("{ID_GRAFICA_2}");
+  const cont = document.getElementById("checks-tray-2");
+  if (!gd || !cont) return;
+  function marcado(serie) {{
+    const el = cont.querySelector('input[data-serie="' + serie + '"]');
+    return el ? el.checked : true;  // capa sin checkbox: se deja como esté
+  }}
+  // Aplica el estado de los checkboxes a la vuelta ACTIVA. Las capas por
+  // vuelta (delantera/trasera/perp) solo tocan la traza de esa vuelta; las
+  // demás ya están apagadas por el paso del slider. La base es una estática.
+  function reaplicar() {{
+    const meta = gd.layout.meta || {{}};
+    const slider = (gd.layout.sliders || [])[0];
+    const k = (slider && slider.active) || 0;
+    const on = [], off = [];
+    function aplica(visible, idx) {{
+      if (idx === undefined || idx === null || idx < 0) return;
+      (visible ? on : off).push(idx);
+    }}
+    aplica(marcado("base"), meta.idx_base);
+    aplica(marcado("base"), meta.idx_fantasma_base);
+    aplica(marcado("delantera"), (meta.idx_delantera || [])[k]);
+    aplica(marcado("delantera"), meta.idx_fantasma_delantera);
+    aplica(marcado("trasera"), (meta.idx_trasera || [])[k]);
+    aplica(marcado("trasera"), meta.idx_fantasma_trasera);
+    aplica(marcado("perp"), (meta.idx_perp || [])[k]);
+    aplica(marcado("perp"), meta.idx_fantasma_perp);
+    if (off.length) Plotly.restyle(gd, {{visible: false}}, off);
+    if (on.length) Plotly.restyle(gd, {{visible: true}}, on);
+  }}
+  // El script de sincronización con la 3b lo llama tras mover la vuelta
+  gd.__reaplicar = reaplicar;
+  cont.querySelectorAll('input[type="checkbox"]').forEach(function(el) {{
+    el.addEventListener("change", reaplicar);
+  }});
+  // Tras cambiar de vuelta el slider reescribe las visibilidades (reactiva
+  // todas las capas de la nueva vuelta): hay que volver a imponer lo marcado,
+  // en un tick aparte, cuando plotly ya terminó
+  gd.on("plotly_sliderchange", function() {{ setTimeout(reaplicar, 0); }});
+  reaplicar();
+}})();
+</script>
+"""
+    return f"""
+<section><h2>2 · Trayectorias de la etiqueta delantera y trasera</h2>
+<p>Las pegatinas en el plano global, <strong>una vuelta cada vez</strong>: al
+mover el slider se ve cómo cambia el trazado de una vuelta a la siguiente. Los
+<strong>ejes están fijos</strong> (mismo rango y escala 1:1 en todas las
+vueltas), así que dos vueltas se pueden comparar directamente. Cada punto real
+va con su marcador además de la línea: son los puntos con los que trabaja el
+controlador. La <strong>estrella ámbar</strong> marca el inicio de la vuelta,
+justo después del cruce de meta, y la <strong>flecha</strong> de su lado, el
+sentido de la marcha.</p>
+{explica_base}
+<div class="descargas">{checks_html}</div>
+{cuerpo}
+{script}
+<div class="descargas">{boton_pdf("2", "Descargar gráfica (PDF)")}
+{boton_csv("posiciones", "Descargar posiciones (CSV)")}</div>
+</section>
+"""
+
+
+# ---------------------------------------------------------------------------
+# Sincronización de la vuelta entre la gráfica 2 y la 3b
+# ---------------------------------------------------------------------------
+# Las dos tienen un slider por vuelta y se miran juntas ("veo algo raro en el
+# trazado de la vuelta 12, quiero su distancia de derrape"). Este script las
+# ata: mover una mueve la otra al paso con la MISMA etiqueta de vuelta (las
+# dos usan el número de vuelta como etiqueta, así que casan directamente).
+#
+# Va en su propia parte, al final del documento, porque necesita que los dos
+# <div> existan ya: un <script> dentro de la sección 2 se ejecutaría cuando el
+# de la 3b todavía no se ha creado.
+# ---------------------------------------------------------------------------
+def script_sincronizar_vueltas():
+    return f"""
+<script>
+(function() {{
+  const g2 = document.getElementById("{ID_GRAFICA_2}");
+  const g3 = document.getElementById("{ID_GRAFICA_3B}");
+  if (!g2 || !g3) return;
+  let sincronizando = false;
+  function pasoConEtiqueta(gd, etiqueta) {{
+    const s = (gd.layout.sliders || [])[0];
+    if (!s) return -1;
+    for (let i = 0; i < s.steps.length; i++)
+      if (String(s.steps[i].label) === String(etiqueta)) return i;
+    return -1;
+  }}
+  function enlazar(origen, destino) {{
+    origen.on("plotly_sliderchange", function(ev) {{
+      if (sincronizando || !ev.step) return;
+      const k = pasoConEtiqueta(destino, ev.step.label);
+      const s = (destino.layout.sliders || [])[0];
+      if (k < 0 || !s || k === (s.active || 0)) return;
+      sincronizando = true;
+      // El paso ya lleva su array de visibilidad: se aplica igual que si se
+      // hubiera pinchado en él, y además se mueve el propio slider
+      Plotly.update(destino, s.steps[k].args[0], {{"sliders[0].active": k}})
+        .then(function() {{
+          if (destino.__reaplicar) destino.__reaplicar();
+          sincronizando = false;
+        }});
+    }});
+  }}
+  enlazar(g2, g3);
+  enlazar(g3, g2);
+}})();
+</script>
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -310,10 +501,12 @@ todavía va por detrás del inicio de la cadena de la cámara que entra, así qu
 # ---------------------------------------------------------------------------
 # Sección 5: tabla de tiempos por vuelta + mini-gráfica de tendencia
 # ---------------------------------------------------------------------------
-def seccion_5_tiempos(vueltas):
+def seccion_5_tiempos(vueltas, df_tel=None, umbral=None):
     """Tabla HTML con todas las vueltas y su tiempo (mejor vuelta resaltada,
-    anómalas marcadas) + pie con mejor/media/peor + mini-gráfica de línea al
-    lado para ver la tendencia. Devuelve el HTML de la sección completa."""
+    anómalas marcadas) + pie con mejor/media/mediana/peor + mini-gráfica de
+    línea al lado para ver la tendencia. Si hay telemetría del bag, debajo de
+    esa tendencia va la figura que compara el derrape con el tiempo (5c).
+    Devuelve el HTML de la sección completa."""
     if not vueltas:
         return ("<section><h2>5 · Tiempos por vuelta</h2>"
                 "<p>El bag no contiene mensajes de time_per_lap.</p></section>")
@@ -322,6 +515,14 @@ def seccion_5_tiempos(vueltas):
     mejor = min(tiempos)
     media = sum(tiempos) / len(tiempos)
     peor = max(tiempos)
+    # La MEDIANA es la referencia de la gráfica: la media se la lleva cualquier
+    # vuelta anómala (una parada de 30 s sube la referencia de todas), mientras
+    # que la mediana dice cómo iba el coche de verdad. La media se queda en la
+    # tabla, para poder comparar las dos y ver de un vistazo si hay anómalas.
+    ordenados = sorted(tiempos)
+    mitad = len(ordenados) // 2
+    mediana = (ordenados[mitad] if len(ordenados) % 2
+               else (ordenados[mitad - 1] + ordenados[mitad]) / 2)
 
     filas = []
     for v in vueltas:
@@ -342,6 +543,7 @@ def seccion_5_tiempos(vueltas):
         "</tr></thead><tbody>" + "".join(filas) + "</tbody>"
         f'<tfoot><tr><td>mejor</td><td>{mejor:.3f}</td></tr>'
         f"<tr><td>media</td><td>{media:.3f}</td></tr>"
+        f"<tr><td>mediana</td><td>{mediana:.3f}</td></tr>"
         f"<tr><td>peor</td><td>{peor:.3f}</td></tr></tfoot></table>"
     )
 
@@ -352,11 +554,14 @@ def seccion_5_tiempos(vueltas):
             hovertemplate="v%{x}: %{y:.3f} s<extra></extra>",
         )
     )
-    fig.add_hline(y=media, line=dict(color=COL_GRID, width=1, dash="dash"),
-                  annotation_text=f"media {media:.2f} s",
+    fig.add_hline(y=mediana, line=dict(color=COL_GRID, width=1, dash="dash"),
+                  annotation_text=f"mediana {mediana:.2f} s",
                   annotation_font_color=COL_TINTA_2)
     fig.update_xaxes(title_text="vuelta", dtick=5)
-    fig.update_yaxes(title_text="tiempo (s)", rangemode="tozero")
+    # Sin rangemode="tozero" (como el panel de tiempos de la 6c): arrancando en
+    # 0 un circuito de ~6 s sale como una línea plana y no se aprecia que una
+    # vuelta suba o baje unas décimas, que es justo lo que se viene a mirar
+    fig.update_yaxes(title_text="tiempo (s)")
     _layout_base(fig, "Tendencia del tiempo por vuelta", 420)
     fig.update_layout(margin=dict(l=60, r=20, t=60, b=50))
     mini = fig.to_html(full_html=False, include_plotlyjs=False,
@@ -366,16 +571,44 @@ def seccion_5_tiempos(vueltas):
     FIGURAS["5"] = fig
     TABLAS["tiempos"] = pd.DataFrame(vueltas)
 
+    # --- Comparativa derrape <-> tiempo (5c) -------------------------------
+    # Solo si el bag trae telemetría del controlador; sin ella no hay
+    # dist_derrape que comparar (mismo criterio que la sección 3b). Va JUSTO
+    # DEBAJO de la gráfica de tendencia, en la misma columna: las dos tienen
+    # el mismo eje X (la vuelta) y se leen una encima de otra, comparando el
+    # tiempo con el derrape de esa misma vuelta sin mover la vista.
+    comparativa = ""
+    if df_tel is not None and len(df_tel):
+        tiempos_por_vuelta = {v["numero"]: v["tiempo"] for v in vueltas}
+        FIGURAS["5c"] = grafica_5c_cajas_derrape(
+            df_tel, tiempos_por_vuelta, umbral)
+        comparativa = (
+            "<p><strong>Derrape frente a tiempo.</strong> Enseña el "
+            "compromiso del algoritmo: al subir el PWM el coche se aparta más "
+            "de la trayectoria (más <code>dist_derrape</code>) y el tiempo "
+            "baja, hasta que el derrape pasa del umbral y el tiempo vuelve a "
+            "<em>empeorar</em>. Cada caja son los cuartiles del derrape de esa "
+            "vuelta (los valores atípicos van sueltos en rojo) y la línea "
+            "naranja, su tiempo en el eje derecho.</p>"
+            + FIGURAS["5c"].to_html(
+                full_html=False, include_plotlyjs=False,
+                config={"displaylogo": False, "responsive": True})
+            + f'<div class="descargas">{boton_pdf("5c")}</div>')
+
     return (
         "<section><h2>5 · Tiempos por vuelta</h2>"
         "<p>Tiempos medidos por el controlador al cruzar la línea de meta "
         "(topic time_per_lap del bag). La mejor vuelta va resaltada; una "
         f"vuelta que supere {FACTOR_VUELTA_ANOMALA:.0f}× la media se marca "
-        "como anómala (parada, salida de pista, relocalización...).</p>"
+        "como anómala (parada, salida de pista, relocalización...). La línea "
+        "de puntos de la gráfica es la <strong>mediana</strong>, no la media: "
+        "una sola vuelta anómala desplaza la media y deja de servir de "
+        "referencia (las dos están en el pie de la tabla).</p>"
         f'<div class="fila-tiempos"><div>{tabla_html}</div>'
-        f'<div class="mini-grafica">{mini}</div></div>'
+        f'<div class="mini-grafica">{mini}'
         f'<div class="descargas">{boton_pdf("5", "Descargar gráfica (PDF)")}'
-        f'{boton_csv("tiempos", "Descargar tiempos (CSV)")}</div></section>'
+        f'{boton_csv("tiempos", "Descargar tiempos (CSV)")}</div>'
+        f"{comparativa}</div></div></section>"
     )
 
 
@@ -599,6 +832,15 @@ def ensamblar_html(nombre, resumen_html, partes):
     color: {COL_TINTA}; background: {COL_GRID}; border-radius: 4px;
     padding: 4px 12px; margin: 4px 8px 4px 0; }}
   a.boton:hover {{ background: #d2d1c8; }}
+  .checks-tray {{
+    display: inline-flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+    font-size: 12px; color: {COL_TINTA}; }}
+  .checks-tray label {{
+    display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+    background: {COL_GRID}; border: 1px solid #d2d1c8; border-radius: 4px;
+    padding: 3px 10px; }}
+  .checks-tray label:hover {{ background: #d2d1c8; }}
+  .checks-tray input[type=checkbox] {{ cursor: pointer; margin: 0; }}
   .descargas {{ margin: 4px 0 18px; }}
   .aviso-servidor {{
     background: #fdf6e3; border-left: 3px solid {COL_TINTA_2};
@@ -919,6 +1161,9 @@ def main():
     umbral_derrape = next(
         (d["c"].params["umbral_derrape"] for d in logs.values()
          if "umbral_derrape" in d["c"].params), UMBRAL_DERRAPE_DEF)
+    max_dist_ruta = next(
+        (d["c"].params["max_dist_ruta"] for d in logs.values()
+         if "max_dist_ruta" in d["c"].params), MAX_DIST_RUTA_DEF)
     vuelta_de_tel = repartir_por_vueltas([m["t"] for m in telemetria], vueltas)
     pwm_de_tel = pwm_en_instantes([m["t"] for m in telemetria], bag["pwm"])
     # Inicio de cada vuelta: el mensaje time_per_lap se publica al CERRARLA,
@@ -989,23 +1234,26 @@ def main():
             "1 · Valor de derrape en cada punto del recorrido",
             "La trayectoria de la pegatina delantera como línea base (violeta, "
             "z=0) y, como altura y color, la distancia de derrape de la "
-            "trasera en cada punto. El slider ACUMULA: el paso v superpone "
-            "las vueltas 1..v, para ver cómo crecen las zonas de derrape con "
-            "las vueltas. La vista se rota arrastrando con el ratón. Para "
-            "sacar una vuelta concreta a PDF: mover el slider y añadir "
-            "<code>&amp;vuelta=N</code> al enlace, o descargar y repetir.",
+            "trasera en cada punto. El slider enseña UNA vuelta cada vez, y la "
+            "caja tiene los ejes fijos: el encuadre no cambia al pasar de "
+            "vuelta, así que dos vueltas se comparan tal cual. El rombo ámbar "
+            "es el inicio de meta y la flecha de su lado, el sentido de la "
+            "marcha. La vista se rota "
+            "arrastrando con el ratón. Para sacar una vuelta concreta a PDF: "
+            "mover el slider y añadir <code>&amp;vuelta=N</code> al enlace, o "
+            "descargar y repetir.",
             FIGURAS["1"], primera=primera, claves=["1"], csv="posiciones",
         ))
         primera = False
-        FIGURAS["2"] = grafica_2_trayectorias(df_pos)
-        partes.append(seccion(
-            "2 · Trayectorias de la etiqueta delantera y trasera",
-            "Las dos pegatinas en el plano global, una vuelta cada vez: al "
-            "mover el slider se ve cómo cambia la trayectoria de una vuelta "
-            "a la siguiente (dónde se dispersa la trasera y dónde va pegada "
-            "a la delantera).",
-            FIGURAS["2"], claves=["2"], csv="posiciones",
-        ))
+        # La trayectoria BASE y las perpendiculares de derrape salen de las
+        # celdas del log: sin logs la figura se queda solo con las dos
+        # pegatinas (ni checkbox de base ni perpendiculares)
+        celdas_por_camara = {cam: d["c"].celdas for cam, d in logs.items()}
+        cerradas = {cam: d["c"].cerrada for cam, d in logs.items()}
+        FIGURAS["2"] = grafica_2_trayectorias(
+            df_pos, celdas_por_camara=celdas_por_camara, cerradas=cerradas,
+            umbral=umbral_derrape, max_dist_ruta=max_dist_ruta)
+        partes.append(seccion_2_trayectorias(FIGURAS["2"], bool(logs)))
     else:
         partes.append("<section><h2>1 · Valor de derrape en cada punto del "
                       "recorrido</h2><p>Sin posiciones dentro de vueltas "
@@ -1023,26 +1271,7 @@ def main():
             TABLAS[f"derrapes:{cam}"] = d["c"].derrapes
             TABLAS[f"resumen_vueltas:{cam}"] = d["tabla"]
 
-        figs3, claves3 = [], []
-        for cam, d in logs.items():
-            clave = f"3:{cam}" if varias else "3"
-            FIGURAS[clave] = etiquetar_camara(
-                grafica_3_dist(d["c"], d["vueltas"]), cam, varias)
-            figs3.append(FIGURAS[clave])
-            claves3.append(clave)
-        partes.append(seccion(
-            "3 · Detección de derrape sobre la trayectoria",
-            "La distancia perpendicular de la pegatina trasera en función de "
-            "su celda, la serie que dispara la máquina de derrapes. En gris "
-            "todas las vueltas (contexto), en azul la vuelta del slider y en "
-            "rojo sus frames con derrape abierto. La línea negra es el umbral "
-            "leído del log.",
-            figs3, primera=primera, claves=claves3,
-            csv=f"frames:{next(iter(logs))}" if logs else None,
-        ))
-        primera = False
-
-    # --- 3b: la misma distancia, pero la que quedó grabada en el bag -------
+    # --- 3b: la distancia de derrape que quedó grabada en el bag -----------
     # Va aquí (y no dentro del `if logs`) porque no necesita el log: sale de
     # la telemetría del propio bag
     if len(df_tel):
@@ -1064,46 +1293,30 @@ def main():
             "tiempos de vuelta.</p></section>")
 
     if logs:
-        FIGURAS["4"] = grafica_4_circuito(logs)
+        # df_pos aporta el primer punto de cada vuelta para marcar el inicio
+        # de meta sobre el circuito (None si el bag no traía posiciones)
+        FIGURAS["4"] = grafica_4_circuito(
+            logs, df_pos if hay_vueltas_pos else None)
         partes.append(seccion(
             "4 · El circuito con el PWM de cada celda",
             "Todas las cámaras en el mismo plano (desplazadas según "
             "OFFSETS_CAMARAS en figuras.py, a ajustar por montaje): la "
-            "trayectoria en gris tenue y cada celda con su PWM escrito como "
-            "número. El anillo rojo marca las celdas dentro de una zona de "
-            "derrape al empezar la vuelta del slider; la línea ámbar "
-            "discontinua es un hueco tapado (celda gigante).",
+            "trayectoria en gris tenue y cada celda pintada del color de su "
+            "valor de PWM, con la leyenda diciendo qué valor es cada color. "
+            "Como todas las celdas de una zona comparten PWM, <strong>un "
+            "bloque de un solo color es una zona</strong> y un cambio de color "
+            "es una frontera: moviendo el slider se ve cómo nacen, crecen y "
+            "desaparecen las zonas vuelta a vuelta. La línea ámbar discontinua "
+            "es un hueco tapado (celda gigante); la estrella ámbar es el "
+            "inicio de meta y la flecha de su lado, el sentido de la marcha.",
             FIGURAS["4"], primera=primera, claves=["4"],
             csv=f"celdas:{next(iter(logs))}" if logs else None,
         ))
         primera = False
 
-    partes.append(seccion_5_tiempos(vueltas))
+    partes.append(seccion_5_tiempos(vueltas, df_tel, umbral_derrape))
 
     if logs:
-        figs6a, claves6a = [], []
-        for cam, d in logs.items():
-            clave = f"6a:{cam}" if varias else "6a"
-            FIGURAS[clave] = etiquetar_camara(
-                grafica_6a_zonas(d["c"], d["vueltas"], d["zonas_fin_vuelta"]),
-                cam, varias)
-            figs6a.append(FIGURAS[clave])
-            claves6a.append(clave)
-        partes.append(seccion(
-            "6a · Evolución de las zonas de derrape",
-            "Cada fila es una vuelta (la primera arriba, se lee hacia abajo). "
-            "Las barras naranjas son las zonas de derrape <em>tal como quedan "
-            "al terminar esa vuelta</em>, con su PWM en el hover. Debajo de "
-            "cada fila, en rojo, los derrapes individuales de esa vuelta "
-            "(rombo = 1 sola celda) y las estrellas marcan fusiones. Los "
-            "círculos grises son aperturas descartadas por la zona muerta; "
-            "los triángulos ámbar, derrames de reducción entre cámaras; la "
-            "banda ámbar vertical, una celda gigante (hueco tapado).",
-            figs6a, primera=primera, claves=claves6a,
-            csv=f"derrapes:{next(iter(logs))}",
-        ))
-        primera = False
-
         figs6b, claves6b = [], []
         for cam, d in logs.items():
             clave = f"6b:{cam}" if varias else "6b"
@@ -1165,6 +1378,10 @@ def main():
         "analizarlas de otra forma (hoja de cálculo, otro script...). Las "
         "claves con dos puntos son por cámara.</p>"
         f'<ul class="lista-csv">{enlaces_csv}</ul></section>')
+
+    # Ata la vuelta de la gráfica 2 con la de la 3b. Va al final del documento
+    # a propósito: necesita que los dos <div> ya existan (ver la función)
+    partes.append(script_sincronizar_vueltas())
 
     # --- Escribir y servir ---------------------------------------------------
     pagina = ensamblar_html(bag_dir.name, resumen_html, partes)
