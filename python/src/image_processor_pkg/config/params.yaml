@@ -1,9 +1,39 @@
 /**:
   ros__parameters:
     modo_calibracion: True
-    coches: ["car1"]
+    # Lista de coches del sistema. Genera un detector por coche en la camara,
+    # un controlador por coche y las suscripciones del puente Arduino. Cada
+    # nombre de esta lista tiene que tener su bloque en 'cars' de abajo.
+    coches: ["car1", "car2"]
 
-    #Parametros para la camara 
+    # Configuracion POR COCHE. La clave (car1, car2, ...) es el identificador
+    # del coche y coincide con 'coches' y con el namespace ROS (/car1/...).
+    # Aqui vive TODO lo que distingue a un coche de otro:
+    #   - stiker_front/back: colores de sus dos pegatinas. La camara construye
+    #     un ColorDetector por coche con estos colores, y por eso dos coches
+    #     con colores distintos se pueden seguir a la vez sin confundirse.
+    #   - carril: carril fisico del Arduino al que esta conectado este coche
+    #     ("r1"/"1" o "r2"/"2"; el puente parsea ambas formas). Sustituye al
+    #     antiguo reparto por orden de la lista en el launch: aqui se pone el
+    #     carril REAL del montaje, no el que toque por posicion.
+    #   - modo_manual: false -> coche autonomo, lo arranca BrainLaunch (que
+    #     ademas lanza el arduino_bridge). true -> lo conduce una persona, lo
+    #     arranca ManualLaunch (sin puente). Cada launch filtra 'coches' por
+    #     este flag, asi que para un mixto (uno manual + uno autonomo) se
+    #     levantan los dos docker-compose a la vez y cada uno coge su parte.
+    cars:
+      car1:
+        stiker_front: "azul"
+        stiker_back: "verde"
+        carril: "2"
+        modo_manual: false
+      car2:
+        stiker_front: "verde"
+        stiker_back: "azul"
+        carril: "1"
+        modo_manual: true
+
+    #Parametros para la camara
     camera:
       # Controlar el tamaño de la foto que sacamos
       # CAMERA_MODES = {
@@ -20,12 +50,9 @@
       # Parametro que controla si estamos en modo debug o no, en caso de estar en bug se envia la imagen de lo que ve la camara
       debug: True 
 
-      # Parametros para el modulo de deteccion 
+      # Parametros para el modulo de deteccion
+      # (los colores de las pegatinas NO van aqui: son por coche, en 'cars')
       detection:
-        # Color de la pegatina delantera del coche 
-        stiker_front: "verde"
-        # Color de la pegatina trasera del coche
-        stiker_back: "azul"
         # Color de la linea del meta del circuito
         finish_line_color: "naranja"
         # Tamaño del kernel que usamos para la operacion de deteccion
@@ -36,7 +63,7 @@
     # Parámetros para el controlador
     controller:
       # Velocidad minima a la que podemos ir
-      minimum_speed: 70 
+      minimum_speed: 65 
       # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
       maximum_speed: 90 
       distancia_nodos_trayectoria: 15.0
@@ -50,5 +77,5 @@
     arduino:
       port: "/dev/ttyACM0"
       baudrate: 115200
-      calibration_speed: 65 
+      calibration_speed: 60 
 

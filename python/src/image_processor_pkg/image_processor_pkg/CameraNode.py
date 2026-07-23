@@ -118,19 +118,22 @@ class ImageProcessor(Node):
         self.declare_parameter("camera.detection.min_area", 50)
         self.min_area = self.get_parameter("camera.detection.min_area").value
 
-        self.declare_parameter("camera.detection.stiker_front", "rojo")
-        self.stiker_front = self.get_parameter("camera.detection.stiker_front").value
-
-        self.declare_parameter("camera.detection.stiker_back", "verde")
-        self.stiker_back = self.get_parameter("camera.detection.stiker_back").value
-
         self.declare_parameter("camera.detection.kernel_size", 5)
         self.kernel_size = self.get_parameter("camera.detection.kernel_size").value
         # ---------------------
 
-        # --- COLOR DETECTOR ---
-        self.color_detector = ColorDetector(self.stiker_front, self.stiker_back, self.kernel_size)
-        # ----------------------
+        # --- COLOR DETECTORS POR COCHE ---
+        # Los colores de las pegatinas ya NO son globales de la camara: son de
+        # cada coche (params.yaml -> cars.<coche>.stiker_front/back). Aqui van
+        # los dos diccionarios que se rellenan en el bucle de coches de abajo,
+        # uno con los colores y otro con un ColorDetector propio por coche.
+        # Tener un detector independiente por coche es lo que permite seguir
+        # varios a la vez con colores distintos sin que se pisen entre hilos.
+        #   self.car_stikers[coche]     = {"front": color, "back": color}
+        #   self.color_detectors[coche] = ColorDetector(front, back, kernel)
+        self.car_stikers = {}
+        self.color_detectors = {}
+        # ---------------------------------
 
         # ---- DEBUG ----
         self.declare_parameter("camera.debug", False)
@@ -192,6 +195,24 @@ class ImageProcessor(Node):
 
         for car_name in self.coches:
             self.get_logger().info(f"CREADO CARRIL PARA {car_name}")
+
+            # Colores de las pegatinas de ESTE coche (params.yaml ->
+            # cars.<coche>.stiker_front/back). Se guardan en car_stikers (que
+            # usan publish_car_position y tarea_por_coche para etiquetar y
+            # buscar) y se construye un ColorDetector propio del coche.
+            param_front = f"cars.{car_name}.stiker_front"
+            param_back = f"cars.{car_name}.stiker_back"
+            self.declare_parameter(param_front, "rojo")
+            self.declare_parameter(param_back, "verde")
+            s_front = self.get_parameter(param_front).value
+            s_back = self.get_parameter(param_back).value
+
+            self.car_stikers[car_name] = {"front": s_front, "back": s_back}
+            self.color_detectors[car_name] = ColorDetector(s_front, s_back, self.kernel_size)
+            self.get_logger().info(
+                f"🚗 {car_name} -> frontal: {s_front} | trasero: {s_back}"
+            )
+
             self.publisher_coche[car_name] = self.create_publisher(
                 CarLocation, f"/{car_name}/position", qos_profile_sensor_data
             )
@@ -232,7 +253,14 @@ class ImageProcessor(Node):
         self.finish_line_color = self.get_parameter("finish_line_color").value
 
         ret, frame_for_find_sectors = self.cam.read()
-        self.finish_line_position = self.color_detector.find_finish_line(frame_for_find_sectors, self.finish_line_color)
+        # La linea de meta es del circuito, no de ningun coche: vale cualquier
+        # detector (find_finish_line usa solo finish_line_color). Se coge el del
+        # primer coche, o uno auxiliar si no hubiera coches configurados.
+        if self.coches:
+            detector_meta = self.color_detectors[self.coches[0]]
+        else:
+            detector_meta = ColorDetector("", "", self.kernel_size)
+        self.finish_line_position = detector_meta.find_finish_line(frame_for_find_sectors, self.finish_line_color)
 
         if self.finish_line_position is not None and ret:
             self.finish_line_publisher = self.create_publisher(FinishLine, "/finish_line_position", QOS_FINISH_LINE)
@@ -350,19 +378,22 @@ class ImageProcessor(Node):
                         f"Parámetro actualizado: min_area = {self.min_area}"
                     )
 
-            elif param.name == "camera.detection.stiker_front":
-                self.stiker_front = param.value
-                self.actualizar_detector()
-                self.get_logger().info(
-                    f"Parámetro actualizado: color_1 = {self.stiker_front}"
-                )
-
-            elif param.name == "camera.detection.stiker_back":
-                self.stiker_back = param.value
-                self.actualizar_detector()
-                self.get_logger().info(
-                    f"Parámetro actualizado: color_2 = {self.stiker_back}"
-                )
+            elif param.name.startswith("cars."):
+                # Cambio en caliente de un color de pegatina de un coche:
+                # cars.<coche>.stiker_front / cars.<coche>.stiker_back
+                parts = param.name.split(".")
+                if len(parts) == 3:
+                    car_name, stiker_type = parts[1], parts[2]
+                    if (
+                        car_name in self.car_stikers
+                        and stiker_type in ("stiker_front", "stiker_back")
+                    ):
+                        key = "front" if stiker_type == "stiker_front" else "back"
+                        self.car_stikers[car_name][key] = param.value
+                        self.actualizar_detector()
+                        self.get_logger().info(
+                            f"Parámetro actualizado para {car_name}: {stiker_type} = {param.value}"
+                        )
 
             elif param.name == "camera.detection.kernel_size":
                 if param.value % 2 == 0:
@@ -411,8 +442,13 @@ class ImageProcessor(Node):
         return mascara_final
 
     def actualizar_detector(self):
-        """Función auxiliar para re-instanciar el detector con los nuevos valores."""
-        self.color_detector = ColorDetector(self.stiker_front, self.stiker_back, self.kernel_size)
+        """Re-instancia el ColorDetector de CADA coche con sus colores actuales
+        (car_stikers) y el kernel actual. Se llama al cambiar en caliente un
+        color de pegatina o el kernel de deteccion."""
+        for car_name in self.coches:
+            s_front = self.car_stikers[car_name]["front"]
+            s_back = self.car_stikers[car_name]["back"]
+            self.color_detectors[car_name] = ColorDetector(s_front, s_back, self.kernel_size)
 
     def publish_car_position(self, detections, proc_duration, x, y, car_name, frame_stamp, n_frame):
         object_location_msg = CarLocation()
@@ -428,7 +464,7 @@ class ImageProcessor(Node):
                 if key == "front":
                     object_location_msg.front.center.x = p["cx"] + x
                     object_location_msg.front.center.y = p["cy"] + y
-                    object_location_msg.front.color = self.stiker_front
+                    object_location_msg.front.color = self.car_stikers[car_name]["front"]
                     # Guardar la posición del rectangulo que detectamos
                     # También hay que ajustarlo porque se sacan las coordenas de dentro del ROI
                     object_bounding_rect_front.x = p["x"] + x 
@@ -442,7 +478,7 @@ class ImageProcessor(Node):
                 if key == "back":
                     object_location_msg.back.center.x = p["cx"] + x
                     object_location_msg.back.center.y = p["cy"] + y
-                    object_location_msg.back.color = self.stiker_back
+                    object_location_msg.back.color = self.car_stikers[car_name]["back"]
                     
                     # Guardar la posición del rectangulo que detectamos
                     # También hay que ajustarlo porque se sacan las coordenas de dentro del ROI
@@ -567,10 +603,15 @@ class ImageProcessor(Node):
     Funcion que ejecutan los threads que se encargan de buscar los Stikers de los coches en el frame
     """
     def tarea_por_coche(self, frame, frame_stamp, n_frame, car_name, info):
+        # Detector y colores propios de ESTE coche (cada hilo del pool trabaja
+        # con la instancia de su coche, sin compartir estado con los demas)
+        detector = self.color_detectors[car_name]
+        s_front = self.car_stikers[car_name]["front"]
+        s_back = self.car_stikers[car_name]["back"]
 
         # --- MODO CALIBRACIÓN ---
         if self.modo_calibracion:
-            detections = self.color_detector.find_object(frame, self.min_area, self.stiker_front, self.stiker_back)
+            detections = detector.find_object(frame, self.min_area, s_front, s_back)
             if detections["front"] is not None:
                 info["puntos_trayectoria"].append((detections["front"]["cx"], detections["front"]["cy"]))
                 # Usamos 0,0 como offset porque es el frame completo
@@ -590,7 +631,7 @@ class ImageProcessor(Node):
 
         # 3. Detectar
         start = time.perf_counter()
-        detections = self.color_detector.find_object(roi_frame, self.min_area, self.stiker_front, self.stiker_back)
+        detections = detector.find_object(roi_frame, self.min_area, s_front, s_back)
         duration = (time.perf_counter() - start) * 1000
 
         found_any = detections["front"] is not None and detections["back"] is not None

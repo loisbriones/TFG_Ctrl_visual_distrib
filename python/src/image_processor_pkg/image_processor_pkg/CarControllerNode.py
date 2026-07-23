@@ -58,6 +58,28 @@ class CarControllerNode(Node):
         self.declare_parameter("carril_asignado", "2")
         self.carril = self.get_parameter("carril_asignado").value
 
+        # --- MODO MANUAL: el coche lo conduce una persona ---
+        # False (el valor con el que arranca BrainLaunch, que no pasa el
+        # parámetro) = carrera autónoma de siempre. True (lo pone
+        # ManualLaunch) = la carrera la conduce una persona con el mando
+        # físico del Scalextric, así que el Arduino queda FUERA del circuito y
+        # el arduino_bridge ni siquiera se lanza.
+        #
+        # Lo ÚNICO que cambia en el nodo es que no se publica la orden de PWM
+        # (ver publicar_velocidad) y que la terminal pasa a ser el salpicadero
+        # del piloto (ver log_algoritmo y mostrar_panel_piloto). TODO lo demás
+        # sigue igual a propósito: la vuelta de calibración, la trayectoria
+        # base, una EstrategiaPerfil por cámara, la detección de derrape, el
+        # aprendizaje del perfil, el derrame entre cámaras, el log y la
+        # telemetría. Que el algoritmo siga corriendo entero en paralelo es el
+        # objetivo del modo, no un descuido: su log guarda fotograma a
+        # fotograma qué PWM habría aplicado ([FRAME ... pwm=N]), y comparándolo
+        # después con lo que hizo la persona se ve dónde el algoritmo es
+        # demasiado conservador y dónde el humano se arriesga más de lo que
+        # este permitiría.
+        self.declare_parameter("modo_manual", False)
+        self.modo_manual = self.get_parameter("modo_manual").value
+
         self.en_calibracion = True
         self.v_actual = self.v_min
         self.ultimo_pwm_enviado = 0.0
@@ -67,6 +89,15 @@ class CarControllerNode(Node):
         self.algoritmos = {}
         self.vueltas = 0
         self.derrapes_ultima_vuelta = 0
+
+        # --- CRONOMETRAJE PARA EL PILOTO (solo modo manual) ---
+        # Los lleva mostrar_panel_piloto, su único consumidor: en modo
+        # automático se quedan a None porque nadie los mira (el dashboard saca
+        # la mejor vuelta del bag). (tiempo, nº de vuelta) de la vuelta más
+        # rápida hasta ahora, y el tiempo de la vuelta inmediatamente anterior
+        # para poder decir "¿he mejorado?" al cruzar meta.
+        self.mejor_tiempo = None
+        self.tiempo_vuelta_anterior = None
 
         self.finish_line = {"camara_id": None, "coordenadas": None}
 
@@ -194,7 +225,20 @@ class CarControllerNode(Node):
         # --- RUTA DE GUARDADO DE TRAYECTORIAS ---
         self.cache_file = "/ros2_ws/src/image_processor_pkg/cache_trayectoria_controller.json"
 
-        self.get_logger().info("🏁 Controlador iniciado. MODO CALIBRACIÓN ACTIVO.")
+        if self.modo_manual:
+            # warn y no info: en manual es importante que quien arranca el
+            # sistema vea de un vistazo que el nodo NO va a mover el coche, y
+            # que la vuelta de calibración hay que conducirla a mano (sin
+            # arduino_bridge nadie pone los carriles a calibration_speed)
+            self.get_logger().warn(
+                "🕹️ Controlador iniciado en MODO MANUAL: conduce una persona y "
+                "NO se publica ninguna orden de PWM. El algoritmo corre igual "
+                "para dejar en su log lo que habría hecho. Conduce la vuelta de "
+                "calibración despacio y sin parar: de ella sale la trayectoria "
+                "base."
+            )
+        else:
+            self.get_logger().info("🏁 Controlador iniciado. MODO CALIBRACIÓN ACTIVO.")
 
     def callback_get_finish_line_position(self, msg):
         self.finish_line["camara_id"] = msg.camara_id
@@ -227,6 +271,10 @@ class CarControllerNode(Node):
             # El cronómetro de meta también parte de cero
             self.front_meta_anterior = None
             self.t_meta_anterior = None
+            # Y con él los tiempos que se le enseñan al piloto: la mejor vuelta
+            # de la carrera anterior no vale para la que empieza
+            self.mejor_tiempo = None
+            self.tiempo_vuelta_anterior = None
             self.publicar_velocidad(0)
             self.get_logger().warn("⚠️ Reiniciando calibración.")
 
@@ -385,7 +433,7 @@ class CarControllerNode(Node):
             if self.camara_activa is None:
                 self.camara_activa = camara
                 self.t_ultimo_frame_valido = time_received_from_camera
-                self.get_logger().info(f"👁️ Cámara activa inicial: {camara}")
+                self.log_algoritmo(f"👁️ Cámara activa inicial: {camara}")
             elif camara == self.camara_activa:
                 self.t_ultimo_frame_valido = time_received_from_camera
             else:
@@ -417,7 +465,7 @@ class CarControllerNode(Node):
                         self.vueltas, self.ultimo_frame_camara[self.camara_activa]
                     )
                     self.camara_precedente[camara] = self.camara_activa
-                    self.get_logger().info(
+                    self.log_algoritmo(
                         f"👁️ Cámara activa: {self.camara_activa} -> {camara} "
                         f"(precedente de {camara} = {self.camara_activa})"
                     )
@@ -432,7 +480,7 @@ class CarControllerNode(Node):
         if pendiente > 0.0:
             precedente = self.camara_precedente.get(camara)
             if precedente is not None and precedente in self.algoritmos:
-                self.get_logger().info(
+                self.log_algoritmo(
                     f"↩️ Derrame: {camara} pide reducir {pendiente:.0f} px; "
                     f"se aplican al final de la trayectoria de {precedente}"
                 )
@@ -467,7 +515,7 @@ class CarControllerNode(Node):
 
         # Log solo si cambia para no saturar la terminal
         if nueva_vel is not None and nueva_vel != self.ultimo_pwm_enviado:
-            self.get_logger().info(
+            self.log_algoritmo(
                 f"🚦 PERFIL ACTUANDO: PWM: {self.v_actual} (perfil {self.v_min}-{self.v_max})"
             )
             self.ultimo_pwm_enviado = self.v_actual
@@ -481,7 +529,7 @@ class CarControllerNode(Node):
         for algoritmo in self.algoritmos.values():
             algoritmo.registrar_vuelta(self.vueltas, vuelta_limpia)
         if vuelta_limpia:
-            self.get_logger().info("📈 Vuelta limpia: el perfil de PWM sube.")
+            self.log_algoritmo("📈 Vuelta limpia: el perfil de PWM sube.")
 
     def distancia_punto_segmento(self, P, A, B):
         AB = B - A
@@ -494,11 +542,70 @@ class CarControllerNode(Node):
         return np.linalg.norm(P - proyeccion)
 
     def publicar_velocidad(self, pwm):
+        # ÚNICO punto por el que sale una orden de PWM del nodo (lo llaman
+        # ejecutar_control_carrera y el reinicio de calibración), así que
+        # cortar aquí corta el control entero. En modo manual manda el gatillo
+        # de la persona: publicar sería, en el mejor de los casos, ruido en el
+        # bag, y si alguien levantase el arduino_bridge por error el coche se
+        # pondría a correr solo en mitad de la carrera manual.
+        if self.modo_manual:
+            return
+
         msg_vel = SpeedCarril()
         msg_vel.pwm = pwm
-        msg_vel.carril = "2"
+        # Carril FISICO de este coche (params.yaml -> cars.<coche>.carril, que
+        # el launch pasa como carril_asignado). Antes iba fijo a "2" porque el
+        # Arduino de pruebas estaba en ese carril; con varios coches cada uno
+        # tiene el suyo y hay que respetarlo o dos coches irian al mismo carril.
+        msg_vel.carril = str(self.carril)
         msg_vel.stamp = self.get_clock().now().to_msg()
         self.pub_pwm.publish(msg_vel)
+
+    def log_algoritmo(self, texto):
+        """Mensajes de terminal que solo interesan cuando el algoritmo manda.
+
+        En modo manual la terminal es lo único que ve la persona mientras
+        conduce, y estos mensajes (el PWM en cada cambio de zona, las
+        conmutaciones de cámara, los derrames) enterrarían los tiempos de
+        vuelta entre decenas de líneas por minuto. No se pierde nada: todo
+        sigue escribiéndose en logs_carrera/derrapesLog_*.txt, que es de donde
+        lo lee el dashboard de análisis.
+        """
+        if not self.modo_manual:
+            self.get_logger().info(texto)
+
+    def mostrar_panel_piloto(self, lap_time, lap_number):
+        """El 'salpicadero' del modo manual: lo que necesita ver de reojo quien
+        está conduciendo — qué vuelta acaba de cerrar, en cuánto, si ha
+        mejorado respecto a la anterior y cuál es su mejor tiempo.
+
+        Las flechas van al revés de lo intuitivo (▼ = menos tiempo = mejor),
+        así que siempre acompañan al signo del delta, que es lo que se lee de
+        verdad al pasar por meta.
+        """
+        lineas = [f"🏁 VUELTA {lap_number} · {lap_time:.3f} s"]
+
+        if self.tiempo_vuelta_anterior is not None:
+            delta = lap_time - self.tiempo_vuelta_anterior
+            flecha = "▼" if delta < 0 else "▲"
+            lineas[0] += f"  {flecha} {delta:+.3f} vs anterior"
+
+        if self.mejor_tiempo is None or lap_time < self.mejor_tiempo[0]:
+            if self.mejor_tiempo is not None:
+                lineas.append(
+                    f"🏆 ¡MEJOR VUELTA! (antes {self.mejor_tiempo[0]:.3f} s "
+                    f"en la vuelta {self.mejor_tiempo[1]})"
+                )
+            self.mejor_tiempo = (lap_time, lap_number)
+        else:
+            lineas.append(
+                f"   mejor: {self.mejor_tiempo[0]:.3f} s "
+                f"(vuelta {self.mejor_tiempo[1]})"
+            )
+
+        self.tiempo_vuelta_anterior = lap_time
+
+        self.get_logger().info("\n".join(lineas))
 
     def publicar_time_lap(self, lap_time, lap_number):
         msg_time_per_lap = TimePerLap()
@@ -655,9 +762,15 @@ class CarControllerNode(Node):
                         self.vueltas += 1
                         lap_time = (t_meta - self.t_meta_anterior) / 1e9
                         self.publicar_time_lap(lap_time, self.vueltas)
-                        self.get_logger().info(
-                            f"⏱️ ¡VUELTA {self.vueltas} COMPLETADA! Tiempo: {lap_time:.3f} s"
-                        )
+                        if self.modo_manual:
+                            # Conduciendo no se lee un log: se mira la pantalla
+                            # de reojo al pasar por meta y hay que ver en el
+                            # acto si se mejoró y cuál es el mejor tiempo
+                            self.mostrar_panel_piloto(lap_time, self.vueltas)
+                        else:
+                            self.get_logger().info(
+                                f"⏱️ ¡VUELTA {self.vueltas} COMPLETADA! Tiempo: {lap_time:.3f} s"
+                            )
                         vuelta_completada = True
 
                     self.t_meta_anterior = t_meta
