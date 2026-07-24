@@ -177,9 +177,14 @@ class CarControllerNode(Node):
             qos_profile_sensor_data,
             callback_group=self.car_position_group,
         )
+        # Topic RELATIVO: el nodo corre en el namespace del coche (/carX), asi
+        # que "modo_calibracion" resuelve a /carX/modo_calibracion. La calibracion
+        # es POR COCHE: cada coche cierra su vuelta cuando cruza la meta sin sacar
+        # de calibracion a los demas (antes era un /modo_calibracion global y el
+        # primer coche en terminar cortaba la calibracion de todos).
         self.sub_modo_calibracion = self.create_subscription(
             Bool,
-            "/modo_calibracion",
+            "modo_calibracion",
             self.callback_control_calibracion,
             10,
             callback_group=self.car_position_group,
@@ -206,10 +211,12 @@ class CarControllerNode(Node):
             callback_group=self.car_position_group,
         )
 
-        # Avisar de que se acabo el modo calibracion
+        # Avisar de que se acabo el modo calibracion. Topic RELATIVO
+        # (/carX/modo_calibracion): solo afecta a ESTE coche; la camara y el
+        # puente escuchan el topic de cada coche por separado.
         self.pub_modo_calibracion = self.create_publisher(
             Bool,
-            "/modo_calibracion",
+            "modo_calibracion",
             10,
             callback_group=self.car_position_group,
         )
@@ -317,7 +324,7 @@ class CarControllerNode(Node):
             msg_fin_calibracion.data = False
             self.pub_modo_calibracion.publish(msg_fin_calibracion)
             self.get_logger().info(
-                "🏁 Vuelta de calibración completada: publicado False en /modo_calibracion"
+                "🏁 Vuelta de calibración completada: publicado False en /carX/modo_calibracion"
             )
 
     def procesar_trayectorias(self):

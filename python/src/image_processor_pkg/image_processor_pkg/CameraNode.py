@@ -34,6 +34,7 @@ from threading import Thread, Lock
 
 from ProcessImage import ColorDetector
 from concurrent.futures import ThreadPoolExecutor, wait
+import functools
 import time
 import json
 import os
@@ -101,15 +102,18 @@ class ImageProcessor(Node):
         # ---------------------
 
         # ---- CALIBRACION ----
+        # La calibracion es POR COCHE, no global. Este parametro es solo el
+        # valor de ARRANQUE con el que empieza cada coche (todos calibrando);
+        # el estado vivo vive en info_coches[coche]["modo_calibracion"] y la
+        # senal de fin llega por coche en /<coche>/modo_calibracion (una
+        # suscripcion por coche, creada en el bucle de coches de abajo y
+        # guardada en self.sub_modo_calibracion[coche]). Antes era un unico
+        # /modo_calibracion global: el primer coche en cerrar su vuelta cortaba
+        # la calibracion de todos y las mascaras salian a medias.
         self.declare_parameter("modo_calibracion", True)
-        self.modo_calibracion = self.get_parameter("modo_calibracion").value
-        # Nos subcribimos al topic para que nos puedan avisar de cuando acaba la calibracion 
-        self.sub_modo_calibracion = self.create_subscription(Bool, "/modo_calibracion", self.callback_control, 10)
-        # Trayectoria base que sigue el coche
-        self.puntos_trayectoria = []
-        # Mascara para calcular la trayectoria
-        self.mascara_trayectoria = None
-        # Tamaño kernel para generar la mascara 
+        self.calib_default = self.get_parameter("modo_calibracion").value
+        self.sub_modo_calibracion = {}
+        # Tamaño kernel para generar la mascara
         self.declare_parameter("camera.mascara_kernel_size", 25)
         self.mascara_kernel_size = self.get_parameter("camera.mascara_kernel_size").value
         # --------------------
@@ -227,7 +231,22 @@ class ImageProcessor(Node):
                 "puntos_trayectoria": [],
                 # Mascara generada
                 "mascara_trayectoria": None,
+                # Estado de calibracion de ESTE coche (arranca con el default
+                # del parametro). Cuando el coche cierra su vuelta pasa a False
+                # sin tocar a los demas. La carga de cache de mas abajo lo pone
+                # a False para los coches que ya tengan trayectoria guardada.
+                "modo_calibracion": self.calib_default,
             }
+
+            # Suscripcion de calibracion POR COCHE: /<coche>/modo_calibracion.
+            # functools.partial fija car_name para que el callback sepa de que
+            # coche viene el aviso (create_subscription entrega solo el msg).
+            self.sub_modo_calibracion[car_name] = self.create_subscription(
+                Bool,
+                f"/{car_name}/modo_calibracion",
+                functools.partial(self.callback_control, car_name),
+                10,
+            )
 
             self.puntos_for_debug[car_name] = {
                 "debug_x": 0,
@@ -285,23 +304,28 @@ class ImageProcessor(Node):
                 with open(self.cache_file, "r") as f:
                     datos_cache = json.load(f)
 
+                # Carga POR COCHE: cada coche que ya tenga trayectoria en la
+                # cache arranca en operacion (mascara lista, modo_calibracion
+                # False); los que no esten en la cache se quedan calibrando con
+                # su default. Asi sale gratis el caso "un coche ya cacheado +
+                # otro nuevo que aun tiene que dar su vuelta de calibracion".
                 for car_name in self.coches:
                     if car_name in datos_cache:
                         self.info_coches[car_name]["puntos_trayectoria"] = datos_cache[car_name]
                         # Generamos la mascara para cada coche con la info almacenada
                         self.info_coches[car_name]["mascara_trayectoria"] = (self.generar_mascara(datos_cache[car_name]))
-
-                # Si cargamos la caché, saltamos la calibración
-                self.modo_calibracion = False
-                self.get_logger().info(
-                    f"🟢 Caché cargada desde {self.cache_file}. Modo calibración omitido."
-                )
+                        self.info_coches[car_name]["modo_calibracion"] = False
+                        self.get_logger().info(
+                            f"🟢 {car_name}: caché cargada desde {self.cache_file}. Calibración omitida."
+                        )
 
             except Exception as e:
                 self.get_logger().error(
                     f"Error cargando caché: {e}. Se forzará calibración."
                 )
-                self.modo_calibracion = True
+                # La cache esta corrupta: todos los coches vuelven a calibrar
+                for car_name in self.coches:
+                    self.info_coches[car_name]["modo_calibracion"] = self.calib_default
 
         # --- THREAD CAPTURA ---
         self.latest_frame = None
@@ -328,41 +352,46 @@ class ImageProcessor(Node):
                 with self.frame_lock:
                     self.latest_frame = (frame, stamp)
 
-    def callback_control(self, msg):
-        # Modo operacion
-        if msg.data == False and self.modo_calibracion:
-            datos_a_guardar = {}
+    def callback_control(self, car_name, msg):
+        # Aviso de calibracion de UN coche concreto (/<car_name>/modo_calibracion).
+        # car_name lo fija functools.partial al crear la suscripcion.
+        info = self.info_coches[car_name]
 
-            for car_name in self.coches:
-                datos_a_guardar[car_name] = self.info_coches[car_name][
-                    "puntos_trayectoria"
-                ]
-                self.info_coches[car_name]["mascara_trayectoria"] = (
-                    self.generar_mascara(
-                        self.info_coches[car_name]["puntos_trayectoria"]
-                    )
-                )
+        # Modo operacion: este coche acaba de cerrar su vuelta de calibracion
+        if msg.data == False and info["modo_calibracion"]:
+            # Generamos SOLO la mascara de este coche con su trayectoria
+            info["mascara_trayectoria"] = self.generar_mascara(
+                info["puntos_trayectoria"]
+            )
 
-            # Guardamos en disco la trayectoria de puntos
+            # Guardamos su trayectoria en la cache SIN pisar la de los demas:
+            # leemos el JSON existente (si lo hay), fijamos la clave de este
+            # coche y reescribimos. Cada coche termina su vuelta en un instante
+            # distinto, asi que no se puede volcar el dict entero de golpe.
             try:
+                datos_cache = {}
+                if os.path.exists(self.cache_file):
+                    with open(self.cache_file, "r") as f:
+                        datos_cache = json.load(f)
+                datos_cache[car_name] = info["puntos_trayectoria"]
                 with open(self.cache_file, "w") as f:
-                    json.dump(datos_a_guardar, f)
-                self.get_logger().info(f"💾 Trayectoria guardada en {self.cache_file}")
+                    json.dump(datos_cache, f)
+                self.get_logger().info(
+                    f"💾 {car_name}: trayectoria guardada en {self.cache_file}"
+                )
             except Exception as e:
-                self.get_logger().error(f"Error guardando caché: {e}")
+                self.get_logger().error(f"Error guardando caché de {car_name}: {e}")
 
-            self.modo_calibracion = False
+            info["modo_calibracion"] = False
 
-            self.get_logger().info("Calibracion Terminada")
+            self.get_logger().info(f"Calibracion Terminada ({car_name})")
 
-        # Modo calibracion
+        # Modo calibracion: reinicio de la calibracion de este coche
         elif msg.data == True:
-            for car_name in self.coches:
-                self.info_coches[car_name]["mascara_trayectoria"] = None
+            info["mascara_trayectoria"] = None
+            info["modo_calibracion"] = True
 
-            self.modo_calibracion = True
-
-            self.get_logger().warn("Reiniciando Calibracion")
+            self.get_logger().warn(f"Reiniciando Calibracion ({car_name})")
 
     def parameters_callback(self, params):
         result = SetParametersResult(successful=True)
@@ -610,7 +639,8 @@ class ImageProcessor(Node):
         s_back = self.car_stikers[car_name]["back"]
 
         # --- MODO CALIBRACIÓN ---
-        if self.modo_calibracion:
+        # Por coche: este coche puede seguir calibrando mientras otro ya corre.
+        if info["modo_calibracion"]:
             detections = detector.find_object(frame, self.min_area, s_front, s_back)
             if detections["front"] is not None:
                 info["puntos_trayectoria"].append((detections["front"]["cx"], detections["front"]["cy"]))

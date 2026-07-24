@@ -29,7 +29,7 @@ class ArduinoBridgeNode(Node):
 
         # Diccionario para mantener controlada la velocidad actual de cada carril
         self.rails = {}
-        
+
         # Lista para no perder la referencia de las suscripciones
         self.sub_pwd = {}
 
@@ -44,16 +44,36 @@ class ArduinoBridgeNode(Node):
                 callback_group=MutuallyExclusiveCallbackGroup(),
             )
 
-        self.modo_calibracion = True
-
+        # --- CALIBRACION POR COCHE (solo autonomos) ---
+        # La calibracion dejo de ser global: cada coche autonomo cierra su
+        # vuelta cuando quiere y solo entonces su carril pasa de calibration_speed
+        # al PWM de carrera. Necesitamos por eso el carril fisico de cada coche
+        # (cars.<coche>.carril) y saber cuales son autonomos (modo_manual False):
+        # los manuales los conduce una persona, su carril NO lo toca el puente.
+        self.carril_de = {}       # coche autonomo -> nº de carril
+        self.calibrando = {}      # coche autonomo -> sigue en calibracion?
+        self.sub_modo_calibracion = {}
         self.grupo_calibracion = MutuallyExclusiveCallbackGroup()
-        self.sub_modo_calibracion = self.create_subscription(
-            Bool,
-            "/modo_calibracion",
-            self.callback_control_calibracion,
-            10,
-            callback_group=self.grupo_calibracion,
-        )
+
+        for car_name in self.coches:
+            self.declare_parameter(f"cars.{car_name}.carril", "1")
+            self.declare_parameter(f"cars.{car_name}.modo_manual", False)
+            es_manual = self.get_parameter(f"cars.{car_name}.modo_manual").value
+            if es_manual:
+                continue
+
+            carril_str = str(self.get_parameter(f"cars.{car_name}.carril").value)
+            self.carril_de[car_name] = self._parse_carril(carril_str)
+            self.calibrando[car_name] = True
+
+            # Suscripcion de calibracion POR COCHE: /<coche>/modo_calibracion
+            self.sub_modo_calibracion[car_name] = self.create_subscription(
+                Bool,
+                f"/{car_name}/modo_calibracion",
+                lambda msg, c=car_name: self.callback_control_calibracion(c, msg),
+                10,
+                callback_group=self.grupo_calibracion,
+            )
 
         # --- PARAMETROS ---
         self.declare_parameter("arduino.port", "/dev/ttyACM0")
@@ -69,16 +89,27 @@ class ArduinoBridgeNode(Node):
         self.arduino = ArduinoController(port=port, baudrate=baud)
         self.get_logger().info(f"Conectando a Arduino en {port}...")
 
-        # Arrancamos con la velocidad de calibración
-        self.arduino.set_both_rails(self.calibration_speed, self.calibration_speed)
+        # Arrancamos cada carril AUTONOMO a la velocidad de calibración (los
+        # carriles de coches manuales no se tocan: los mueve la persona).
+        for car_name, carril in self.carril_de.items():
+            self.arduino.set_rail_speed(carril, self.calibration_speed)
 
-    def callback_control_calibracion(self, msg):
-        if msg.data == False and self.modo_calibracion:
-            self.modo_calibracion = False
-        elif msg.data == True and not self.modo_calibracion:
-            self.modo_calibracion = True
-            # Arrancamos con la velocidad de calibración
-            self.arduino.set_both_rails(self.calibration_speed, self.calibration_speed)
+    @staticmethod
+    def _parse_carril(carril_str):
+        # Acepta "r2" o "2" (misma limpieza que pwm_callback) -> entero 2
+        limpio = carril_str.strip().lower().replace("'", "").replace('"', "")
+        return int(limpio.replace("r", ""))
+
+    def callback_control_calibracion(self, car_name, msg):
+        # Aviso de calibracion de UN coche autonomo (/<car_name>/modo_calibracion).
+        if msg.data == False and self.calibrando.get(car_name, False):
+            # El coche cerro su vuelta: dejamos de forzar calibration_speed en su
+            # carril; el PWM de carrera lo tomara en cuanto llegue por pwm_callback.
+            self.calibrando[car_name] = False
+        elif msg.data == True and not self.calibrando.get(car_name, True):
+            # Reinicio de calibracion de este coche: su carril vuelve a calibration_speed
+            self.calibrando[car_name] = True
+            self.arduino.set_rail_speed(self.carril_de[car_name], self.calibration_speed)
 
     def pwm_callback(self, msg: SpeedCarril):
         """
