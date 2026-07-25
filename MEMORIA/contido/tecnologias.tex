@@ -7,132 +7,40 @@ de comunicación que permite crear la arquitectura distribuida, las principales 
 herramientas integradas, así como los dispositivos físicos que permiten la interacción entre 
 el sistema y los coches del circuito.
 
-\section{Tecnologías software}
-\label{sec:tecnoloxias-software}
 
-\subsection{Lenguajes de programación}
+\section{Herramientas de desarollo software}
 
+\subsection{Lenguajes de programacion}
 \subsubsection{Python}
 
-Python es un lenguaje de programación de código abierto, interpretado y de tipado dinámico,
-lo que significa que no requiere especificar el tipo de las variables de forma explícita y
-que el código se ejecuta directamente mediante un intérprete, sin necesidad de compilación
-previa~\cite{python}.
+Python es un lenguaje de programación de código abierto, interpretado y de tipado dinámico, lo que significa que no requiere especificar el tipo de las variables de forma explícita y que el código se ejecuta directamente mediante un intérprete, sin necesidad de compilación previa~\cite{python}.
 
-Admite múltiples paradigmas de programación, como la orientación a objetos, la programación
-funcional y la programación por procedimientos, y es multiplataforma, lo que permite
-ejecutar el mismo programa en distintos sistemas operativos sin modificaciones. Su extenso
-ecosistema de librerías científicas y de visión artificial, junto con su sintaxis clara, lo
-han convertido en uno de los lenguajes más populares en la actualidad.
-
-En este proyecto, Python es el único lenguaje empleado en el sistema principal: todos los
-nodos de la arquitectura distribuida están implementados en Python sobre la librería 
-\texttt{rclpy} de ROS2.
+Admite múltiples paradigmas de programación, como la orientación a objetos, la programación funcional y la programación por procedimientos, y es multiplataforma, lo que permite ejecutar el mismo programa en distintos sistemas operativos sin modificaciones. Su extenso ecosistema de librerías científicas y de visión artificial, junto con su sintaxis clara, lo han convertido en uno de los lenguajes más populares en la actualidad.  En este proyecto, Python es el único lenguaje empleado en el sistema principal: todos los nodos de la arquitectura distribuida están implementados en Python sobre la librería \texttt{rclpy} de ROS2.
 % TODO: Si documentas el firmware del Arduino, añade aquí un subsubsection breve sobre
 % C/C++ (lenguaje del sketch), como hacen Mario y Adrián.
-
-\subsection{ROS2}
-\label{sec:ros2}
-
-ROS2 (\textit{Robot Operating System 2}) es un conjunto de librerías y herramientas de
-código abierto para construir aplicaciones para robots~\cite{ros2docs}. A pesar de su nombre,
-no se trata de un sistema operativo, sino de un middleware que proporciona la
-infraestructura de comunicación, el sistema de construcción y las utilidades necesarias para
-componer aplicaciones a partir de procesos independientes llamados \textit{nodos}. En este
-trabajo se ha utilizado la distribución \textit{Humble Hawksbill}~\cite{ros2docs}, versión
-con soporte extendido (\gls{lts}) publicada en 2022.
-
-ROS2 constituye la columna vertebral de la arquitectura de este proyecto, del que se
-emplean los siguientes conceptos:
-
-\begin{itemize}
-    \item \textbf{Nodos:} procesos independientes que encapsulan una funcionalidad concreta
-    (en nuestro caso, la gestión de una cámara, el control de un coche o el puente con el
-    Arduino) y que pueden ejecutarse en máquinas distintas.
-
-    \item \textbf{Topics y mensajes:} bus que permite la comunicación entre los nodos que publican 
-    y reciben mensajes tipados. En el proyecto se definen tipos de
-    mensajes propios para intercambiar la posición del coche, el valor del pwm ("velocidad") y telemetría.
-
-    \item \textbf{Parámetros:} valores de configuración declarados por cada nodo, que
-    pueden establecerse desde un fichero \gls{yaml} común y modificarse en caliente durante
-    la ejecución.
-
-    \item \textbf{Ficheros \textit{launch}:} scripts de lanzamiento
-    que permiten arrancar varios nodos junto con sus configuraciones 
-    
-    \item \textbf{\textit{namespaces}:} es un mecanismo de encapsulación jerárquica que agrupa identificadores del sistema (nodos, tópicos, servicios o parámetros) bajo un prefijo de ruta común, es un sistema análoga a los directorios de un sistema de ficheros.
-
-    \item \textbf{\textit{Executors} y \textit{callback groups}:} mecanismos de
-    planificación que permiten atender varios \textit{callbacks} en paralelo dentro de un
-    nodo. Se emplea el \texttt{MultiThreadedExecutor} junto con grupos mutuamente
-    excluyentes para separar tareas críticas (procesamiento de posición) de tareas
-    secundarias (envio de imagen para depuración).
-\end{itemize}
-
-La característica de ROS2 más determinante para este trabajo es que su capa de transporte
-se apoya en el estándar \gls{dds}~\cite{ddsspec}, el cual se desglosa en la sección~\ref{sec:sistemas-distribuidos}.
+\subsubsection{C++}
 
 \subsection{Librerías}
-
 \subsubsection{OpenCV}
-
-OpenCV es una librería de visión por computador de código abierto ampliamente
-utilizada~\cite{opencv,bradski2008}. En este proyecto es el componente central del análisis
-visual: se emplea para capturar imagenes desde las cámaras, convertir los fotogramas al espacio
-de color \gls{hsv}, segmentar las pegatinas de los coches y la línea de meta mediante
-máscaras de color, aplicar operaciones morfológicas de limpieza y extraer los contornos de
-los objetos detectados.
-
+OpenCV es una librería de visión por computador de código abierto ampliamente utilizada~\cite{opencv,bradski2008}. En este proyecto es el componente central del análisis visual: se emplea para capturar imagenes desde las cámaras, convertir los fotogramas al espacio de color \gls{hsv}, segmentar las pegatinas de los coches y la línea de meta mediante máscaras de color, aplicar operaciones morfológicas de limpieza y extraer los contornos de los objetos detectados.
 \subsubsection{NumPy}
-
-NumPy es una librería optimizada para el cálculo numérico con arreglos
-multidimensionales~\cite{numpy}. Se utiliza para representar y operar sobre las trayectorias
-del circuito (arrays de puntos), calculando de forma vectorizada distancias entre puntos y
-segmentos, el nodo de la trayectoria más cercano a una posición o las máscaras binarias
-derivadas de los fotogramas. Estas operaciones se ejecutan decenas de veces por segundo, por
-lo que su eficiencia resulta esencial para el funcionamiento en tiempo real.
+NumPy es una librería optimizada para el cálculo numérico con arreglos multidimensionales~\cite{numpy}. Se utiliza para representar y operar sobre las trayectorias del circuito (arrays de puntos), calculando de forma vectorizada distancias entre puntos y segmentos, el nodo de la trayectoria más cercano a una posición o las máscaras binarias derivadas de los fotogramas. Estas operaciones se ejecutan decenas de veces por segundo, por lo que su eficiencia resulta esencial para el funcionamiento en tiempo real.
 
 \subsubsection{pyserial}
-
-pyserial permite establecer comunicación serie entre Python y dispositivos externos como
-microcontroladores~\cite{pyserial}. En este proyecto se emplea en el nodo puente para enviar
-los comandos de velocidad al Arduino a través del puerto \gls{usb}, así como para recibir
-las confirmaciones de la placa.
+Pyserial permite establecer comunicación serie entre Python y dispositivos externos como microcontroladores~\cite{pyserial}. En este proyecto se emplea en el nodo puente para enviar los comandos de velocidad al Arduino a través del puerto \gls{usb}, así como para recibir las confirmaciones de la placa.
 
 \subsubsection{threading y concurrent.futures}
-
-Los módulos estándar \texttt{threading} y \texttt{concurrent.futures} permiten ejecutar
-tareas en paralelo dentro de un mismo proceso. En el nodo cámara se emplean para desacoplar
-la captura de vídeo del procesamiento (un hilo dedicado actualizar el buffer de la
-cámara) y para buscar en paralelo las pegatinas de varios coches sobre el mismo fotograma
-mediante un \textit{pool} de hilos.
+Los módulos estándar \texttt{threading} y \texttt{concurrent.futures} permiten ejecutar tareas en paralelo dentro de un mismo proceso. En el nodo cámara se emplean para desacoplar la captura de vídeo del procesamiento (un hilo dedicado actualizar el buffer de la cámara) y para buscar en paralelo las pegatinas de varios coches sobre el mismo fotograma mediante un \textit{pool} de hilos.
 
 \subsection{Herramientas de despliegue}
 
 \subsubsection{Docker y Docker Compose}
 
-Docker es una plataforma de contenedores que permite empaquetar una aplicación junto con
-todas sus dependencias en una imagen ejecutable de forma idéntica en cualquier
-máquina~\cite{docker}. En este proyecto resulta clave para el despliegue distribuido: los
-equipos que participan en el sistema no necesitan tener instalado ROS2 ni ninguna librería,
-únicamente Docker. Una única imagen, construida sobre la base oficial
-\texttt{ros:humble-ros-base}, sirve para todos los roles del sistema.
+Docker es una plataforma de contenedores que permite empaquetar una aplicación junto con todas sus dependencias en una imagen ejecutable de forma idéntica en cualquier máquina~\cite{docker}. En este proyecto resulta clave para el despliegue distribuido: los equipos que participan en el sistema no necesitan tener instalado ROS2 ni ninguna librería, únicamente Docker. Una única imagen, construida sobre la base oficial \texttt{ros:humble-ros-base}, sirve para todos los roles del sistema.
 
-Docker Compose complementa a Docker permitiendo describir en un fichero \gls{yaml} la
-configuración completa de arranque de un contenedor. Se definen dos ficheros: uno para las
-máquinas con cámara, parametrizado con el identificador del nodo y el dispositivo de vídeo,
-y otro para la máquina con acceso al puerto serie del Arduino. De esta forma, poner
-en marcha cualquier equipo del sistema se reduce a un único comando.
+Docker Compose complementa a Docker permitiendo describir en un fichero \gls{yaml} la configuración completa de arranque de un contenedor. Se definen dos ficheros: uno para las máquinas con cámara, parametrizado con el identificador del nodo y el dispositivo de vídeo, y otro para la máquina con acceso al puerto serie del Arduino. De esta forma, poner en marcha cualquier equipo del sistema se reduce a un único comando.
 
-\subsubsection{colcon}
-
-colcon es la herramienta oficial de construcción de "workspaces" de ROS2~\cite{ros2docs}. 
-Se encarga de compilar el paquete del proyecto, generar el código de
-los mensajes personalizados a partir de sus definiciones e instalar los ejecutables y
-ficheros de configuración para que puedan ser lanzados con las utilidades de ROS2.
-
-\subsection{Entornos de desarrollo y control de versiones}
+\subsection{Entornos de desarrollo}
 
 \subsubsection{Visual Studio Code}
 
@@ -149,8 +57,8 @@ cargarlo en la placa mediante la conexión serie. En este proyecto se emplea par
 firmware que interpreta los comandos de velocidad y genera las señales \gls{pwm} de los
 carriles.
 
+\subsection{Control de versiones}
 \subsubsection{Git}
-
 Git es un sistema de control de versiones distribuido~\cite{git}. Todo el desarrollo del
 proyecto se ha gestionado con Git, empleando ramas para las líneas de trabajo principales y
 una convención de mensajes de \textit{commit} con etiquetas por funcionalidad (por ejemplo
@@ -173,6 +81,125 @@ El formato \gls{json} es un estándar ligero de intercambio de datos basado en t
 emplea para persistir en disco las trayectorias obtenidas durante la vuelta de calibración
 (tanto las de cada cámara como las del controlador), de forma que en arranques posteriores
 el sistema pueda cargarlas y omitir la calibración.
+
+\section{ROS2}
+\label{sec:ros2}
+
+ROS2 (\textit{Robot Operating System 2}) es un conjunto de librerías y herramientas de
+código abierto para construir aplicaciones para robots~\cite{ros2docs}. A pesar de su nombre,
+no se trata de un sistema operativo, sino de un middleware que proporciona la
+infraestructura de comunicación, el sistema de construcción y las utilidades necesarias para
+componer aplicaciones a partir de procesos independientes llamados \textit{nodos}. En este
+trabajo se ha utilizado la distribución \textit{Humble Hawksbill}~\cite{ros2docs}, versión
+con soporte extendido (\gls{lts}) publicada en 2022.
+
+ROS2 constituye la columna vertebral de la arquitectura de este proyecto, del que se
+emplean los siguientes conceptos:
+
+\subsection{Nodos}
+Procesos independientes que encapsulan una funcionalidad concreta (en nuestro caso, la gestión de una cámara, el control de un coche o el puente con el Arduino) y que pueden ejecutarse en máquinas distintas.
+
+\subsection{Topics y mensajes}
+Bus que permite la comunicación entre los nodos que publican y reciben mensajes tipados. En el proyecto se definen tipos de mensajes propios para intercambiar la posición del coche, el valor del pwm ("velocidad") y telemetría.
+
+\subsection{Parámetros}
+Valores de configuración declarados por cada nodo, que pueden establecerse desde un fichero \gls{yaml} común y modificarse en caliente durante la ejecución.
+
+\subsection{Ficheros Launch}
+Scripts de lanzamiento que permiten arrancar varios nodos junto con sus configuraciones 
+    
+\subsection{Namespaces}
+Es un mecanismo de encapsulación jerárquica que agrupa identificadores del sistema (nodos, tópicos, servicios o parámetros) bajo un prefijo de ruta común, es un sistema análoga a los directorios de un sistema de ficheros.
+
+\subsection{Executors y callbacksgroups}
+Mecanismos de planificación que permiten atender varios \textit{callbacks} en paralelo dentro de un nodo. Se emplea el \texttt{MultiThreadedExecutor} junto con grupos mutuamente excluyentes para separar tareas críticas (procesamiento de posición) de tareas secundarias (envio de imagen para depuración).
+
+
+\subsection{Colcon}
+Colcon es la herramienta oficial de construcción de "workspaces" de ROS2~\cite{ros2docs}.  Se encarga de compilar el paquete del proyecto, generar el código de los mensajes personalizados a partir de sus definiciones e instalar los ejecutables y ficheros de configuración para que puedan ser lanzados con las utilidades de ROS2.
+
+\subsection{Paradigma publicador/suscriptor}
+\label{sec:pubsub}
+
+En el modelo publicador/suscriptor, los procesos no se comunican directamente entre sí, sino
+a través de canales con nombre (\textit{topics}): los publicadores envían mensajes a un
+topic sin conocer quién los recibirá, y los suscriptores expresan su interés en un topic sin
+conocer quién publica en él. Este desacoplamiento aporta grandes ventajas que simplican el diseño. 
+
+El paradigma encaja de forma natural en el problema de este proyecto: cada nodo cámara
+publica las posiciones que detecta sin saber cuántos controladores existen, y cada
+controlador se suscribe a las posiciones de su coche sin saber cuántas cámaras cubren el circuito. Añadir una cámara o un coche no requiere reconfigurar ningún otro componente del
+sistema.
+
+\subsection{Middleware DDS y calidad de servicio (QoS)}
+\label{sec:dds-qos}
+
+\gls{dds} es un estándar de middleware publicador/suscriptor orientado a sistemas de tiempo
+real, definido por el Object Management Group~\cite{ddsspec}, sobre el que ROS2 construye
+toda su capa de comunicación. Dos de sus características son especialmente
+relevantes para este trabajo. La primera es el descubrimiento automático: los participantes
+de un mismo dominio (identificado por un número, el \textit{domain ID}) se anuncian
+periódicamente en la red local y establecen las conexiones entre publicadores y suscriptores
+sin ninguna configuración manual de direcciones. La segunda es la calidad de servicio
+(\gls{qos}): cada publicador y suscriptor declara sus garantías de entrega mediante un
+conjunto de políticas, entre las que destacan:
+
+\begin{itemize}
+    \item \textbf{Fiabilidad (\textit{reliability}):} en modo \textit{reliable} el
+    middleware reenvía los mensajes perdidos hasta confirmar su entrega; en modo
+    \textit{best effort} los mensajes se envían una única vez y pueden perderse.
+
+    \item \textbf{Durabilidad (\textit{durability}):} en modo \textit{volatile} un
+    suscriptor solo recibe los mensajes publicados después de conectarse; en modo
+    \textit{transient local} el publicador conserva los últimos mensajes y los entrega a
+    los suscriptores que se conecten más tarde.
+
+    \item \textbf{Historial (\textit{history} y \textit{depth}):} determina cuántos
+    mensajes se almacenan en las colas de envío y recepción.
+\end{itemize}
+
+La elección de estas políticas supone un compromiso entre latencia y garantías de entrega.
+Para los datos de posición, que se publican decenas de veces por segundo, se emplea el
+perfil de datos de sensor (\textit{best effort}): un mensaje perdido carece de importancia
+porque enseguida llega el siguiente, y resulta preferible perder un fotograma a acumular
+retardo reenviando información ya obsoleta. En cambio, para la posición de la línea de meta,
+que se publica una única vez al arrancar, se utiliza un perfil \textit{reliable} y
+\textit{transient local}: el mensaje debe llegar con garantías incluso a los controladores
+que arranquen después de que la cámara lo haya publicado.
+
+%\subsection{Tolerancia a fallos: heartbeat, failover y watchdog}
+%\label{sec:tolerancia-fallos}
+%
+%En un sistema distribuido, la caída de un proceso no puede detectarse de forma directa: la
+%única evidencia disponible es la ausencia de comunicación. Sobre esta idea se construyen los
+%tres mecanismos de tolerancia a fallos empleados en este proyecto:
+%
+%\begin{itemize}
+%    \item \textbf{Latido de vida (\textit{heartbeat}):} un proceso emite periódicamente un
+%    mensaje que atestigua que sigue vivo. Quien lo vigila considera que ha fallado cuando
+%    transcurre un plazo sin recibir latidos.
+%
+%    \item \textbf{Replicación primario/respaldo (\textit{failover}):} un componente crítico
+%    se despliega por duplicado. La réplica primaria realiza el trabajo y emite latidos; la
+%    réplica de respaldo procesa la misma información en silencio y, si detecta la ausencia
+%    de latidos, asume el rol de primaria de forma automática. De este modo el servicio se
+%    recupera en segundos sin intervención humana.
+%
+%    \item \textbf{Perro guardián (\textit{watchdog}):} un componente vigila que otro siga
+%    enviando información con la cadencia esperada y, en caso contrario, ejecuta una acción
+%    de seguridad. En este proyecto, el nodo puente detiene la alimentación de un carril
+%    cuando deja de recibir consignas de velocidad para él, de forma que un coche cuyo
+%    control ha fallado (o que se ha salido de la pista) queda detenido sin afectar al resto
+%    de la carrera.
+%\end{itemize}
+%
+%Como tercera capa de recuperación, el sistema de lanzamiento de ROS2 permite reiniciar
+%automáticamente (\textit{respawn}) cualquier nodo que termine de forma inesperada, de manera
+%que un nodo caído se reincorpora al sistema al cabo de unos segundos.
+
+La característica de ROS2 más determinante para este trabajo es que su capa de transporte
+se apoya en el estándar \gls{dds}~\cite{ddsspec}, el cual se desglosa en la sección~\ref{sec:sistemas-distribuidos}.
+
 
 \section{Tecnologías hardware}
 \label{sec:tecnoloxias-hardware}

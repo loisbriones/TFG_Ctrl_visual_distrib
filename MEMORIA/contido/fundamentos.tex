@@ -60,12 +60,8 @@ ejemplo, por una oclusión o porque el coche abandona el campo de visión de la 
 ventana se amplía progresivamente en los fotogramas siguientes hasta cubrir la imagen
 completa, garantizando la readquisición del vehículo en cuanto vuelve a ser visible.
 
-\section{PWM}
-La modulación por ancho de pulso (\gls{pwm}) es una técnica basada en la generación de una señal digital cuadrada, constituida por un tren de pulsos de amplitud fija y frecuencia constante, cuya longitud es variable. Esta variación viene definida por el ciclo de trabajo o \textit{duty cycle}, que representa la proporción de tiempo que la señal permanece en nivel alto respecto a su período total. Aunque la señal solo alterna entre dos valores discretos (0\,V y la tensión de alimentación), el sistema o la carga conectada percibe una tensión media analógica directamente proporcional a dicho ciclo de trabajo. De este modo, se logra emular un control continuo de potencia. Un caso de uso muy común para controlar la velocidad de los motores. 
-
 \section{Sistemas distribuidos}
 \label{sec:sistemas-distribuidos}
-
 Un sistema distribuido es un conjunto de computadores independientes que se presenta ante
 sus usuarios como un único sistema coherente. Sus principales ventajas son
 la escalabilidad --la capacidad de crecer añadiendo más máquinas-- y la tolerancia a fallos
@@ -79,85 +75,6 @@ Este trabajo convierte el sistema monolítico heredado en un sistema distribuido
 precisamente para ganar escalabilidad: el número de cámaras deja de estar limitado por los
 puertos y la capacidad de procesamiento de un único ordenador. Los conceptos de esta sección
 fundamentan las decisiones de diseño tomadas para afrontar los retos mencionados.
-
-\subsection{Paradigma publicador/suscriptor}
-\label{sec:pubsub}
-
-En el modelo publicador/suscriptor, los procesos no se comunican directamente entre sí, sino
-a través de canales con nombre (\textit{topics}): los publicadores envían mensajes a un
-topic sin conocer quién los recibirá, y los suscriptores expresan su interés en un topic sin
-conocer quién publica en él. Este desacoplamiento aporta grandes ventajas que simplican el diseño. 
-
-El paradigma encaja de forma natural en el problema de este proyecto: cada nodo cámara
-publica las posiciones que detecta sin saber cuántos controladores existen, y cada
-controlador se suscribe a las posiciones de su coche sin saber cuántas cámaras cubren el circuito. Añadir una cámara o un coche no requiere reconfigurar ningún otro componente del
-sistema.
-
-\subsection{Middleware DDS y calidad de servicio (QoS)}
-\label{sec:dds-qos}
-
-\gls{dds} es un estándar de middleware publicador/suscriptor orientado a sistemas de tiempo
-real, definido por el Object Management Group~\cite{ddsspec}, sobre el que ROS2 construye
-toda su capa de comunicación. Dos de sus características son especialmente
-relevantes para este trabajo. La primera es el descubrimiento automático: los participantes
-de un mismo dominio (identificado por un número, el \textit{domain ID}) se anuncian
-periódicamente en la red local y establecen las conexiones entre publicadores y suscriptores
-sin ninguna configuración manual de direcciones. La segunda es la calidad de servicio
-(\gls{qos}): cada publicador y suscriptor declara sus garantías de entrega mediante un
-conjunto de políticas, entre las que destacan:
-
-\begin{itemize}
-    \item \textbf{Fiabilidad (\textit{reliability}):} en modo \textit{reliable} el
-    middleware reenvía los mensajes perdidos hasta confirmar su entrega; en modo
-    \textit{best effort} los mensajes se envían una única vez y pueden perderse.
-
-    \item \textbf{Durabilidad (\textit{durability}):} en modo \textit{volatile} un
-    suscriptor solo recibe los mensajes publicados después de conectarse; en modo
-    \textit{transient local} el publicador conserva los últimos mensajes y los entrega a
-    los suscriptores que se conecten más tarde.
-
-    \item \textbf{Historial (\textit{history} y \textit{depth}):} determina cuántos
-    mensajes se almacenan en las colas de envío y recepción.
-\end{itemize}
-
-La elección de estas políticas supone un compromiso entre latencia y garantías de entrega.
-Para los datos de posición, que se publican decenas de veces por segundo, se emplea el
-perfil de datos de sensor (\textit{best effort}): un mensaje perdido carece de importancia
-porque enseguida llega el siguiente, y resulta preferible perder un fotograma a acumular
-retardo reenviando información ya obsoleta. En cambio, para la posición de la línea de meta,
-que se publica una única vez al arrancar, se utiliza un perfil \textit{reliable} y
-\textit{transient local}: el mensaje debe llegar con garantías incluso a los controladores
-que arranquen después de que la cámara lo haya publicado.
-
-%\subsection{Tolerancia a fallos: heartbeat, failover y watchdog}
-%\label{sec:tolerancia-fallos}
-%
-%En un sistema distribuido, la caída de un proceso no puede detectarse de forma directa: la
-%única evidencia disponible es la ausencia de comunicación. Sobre esta idea se construyen los
-%tres mecanismos de tolerancia a fallos empleados en este proyecto:
-%
-%\begin{itemize}
-%    \item \textbf{Latido de vida (\textit{heartbeat}):} un proceso emite periódicamente un
-%    mensaje que atestigua que sigue vivo. Quien lo vigila considera que ha fallado cuando
-%    transcurre un plazo sin recibir latidos.
-%
-%    \item \textbf{Replicación primario/respaldo (\textit{failover}):} un componente crítico
-%    se despliega por duplicado. La réplica primaria realiza el trabajo y emite latidos; la
-%    réplica de respaldo procesa la misma información en silencio y, si detecta la ausencia
-%    de latidos, asume el rol de primaria de forma automática. De este modo el servicio se
-%    recupera en segundos sin intervención humana.
-%
-%    \item \textbf{Perro guardián (\textit{watchdog}):} un componente vigila que otro siga
-%    enviando información con la cadencia esperada y, en caso contrario, ejecuta una acción
-%    de seguridad. En este proyecto, el nodo puente detiene la alimentación de un carril
-%    cuando deja de recibir consignas de velocidad para él, de forma que un coche cuyo
-%    control ha fallado (o que se ha salido de la pista) queda detenido sin afectar al resto
-%    de la carrera.
-%\end{itemize}
-%
-%Como tercera capa de recuperación, el sistema de lanzamiento de ROS2 permite reiniciar
-%automáticamente (\textit{respawn}) cualquier nodo que termine de forma inesperada, de manera
-%que un nodo caído se reincorpora al sistema al cabo de unos segundos.
 
 \section{Control por Modulación por Ancho de Pulso (PWM)}
 \label{sec:pwm-fundamentos}
