@@ -1105,7 +1105,8 @@ def main():
     # --- Logs del algoritmo ------------------------------------------------
     rutas_logs = buscar_logs(args.logs, carpeta)
     if not rutas_logs:
-        print("AVISO: sin logs del algoritmo; las secciones 3, 4 y 6 no saldrán")
+        print("AVISO: sin logs del algoritmo; no saldrán las secciones 4 y 6 ni "
+              "la trayectoria base de la 2")
     logs = cargar_logs(rutas_logs)
     varias = len(logs) > 1
     for camara, d in logs.items():
