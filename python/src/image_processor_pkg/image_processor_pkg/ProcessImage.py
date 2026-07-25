@@ -31,7 +31,7 @@ COLOR_RANGES = {
         )
     ],
     "cian": [(np.array([78, 65, 120]), np.array([120, 255, 255]))],
-    "violeta": [(np.array([120, 50, 50]), np.array([150, 255, 255]))],
+    "violeta": [(np.array([120, 45, 45]), np.array([160, 255, 255]))],
 }
 
 
