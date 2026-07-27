@@ -225,6 +225,10 @@
 \let\lsttext\lstinline
 \renewcommand{\lstinline}[1]{{\lstset{style=inline}\lsttext!#1!}}
 
+%% Nome das lendas dos listados de código, segundo a lingua do documento
+\ifthenelse{\equal{\lingua}{gal}}{\renewcommand{\lstlistingname}{Listaxe}}{}
+\ifthenelse{\equal{\lingua}{esp}}{\renewcommand{\lstlistingname}{Listado}}{}
+
 \lstset{
   basicstyle=\ttfamily\footnotesize, % estilo da fonte para entornos de código
   breakatwhitespace=true,            % pártense as liñas só polos espazos en branco
