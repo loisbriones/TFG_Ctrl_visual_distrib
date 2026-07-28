@@ -46,9 +46,10 @@ Los requisitos no funcionales definen las condiciones bajo las que debe operar e
 
 El sistema está pensado para operar de forma autónoma una vez puesto en marcha, por lo que el único actor que interactúa con él es el \textbf{usuario final}. A diferencia de los trabajos previos, en los que dicha interacción se producía a través de una única aplicación de escritorio, en la arquitectura distribuida presentada el usuario actúa sobre el sistema por dos vías: la configuración y el despliegue de los nodos.
 
-Antes de una sesión, el usuario define el comportamiento del sistema editando un único fichero de parámetros: indica los colores de las pegatinas de cada coche y de la línea de meta, los coches que participan en la carrera, la resolución , los umbrales que se usan para ajustar el algoritmo de control de velocidad. A continuación, arranca cada uno de los equipos de la red local (los que llevan una cámara conectada y el que dispone del puerto serie hacia el Arduino), con lo que los nodos se descubren automáticamente y comienzan la fase de calibración. Para arrancar los nodos habría que utilizar un comando de docker. En este caso para cada una de las camaras el usuario tendría que ir dispositivo por dispositivo levantando los contenedores dentro de cada camara.
+Antes de una sesión, el usuario define el comportamiento del sistema editando un único fichero de parámetros: indicar los colores de las pegatinas de cada coche y de la línea de meta, los coches que participan en la carrera, la resolución de la camara, etc. A continuación, arranca cada uno de los equipos de la red local, con lo que los nodos se descubren automáticamente y comienzan la fase de calibración. Para arrancar los nodos habría que utilizar un comando de docker, habría que hacerlo en cada uno de los dispositivos que formen parte de la red.
+%Se podría hacer un script para automatizar despliegue con ansible???
 
-Durante la ejecución, el usuario  es el encargado de detener el sistema cuando lo considere necesario. Lo que si que puede hacer es durante la ejecución en caso de activar el nodo de visualización puede ver en directo las imagenes que están viendo las camaras aunque eso puede afectar un poco al rendimiento. Y en caso de que lanzara el nodo de registro, el encargado de guardar toda la mensajería que se envía por la red, podrá una vez terminada la carrera analizar la información trasmitida y ver toda al información en diferido.
+Durante la ejecución, el usuario  es el encargado de detener el sistema cuando lo considere necesario. En caso de activarlo durante la carrera puede ver lo que esta pasando en el nodo de visualización, aunque puede afectar al rendimiento. Una vez terminada la carrera, si activo el guardado de la información puede analizarla en diferido.
 
 \section{Descripción del sistema}
 \label{sec:descricion-sistema}
@@ -57,14 +58,16 @@ El sistema desarrollado es una plataforma distribuida para el control visual de 
 
 El sistema se descompone en tres tipos de nodos. En primer lugar, un \emph{nodo cámara} por cada cámara física del circuito, que captura los fotogramas, segmenta por color las pegatinas de los coches y la línea de meta, y publica en la red la posición detectada de cada vehículo. En segundo lugar, un \emph{nodo controlador} por cada carril del circuito por el que pueda circular un coche; este nodo reconstruye la trayectoria del trazado durante una vuelta de calibración y, en carrera, determina en tiempo real el valor de pwm que debe aplicarse al carril en función de la posición del coche y de su comportamiento. Por último, un \emph{nodo puente} envía los valores de PWM que se envían por la red através de un puerto serie a la placa Arduino encargada de alimentar los carriles.
 
-La parte hardware está constituida por la placa Elegoo Uno R3 y el módulo controlador L293D, que reciben los comandos del nodo puente y regulan la tensión de cada carril mediante señales PWM, controlando así la velocidad de los coches. El conjunto de nodos se distribuye entre los distintos equipos de cómputo disponibles (placas Raspberry Pi para la captura y un ordenador portátil para el control y el puente), y se despliega de forma reproducible mediante contenedores Docker, lo que elimina la necesidad de instalar ROS2 o sus dependencias en cada máquina.
+La parte hardware está constituida por la placa Elegoo Uno R3 y el módulo controlador L293D, que reciben los comandos del nodo puente y regulan la tensión de cada carril mediante señales PWM, controlando así la velocidad de los coches. El conjunto de nodos se distribuye entre los distintos equipos de cómputo disponibles, y se despliega de forma reproducible mediante contenedores Docker, lo que elimina la necesidad de instalar ROS2 o sus dependencias en cada máquina.
 
 \section{Metodología de desarrollo}
 \label{sec:metodoloxia}
 
-Tal y como se planteó en el anteproyecto, se ha seguido una metodología ágil que permite iterar en el diseño, el desarrollo y las pruebas del sistema. El trabajo comenzó con una fase de estudio y análisis. Donde se revisó el estado del arte de los TFGs anteriores para identificar los puntos de mejora y también se estudio que tecnologías emplear. Después se continuo con el diseño de la arquitectura del sistema, la implementación incremental de las mejoras y la validación en entornos reales. Finalmente, se procedió a la documentación y presentación del proyecto.
+Tal y como se planteó en el anteproyecto, se ha seguido una metodología ágil e incremental. El trabajo comenzó con una fase de estudio y análisis, en la que se revisaron los TFG anteriores para identificar puntos de mejora y se evaluaron las tecnologías disponibles. A continuación se abordó el diseño de la arquitectura, la implementación incremental de las mejoras y su validación en entornos reales, para concluir con la documentación y la preparación de la defensa.
 
-El desarrollo se organizó en iteraciones cortas: cada una añade una capacidad concreta al sistema y se valida sobre el hardware real antes de continuar, de modo que los datos obtenidos en las pruebas permiten iterar sobre el diseño para corregir errores y optimizar el rendimiento.
+El desarrollo se organizó en iteraciones cortas, cada una orientada a incorporar una capacidad concreta al sistema. Una iteración no se daba por cerrada hasta validar su resultado sobre el hardware real, de modo que las pruebas de cada etapa condicionaban el diseño de la siguiente. Este enfoque resultó adecuado en un proyecto con una fuerte componente hardware, donde el comportamiento del sistema difícilmente puede anticiparse sin ensayos sobre el circuito.
+
+Al tratarse de un proyecto individual, no se aplicaron las ceremonias propias de marcos como Scrum. El seguimiento se articuló mediante reuniones periódicas con el director, en las que se revisaba la iteración en curso y se acordaban los objetivos de la siguiente. El código se gestionó con un sistema de control de versiones.
 
 \section{Planificación e iteraciones}
 \label{sec:planificacion-iteraciones}
@@ -95,6 +98,8 @@ De acuerdo con la metodología ágil e incremental descrita en la sección anter
 
     \item \textbf{Iteración 11. Mejora del algoritmo y pruebas finales.} Mejora y adaptación del algoritmo de control a las situaciones propias del entorno real. Se analizaron los resultados, se anotaron las pruebas de funcionamiento y se llevaron a cabo las pruebas finales del sistema completo, validando su comportamiento de forma integral.
 
+    \item \textbf{Iteración 12. Documentación y preparación de la defensa.} Redacción de la memoria del trabajo, elaboración de la guía de instalación, despliegue y uso del sistema, y organización del repositorio de código para facilitar su reutilización en trabajos posteriores. Finalmente, se preparó la presentación para la defensa del proyecto.
+
 \end{itemize}
 
 A lo largo de este proceso surgieron diversas dificultades que condicionaron el ritmo del desarrollo. Las más relevantes se concentraron en la fase de integración con la red, la adopción de Docker de junto con ROS~2 generó una serie de problemas que dificultaron el lograr un despliegue estable. Asimismo, el hardware presentó fallos intermitentes que, al no manifestarse de forma constante, resultaron difíciles de diagnosticar y penalizaron. Finalmente, durante el desarrollo del algoritmo de control aparecieron fallos no previstos que obligaron a revisar y ajustar el diseño.
@@ -103,31 +108,19 @@ A lo largo de este proceso surgieron diversas dificultades que condicionaron el 
 \section{Gestión de archivos}
 \label{sec:xestion-arquivos}
 
-Con el fin de garantizar la trazabilidad y la reproducibilidad del trabajo, todos los
-artefactos generados durante el desarrollo del proyecto se han organizado y publicado en un
-repositorio de acceso público alojado en GitHub. Dicho repositorio reúne el código fuente de
-los nodos ROS2 escritos en Python, las definiciones de los mensajes personalizados
-intercambiados entre nodos, el firmware de Arduino encargado de generar las señales PWM, así
-como los ficheros de configuración del sistema (el fichero de parámetros en YAML y los
-ficheros de Docker Compose empleados en el despliegue).
+Con el fin de garantizar la trazabilidad y la reproducibilidad del trabajo, todos los artefactos generados durante el desarrollo del proyecto se han organizado y publicado en un repositorio de acceso público alojado en GitHub. Dicho repositorio reúne el código fuente de los nodos ROS2 escritos en Python, las definiciones de los mensajes personalizados intercambiados entre nodos, el firmware de Arduino encargado de generar las señales PWM, así como los ficheros de configuración del sistema (el fichero de parámetros en YAML y los ficheros de Docker Compose empleados en el despliegue).
 
-Junto al código se incluyen también las trayectorias obtenidas en las vueltas de calibración,
-persistidas en formato JSON, que permiten reproducir sesiones anteriores sin necesidad de
-recalibrar el circuito. Para ilustrar el funcionamiento del sistema se han grabado y publicado
-vídeos de las distintas pruebas y una demostración final, accesibles desde el canal de YouTube
-asociado al proyecto. Este material aporta evidencia visual de los resultados alcanzados y
-puede servir de guía para futuros desarrollos que continúen esta línea de trabajo.
+Para ilustrar el funcionamiento del sistema se han grabado y publicado
+vídeos de las distintas pruebas realizadas capturadas apartir del ros bag~\ref{sec:ros2-rosbag}, accesibles desde el canal de YouTube asociado al proyecto. Este material aporta evidencia visual de los resultados alcanzados.
 
 \section{Recursos}
 \label{sec:recursos}
 
-En esta sección se enumeran los recursos hardware, software y humanos que han intervenido en
-el desarrollo del proyecto.
+En esta sección se enumeran los recursos hardware, software y humanos que han intervenido en el desarrollo del proyecto.
 
 \subsection{Recursos hardware}
 
-El material hardware necesario para el desarrollo y la puesta en funcionamiento del sistema
-fue el siguiente:
+El material hardware necesario para el desarrollo y la puesta en funcionamiento del sistema fue el siguiente:
 
 \begin{itemize}
     \item Placa Elegoo Uno R3.
@@ -142,47 +135,33 @@ fue el siguiente:
 
 \subsection{Recursos software}
 
-Todo el software empleado en el proyecto es de código abierto o de uso gratuito, por lo que no
-lleva asociado ningún coste de licencia. El listado completo se detalla en el capítulo de
-tecnologías; los lenguajes de programación utilizados fueron:
+Todo el software empleado en el proyecto es de código abierto o de uso gratuito, por lo que no lleva asociado ningún coste de licencia. El listado completo se detalla en el capítulo de tecnologías; los lenguajes de programación utilizados fueron:
 
 \begin{itemize}
-    \item Python, empleado en la implementación de los nodos ROS2 y de toda la lógica de
-          visión y control.
-    \item C/C++, utilizado en el firmware de la placa Arduino encargado de interpretar los
-          comandos de velocidad y generar las señales PWM.
-    \item El lenguaje del entorno Arduino, basado en C/C++, para la programación y carga del
-          microcontrolador.
+    \item Python, empleado en la implementación de los nodos ROS2 y de toda la lógica de visión y control.
+    \item C/C++, utilizado en el firmware de la placa Arduino encargado de interpretar los comandos de velocidad y generar las señales PWM.
 \end{itemize}
 
 \subsection{Recursos humanos}
 
-Durante el desarrollo del proyecto, el alumno ha asumido de forma íntegra los distintos roles
-que intervienen en un proceso de ingeniería del software:
+Durante el desarrollo del proyecto, el alumno ha asumido de forma íntegra los distintos roles que intervienen en un proceso de ingeniería del software:
 
 \begin{itemize}
-    \item \textbf{Jefe de proyecto}: planifica y coordina las fases del desarrollo y actúa
-          como enlace con los tutores.
-    \item \textbf{Analista}: recopila y modela los requisitos del sistema y define las
-          especificaciones funcionales.
-    \item \textbf{Arquitecto de software}: diseña la arquitectura distribuida, selecciona las
-          tecnologías y establece la estructura modular basada en nodos.
-    \item \textbf{Programador}: implementa las funcionalidades, integra los distintos nodos y
-          realiza tareas de optimización.
-    \item \textbf{Responsable de pruebas}: diseña y ejecuta las pruebas necesarias para
-          verificar el correcto funcionamiento del sistema.
+    \item \textbf{Jefe de proyecto}: planifica y coordina las fases del desarrollo y actúa como enlace con los tutores.
+    \item \textbf{Analista}: recopila y modela los requisitos del sistema y define las especificaciones funcionales.
+    \item \textbf{Arquitecto de software}: diseña la arquitectura distribuida, selecciona las tecnologías y establece la estructura modular basada en nodos.
+    \item \textbf{Programador}: implementa las funcionalidades, integra los distintos nodos y realiza tareas de optimización.
+    \item \textbf{Responsable de pruebas}: diseña y ejecuta las pruebas necesarias para verificar el correcto funcionamiento del sistema.
 \end{itemize}
 
 \section{Estimación de costes}
 \label{sec:custos}
 
-En este apartado se estima el coste total del proyecto a partir de los recursos materiales y
-humanos empleados. Los recursos software no generan coste alguno, ya que todo el software
-utilizado es libre o gratuito.
+En este apartado se estima el coste total del proyecto a partir de los recursos materiales y humanos empleados. Los recursos software no generan coste alguno, ya que todo el software utilizado es libre o gratuito.
 
 El coste de los recursos hardware se recoge en la tabla~\ref{tab:costes_hardware}.
 
-\begin{table}[htbp]
+\begin{table}[tbp]
     \centering
     \caption{Costes derivados del hardware}
     \label{tab:costes_hardware}
@@ -203,13 +182,9 @@ El coste de los recursos hardware se recoge en la tabla~\ref{tab:costes_hardware
     \end{tabular}
 \end{table}
 
-Respecto a los recursos humanos, el desarrollo se llevó a cabo a lo largo de aproximadamente
-180 días, con una dedicación media en torno a las 3 horas diarias, lo que supone un total
-cercano a las 540 horas de trabajo efectivas. El esfuerzo se distribuyó entre los distintos
-roles asignando a cada uno una carga horaria acorde con sus responsabilidades, concentrándose
-la mayor parte del tiempo en las tareas de programación. El desglose de horas y costes se muestra en la tabla~\ref{tab:costes_humanos}.
+Respecto a los recursos humanos, el desarrollo se llevó a cabo a lo largo de aproximadamente 180 días, con una dedicación media en torno a las 3 horas diarias, aunque hubo días de un periodo mayor y otros en los que hubo menos, lo que supone un total cercano a las 540 horas de trabajo efectivas. El esfuerzo se distribuyó entre los distintos roles asignando a cada uno una carga horaria acorde con sus responsabilidades, concentrándose la mayor parte del tiempo en las tareas de programación. El desglose de horas y costes se muestra en la tabla~\ref{tab:costes_humanos}.
 
-\begin{table}[htbp]
+\begin{table}[tbp]
     \centering
     \caption{Desglose de horas y costes de los recursos humanos}
     \label{tab:costes_humanos}
@@ -230,7 +205,4 @@ la mayor parte del tiempo en las tareas de programación. El desglose de horas y
     \end{tabular}
 \end{table}
 
-Sumando el coste de los recursos hardware (tabla~\ref{tab:costes_hardware}) y el de los
-recursos humanos (tabla~\ref{tab:costes_humanos}), y teniendo en cuenta que los recursos
-software no suponen coste alguno, el coste total estimado del proyecto asciende a
-\textbf{27\,411{,}21 \euro}.
+Sumando el coste de los recursos hardware (tabla~\ref{tab:costes_hardware}) y el de los recursos humanos (tabla~\ref{tab:costes_humanos}), y teniendo en cuenta que los recursos software no suponen coste alguno, el coste total estimado del proyecto asciende a\textbf{27\,411{,}21 \euro}.

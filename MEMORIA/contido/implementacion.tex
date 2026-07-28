@@ -550,6 +550,42 @@ La sección~\ref{subsec:derrape-arquitectura} exige que exista una señal capaz 
 
 La detección se implementa como una máquina de estados que se alimenta en cada fotograma con la celda y la distancia perpendicular de la pegatina trasera. Cuando la distancia supera el umbral de derrape se abre uno y se anota la celda inicial, mientras se mantenga por encima, el derrape se prolonga actualizando su celda final; cuando vuelve a caer por debajo, se cierra. No se abren derrapes junto a los extremos de la cadena ni junto a las celdas gigantes, donde la medida no es fiable.
 
+La figura~\ref{fig:secuencia-derrape} ejemplifica un caso donde se puede ver el proceso real de derrape del coche. Con el coche alineado la pegatina trasera va sobre el carril y su distancia a la trayectoria es casi nula; al abrirse la parte trasera la distancia perpendicular del centroide de la pegatina a la trayectoria crece hasta superar el umbral, que es lo que abre el derrape, se puede ver en la figura~\ref{fig:derrape-trazas-b}. En el instante más violento el coche queda atravesado y ninguna de las dos pegatinas se detecta, situación que resuelve la readquisición de la sección~\ref{subsec:readquisicion}.
+
+\begin{figure}[tbp]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/derrape_seq_a_antes.png}
+        \caption{Coche alineado con el carril}
+        \label{fig:secuencia-derrape-a}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/derrape_seq_b_inicio.png}
+        \caption{La parte trasera empieza a abrirse}
+        \label{fig:secuencia-derrape-b}
+    \end{subfigure}
+
+    \vspace{0.7em}
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/derrape_seq_c_completo.png}
+        \caption{Derrape completo, sin detección}
+        \label{fig:secuencia-derrape-c}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/derrape_seq_d_recuperado.png}
+        \caption{Seguimiento readquirido}
+        \label{fig:secuencia-derrape-d}
+    \end{subfigure}
+    \caption{Ejemplo de proceso de derrape en el circuito en forma de ovalo}
+    \label{fig:secuencia-derrape}
+\end{figure}
+
 \subsection{Castigo de zonas y ciclo de aprendizaje}
 \label{subsec:algoritmo-aprendizaje}
 
@@ -560,6 +596,63 @@ Cada derrape cerrado desencadena el castigo. El intervalo de celdas del derrape 
 Si el derrape cae dentro o junto a una zona de derrape ya existente, ambas se fusionan. El intervalo resultante es la unión de los dos y el PWM, el mínimo de ambos menos la reducción. En ese caso el retroceso añadido es menor que el de una zona nueva, porque la zona existente ya aplicó el suyo al crearse. Si cada reincidencia retrocediera de nuevo la distancia completa, las zonas protegidas acabarían cubriendo el circuito entero y el perfil no volvería a subir en ningún tramo. Las celdas gigantes alcanzadas por un derrape o por su retroceso se castigan como una unidad, ya que dentro del hueco no hay precisión que permita distinguir una parte de otra.
 
 La política de mejora se dispara con el paso por meta. El controlador comprueba si durante la vuelta hubo algún derrape en alguna de las cámaras y comunica el resultado a todas las instancias. Cada zona sin derrape incrementa su PWM en una unidad, con \texttt{maximum\_speed} como techo. Quedan fuera las zonas que registraron un derrape en las últimas vueltas, que permanecen protegidas durante un número configurable de vueltas antes de poder volver a subir.
+
+Las figuras~\ref{fig:derrape-trazas} y~\ref{fig:derrape-dist} recorren el ciclo completo sobre tres vueltas consecutivas de una sesión, con las gráficas de la herramienta de análisis (sección~\ref{subsec:visualizacion-analisis}). En la vuelta~21 la trasera va pegada a la trayectoria base y la distancia nunca se acerca al umbral, de modo que el PWM se mantiene igual en todo el recorrido y solamente hay una zona. En la~22 la trasera se abre en la curva y la distancia lo supera durante diez fotogramas, lo que cierra un derrape y castiga la zona. En la~23 el perfil ya trae el PWM rebajado en ese tramo.
+
+\begin{figure}[tbp]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/derrape_traza_v21.png}
+        \caption{Vuelta 21, limpia}
+        \label{fig:derrape-trazas-a}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/derrape_traza_v22.png}
+        \caption{Vuelta 22, con derrape}
+        \label{fig:derrape-trazas-b}
+    \end{subfigure}
+
+    \vspace{0.7em}
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/derrape_traza_v23.png}
+        \caption{Vuelta 23, ya castigada}
+        \label{fig:derrape-trazas-c}
+    \end{subfigure}
+    \caption{Recorrido de la pegatina trasera (magenta) frente a la trayectoria base (azul) en tres vueltas consecutivas. Los segmentos rojos son la distancia perpendicular que mide el algoritmo}
+    \label{fig:derrape-trazas}
+\end{figure}
+
+\begin{figure}[p]
+    \centering
+    \begin{subfigure}[b]{0.85\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/derrape_dist_v21.png}
+        \caption{Vuelta 21}
+        \label{fig:derrape-dist-a}
+    \end{subfigure}
+
+    \vspace{0.5em}
+    \begin{subfigure}[b]{0.85\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/derrape_dist_v22.png}
+        \caption{Vuelta 22}
+        \label{fig:derrape-dist-b}
+    \end{subfigure}
+
+    \vspace{0.5em}
+    \begin{subfigure}[b]{0.85\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/derrape_dist_v23.png}
+        \caption{Vuelta 23}
+        \label{fig:derrape-dist-c}
+    \end{subfigure}
+    \caption{Distancia de la pegatina trasera a lo largo de cada vuelta (eje izquierdo) frente al PWM aplicado (línea verde, eje derecho). Las aspas rojas marcan las muestras que superan el umbral y abren el derrape. El escalón verde de la vuelta~23 es la zona creada por el castigo de la anterior.}
+    \label{fig:derrape-dist}
+\end{figure}
 
 \subsection{Coordinación entre cámaras}
 \label{subsec:algoritmo-coordinacion}
