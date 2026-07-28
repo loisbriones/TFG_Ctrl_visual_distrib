@@ -1,5 +1,4 @@
 import math
-import csv
 import os
 import numpy as np
 from datetime import datetime
@@ -11,8 +10,7 @@ class EstrategiaPerfil:
     celdas equiespaciadas.
 
     Sustituye al modelo anterior de tramos + longitud de arco, que en pista
-    generaba tramos espurios (la trayectoria de calibración llega con ~1,25
-    vueltas y puntos duplicados) y zonas de derrape gigantes e imprecisas.
+    generaba tramos espurios y zonas de derrape gigantes e imprecisas.
 
     ============================================================
     CONCEPTOS CLAVE PARA SEGUIR EL CÓDIGO
@@ -24,14 +22,15 @@ class EstrategiaPerfil:
     diseño: no se contemplan porciones sueltas). Esa porción puede tener
     huecos tapados por dentro (el circuito no se ve pero continúa).
 
-    FILTRADO: como la calibración graba más de una vuelta, la lista trae una
-    cola que repite puntos ya grabados. `setTrayectoria` recorta esa cola
-    (cuando varios puntos seguidos vuelven a pasar por donde ya se pasó, la
-    vuelta se cerró). Si la grabación empezó en mitad de la porción visible,
-    la lista queda "rotada" ([mitad B, salto, mitad A]) y se reordena para
-    que empiece por el principio real de la porción.
+    ORIENTACIÓN: la lista de entrada ya es UNA vuelta limpia, porque el
+    controlador solo acumula puntos entre el primer y el segundo paso por
+    meta. Lo único que queda por resolver es que esa vuelta empieza EN LA
+    META, que no tiene por qué caer en un extremo de la porción visible: si
+    cae en mitad de ella, la lista llega "rotada" ([mitad B, salto, mitad A])
+    y `setTrayectoria` la reordena para que empiece por el principio real de
+    la porción.
 
-    CELDA: la trayectoria filtrada se remuestrea colocando un punto cada
+    CELDA: la trayectoria se remuestrea colocando un punto cada
     `paso_celda` px SOBRE la polilínea (interpolando en los huecos pequeños
     entre puntos de calibración). 1 punto remuestreado = 1 celda. Así las
     celdas quedan repartidas de forma uniforme sobre la línea real, en vez
@@ -87,7 +86,7 @@ class EstrategiaPerfil:
 
     LOG DE EJECUCIÓN (derrapesLog_<nodo>_<camara>.txt), prefijos grep-ables:
       [INIT]    parámetros con los que corre la instancia
-      [TRAY]    filtrado (recorte de cola, rotación), remuestreo, celdas
+      [TRAY]    orientación (cierre / rotación), remuestreo, celdas
                 gigantes y cadena final celda a celda
       [FRAME]   una línea por llamada a actualizar_estado
       [DERRAPE] transiciones de la máquina de estados
@@ -96,86 +95,67 @@ class EstrategiaPerfil:
       [VUELTA]  decisión al cruzar meta: qué zonas suben y cuáles no
     """
 
-    def __init__(self, v_max, v_min, node_name="node", camara_id="cam"):
+    def __init__(
+        self,
+        v_max,
+        v_min,
+        node_name="node",
+        camara_id="cam",
+        # --- detección de derrape y localización ---
+        umbral_derrape=12.0,
+        max_dist_ruta=80.0,
+        margen_extremo_celdas=2,
+        # --- construcción de la cadena de celdas ---
+        paso_celda=15.0,
+        umbral_celda_gigante=150.0,
+        umbral_cierre=60.0,
+        # --- perfil de zonas y aprendizaje ---
+        incremento_vuelta=1.0,
+        reduccion_derrape=2.0,
+        retroceso_creacion=150.0,
+        retroceso_fusion=60.0,
+        margen_fusion_celdas=1,
+        vueltas_proteccion=2,
+    ):
         """
         Crea una instancia del algoritmo para UNA cámara concreta.
 
         Solo guarda parámetros y deja el estado vacío: la trayectoria llega
         después por `setTrayectoria`. También abre el fichero de log.
+
+        Todos los umbrales llegan como argumentos con valor por defecto. En el
+        sistema es CarControllerNode quien los lee de params.yaml
+        (controller.algoritmo.*) y los pasa aquí; los defaults son esos mismos
+        valores, para que la clase se pueda instanciar suelta y probar fuera
+        de ROS sin arrastrar el fichero de configuración. La explicación de
+        para qué sirve cada uno está en params.yaml, junto a su valor.
         """
         self.v_max = float(v_max)
         self.v_min = float(v_min)
 
-        # ------------------------------------------------------------------
-        # Parámetros de detección de derrape y localización
-        # ------------------------------------------------------------------
-        # Umbral de distancia perpendicular (px) para considerar derrape.
-        # Ajustado empíricamente en pista: con 15 px (valor original) el
-        # derrape se confirmaba tan tarde que el coche ya se había salido;
-        # con 8 px se reacciona a tiempo
-        self.umbral_derrape = 12.0
-        # Ruido: si la etiqueta frontal está más lejos que esto de la ruta
-        # se ignora el frame entero (detección falsa)
-        self.max_dist_ruta = 80.0
-        # Zona muerta (en CELDAS) junto a los extremos de la cadena abierta
-        # y junto a las celdas gigantes: al entrar/salir del encuadre la
-        # detección de la pose no es fiable y daría falsos derrapes
-        self.margen_extremo_celdas = 2 
+        # Detección de derrape y localización
+        self.umbral_derrape = float(umbral_derrape)
+        self.max_dist_ruta = float(max_dist_ruta)
+        self.margen_extremo_celdas = int(margen_extremo_celdas)
 
-        # ------------------------------------------------------------------
-        # Parámetros de construcción de la cadena de celdas
-        # ------------------------------------------------------------------
-        # Separación entre celdas (px sobre la polilínea). Las celdas se
-        # generan interpolando, así que este valor manda sobre la densidad
-        # real de puntos de calibración
-        self.paso_celda = 15.0
-        # Salto entre puntos consecutivos a partir del cual se considera un
-        # hueco tapado (celda gigante). En los logs de pista reales los
-        # huecos por salida de encuadre miden 189-489 px y los cortes falsos
-        # del algoritmo antiguo 60-133 px: 150 separa bien ambos mundos
-        self.umbral_celda_gigante = 150.0
-        # Distancia (px) por debajo de la cual un punto "repite" uno antiguo:
-        # se usa para detectar la cola duplicada de la calibración. Del orden
-        # de la separación entre nodos de la ruta limpia (15 px) con holgura
-        self.umbral_duplicado = 20.0
-        # Nº de puntos SEGUIDOS repitiendo puntos antiguos para dar la vuelta
-        # por cerrada y recortar. Exigir una racha evita recortar en el cruce
-        # del circuito en ocho, donde la trayectoria se toca solo un instante
-        self.racha_duplicado = 5
-        # Al buscar duplicados se ignoran los últimos N puntos (los vecinos
-        # inmediatos siempre están cerca y no son duplicados de nada)
-        self.exclusion_duplicado = 8
-        # Distancia máxima (px) entre el último y el primer punto filtrados
-        # para considerar que el final conecta con el inicio (la grabación
-        # volvió al punto de partida). Tras el recorte de la cola duplicada
-        # el hueco de cierre real queda por debajo de ~40 px
-        self.umbral_cierre = 60.0
+        # Construcción de la cadena de celdas
+        self.paso_celda = float(paso_celda)
+        self.umbral_celda_gigante = float(umbral_celda_gigante)
+        self.umbral_cierre = float(umbral_cierre)
 
-        # ------------------------------------------------------------------
-        # Parámetros del perfil de zonas
-        # ------------------------------------------------------------------
-        # Subida por vuelta limpia y bajada por derrape (unidades de PWM)
-        self.incremento_vuelta = 1.0
-        self.reduccion_derrape = 2.0
-        # Retroceso (px) al CREAR una zona de derrape nueva: el coche llegó
-        # demasiado rápido, hay que frenar bastante antes del punto donde
-        # se manifestó la pérdida de adherencia
-        self.retroceso_creacion = 150.0
-        # Retroceso (px) al FUSIONAR un derrape con una zona existente
-        # (~2 celdas). Si cada reincidencia retrocediera los 300 px completos
-        # el circuito entero acabaría cubierto y el perfil no subiría nunca
-        self.retroceso_fusion = 60.0
-        # Holgura (en celdas) para considerar que un derrape "toca" una zona
-        # existente y hay que fusionar en vez de crear
-        self.margen_fusion_celdas = 1
-        # Vueltas sin derrapar en una zona antes de dejarla subir de nuevo
-        self.vueltas_proteccion = 2
+        # Perfil de zonas y aprendizaje
+        self.incremento_vuelta = float(incremento_vuelta)
+        self.reduccion_derrape = float(reduccion_derrape)
+        self.retroceso_creacion = float(retroceso_creacion)
+        self.retroceso_fusion = float(retroceso_fusion)
+        self.margen_fusion_celdas = int(margen_fusion_celdas)
+        self.vueltas_proteccion = int(vueltas_proteccion)
 
         # ------------------------------------------------------------------
         # Estado de la cadena de celdas (lo rellena setTrayectoria)
         # ------------------------------------------------------------------
-        # Trayectoria filtrada que se usó para construir la cadena (para
-        # idempotencia y depuración)
+        # Trayectoria (ya orientada) que se usó para construir la cadena, para
+        # idempotencia y depuración
         self.trayectoriaUsada = None
         # Matriz (P, 2) con la posición de cada celda NORMAL (las gigantes
         # no tienen punto: no se puede localizar nada dentro de ellas)
@@ -235,7 +215,6 @@ class EstrategiaPerfil:
         os.makedirs(directorio_logs, exist_ok=True)
 
         self.log_file = f"{directorio_logs}/derrapesLog_{node_name}_{camara_id}.txt"
-        self.csv_file = f"{directorio_logs}/datosDerrapes_{node_name}_{camara_id}.csv"
 
         try:
             # Se abre en modo "w" para vaciar el log de la sesión anterior
@@ -245,7 +224,11 @@ class EstrategiaPerfil:
             print(f"Error inicializando log: {e}")
 
         # Volcado de TODOS los parámetros vigentes para que el log sea
-        # autocontenido (se ajustan a mano en el código)
+        # autocontenido: como ahora llegan de params.yaml, esta es la única
+        # forma de saber después con qué valores corrió la sesión. La
+        # herramienta de análisis los lee de aquí (umbral_derrape,
+        # max_dist_ruta y paso_celda los usa para dibujar), así que el formato
+        # "clave=valor" de estas líneas es un contrato: no cambiarlo
         self.saveLogFile(f"[INIT] nodo={node_name} camara={camara_id}")
         self.saveLogFile(
             f"[INIT] v_min={self.v_min:.0f} v_max={self.v_max:.0f} | "
@@ -255,9 +238,6 @@ class EstrategiaPerfil:
         self.saveLogFile(
             f"[INIT] paso_celda={self.paso_celda} "
             f"umbral_celda_gigante={self.umbral_celda_gigante} "
-            f"umbral_duplicado={self.umbral_duplicado} "
-            f"racha_duplicado={self.racha_duplicado} "
-            f"exclusion_duplicado={self.exclusion_duplicado} "
             f"umbral_cierre={self.umbral_cierre}"
         )
         self.saveLogFile(
@@ -284,22 +264,10 @@ class EstrategiaPerfil:
         return self._estado_derrapando
 
     @property
-    def margen_restante(self):
-        """Px de trayectoria que le quedan al coche dentro del campo de
-        visión de esta cámara (infinito si la cadena es cerrada)."""
-        return self._margen_restante
-
-    @property
     def frame_valido(self):
         """True si el último fotograma procesado localizó el coche sobre la
         trayectoria (no fue descartado por ruido)."""
         return self._frame_valido
-
-    @property
-    def reduccion_pendiente(self):
-        """Px de reducción que se salieron por el inicio de la cadena y que
-        el controlador debe reenviar a la cámara precedente."""
-        return self._reduccion_pendiente
 
     def consumir_reduccion_pendiente(self):
         """Devuelve los px de reducción pendientes y los pone a cero. El
@@ -309,17 +277,6 @@ class EstrategiaPerfil:
         self._reduccion_pendiente = 0.0
         return pendiente
 
-    def set_velocidades(self, v_max, v_min):
-        """Actualiza los límites de PWM en caliente. No toca las zonas ya
-        aprendidas: solo cambia el tope aplicado en _velocidad_en."""
-        self.saveLogFile(
-            f"[INIT] Límites PWM cambiados en caliente: "
-            f"v_min {self.v_min:.0f}->{float(v_min):.0f}, "
-            f"v_max {self.v_max:.0f}->{float(v_max):.0f} (las zonas no se tocan)"
-        )
-        self.v_max = float(v_max)
-        self.v_min = float(v_min)
-
     # ======================================================================
     # CONSTRUCCIÓN DE LA CADENA DE CELDAS
     # ======================================================================
@@ -328,9 +285,9 @@ class EstrategiaPerfil:
         Procesa la trayectoria de calibración de la cámara. Se llama UNA vez.
 
         Dos pasos, y a partir de ahí solo se trabaja con las celdas:
-          1. FILTRAR la lista de puntos: recortar la cola duplicada de la
-             calibración y, si procede, rotar la lista para que empiece por
-             el principio real de la porción visible.
+          1. ORIENTAR la lista de puntos: decidir si la cadena es cerrada o
+             abierta y, si procede, rotarla para que empiece por el principio
+             real de la porción visible.
           2. GENERAR LAS CELDAS: remuestrear la polilínea a `paso_celda` px,
              convirtiendo los saltos grandes en celdas gigantes.
 
@@ -356,13 +313,8 @@ class EstrategiaPerfil:
             )
             return
 
-        # --- Paso 1: filtrado ---
+        # --- Paso 1: orientación (cierre / rotación) ---
         filtrados, cerrada = self._filtrar_trayectoria(puntos, varias_camaras)
-        if len(filtrados) < 2:
-            self.saveLogFile(
-                "[TRAY] Trayectoria RECHAZADA: tras el filtrado quedan <2 puntos"
-            )
-            return
         self.trayectoriaUsada = filtrados
         self._cerrada = cerrada
 
@@ -402,67 +354,34 @@ class EstrategiaPerfil:
 
     def _filtrar_trayectoria(self, puntos, varias_camaras):
         """
-        Paso 1 de setTrayectoria: limpia la lista de puntos de calibración.
-        Devuelve (puntos_filtrados, cerrada).
+        Paso 1 de setTrayectoria: decide la ORIENTACIÓN de la cadena.
+        Devuelve (puntos, cerrada), rotando la lista si hace falta.
 
-        a) RECORTE DE LA COLA DUPLICADA: la calibración graba desde que
-           arranca el sistema hasta el 2º cruce de meta, o sea, MÁS de una
-           vuelta. Se recorre la lista midiendo la distancia de cada punto a
-           los puntos antiguos (excluyendo los `exclusion_duplicado` vecinos
-           recientes): cuando `racha_duplicado` puntos seguidos caen a menos
-           de `umbral_duplicado` px de puntos antiguos, el coche está
-           repitiendo recorrido -> la vuelta se cerró y se recorta ahí.
+        No hay nada que recortar: el controlador acumula los puntos de la
+        calibración entre el PRIMER y el SEGUNDO paso por meta
+        (`recolectar_datos_calibracion`), así que la lista que llega es
+        exactamente una vuelta. Antes la calibración grababa desde que
+        arrancaba el sistema y había que detectar y recortar la cola que
+        repetía recorrido ya grabado; eso desapareció con la vuelta delimitada
+        por meta.
 
-        b) CIERRE / ROTACIÓN: tras el recorte, si el final queda cerca del
-           inicio (< umbral_cierre) la grabación volvió al punto de partida:
-             - sin saltos grandes -> la cámara ve el circuito completo:
-               cadena CERRADA;
-             - con saltos grandes y VARIAS cámaras -> la grabación empezó en
-               mitad de la porción visible y el salto es el resto del
-               circuito: se ROTA la lista para empezar tras el salto y la
-               cadena queda ABIERTA;
-             - con saltos grandes y UNA cámara -> ve el circuito completo
-               con huecos tapados: cadena CERRADA (los saltos serán celdas
-               gigantes).
+        Lo que sí queda por resolver es que la vuelta empieza EN LA META, y la
+        meta no tiene por qué caer en un extremo de la porción que ve esta
+        cámara. Si el final queda cerca del inicio (< umbral_cierre), la
+        grabación volvió al punto de partida y hay tres lecturas:
+          - sin saltos grandes -> la cámara ve el circuito completo:
+            cadena CERRADA;
+          - con saltos grandes y VARIAS cámaras -> la meta cae en mitad de la
+            porción visible: la lista llega como [mitad B, salto, mitad A],
+            donde el salto es el resto del circuito que ven las otras cámaras.
+            Se ROTA para empezar tras el salto y la cadena queda ABIERTA. Es
+            el caso de la cámara que ve la meta, y con esta calibración ocurre
+            siempre;
+          - con saltos grandes y UNA cámara -> ve el circuito completo con
+            huecos tapados: cadena CERRADA (los saltos serán celdas gigantes).
         """
-        n = len(puntos)
+        filtrados = puntos
 
-        # a) recorte de la cola duplicada
-        corte = n
-        racha = 0
-        inicio_racha = n
-        for j in range(1, n):
-            limite = j - self.exclusion_duplicado
-            if limite <= 0:
-                continue
-            d2 = np.sum((puntos[:limite] - puntos[j]) ** 2, axis=1)
-            if math.sqrt(float(d2.min())) < self.umbral_duplicado:
-                if racha == 0:
-                    inicio_racha = j
-                racha += 1
-                if racha >= self.racha_duplicado:
-                    corte = inicio_racha
-                    break
-            else:
-                racha = 0
-
-        if corte < n:
-            self.saveLogFile(
-                f"[TRAY] Filtrado: {n - corte} puntos de cola duplicada "
-                f"recortados (racha de {self.racha_duplicado} puntos a "
-                f"<{self.umbral_duplicado:.0f} px de puntos antiguos a partir "
-                f"del punto {corte}); quedan {corte} de {n}"
-            )
-        else:
-            self.saveLogFile(
-                f"[TRAY] Filtrado: sin cola duplicada detectada "
-                f"({n} puntos se mantienen)"
-            )
-        filtrados = puntos[:corte]
-        if len(filtrados) < 2:
-            return filtrados, False
-
-        # b) cierre / rotación
         dif = np.diff(filtrados, axis=0)
         dist = np.hypot(dif[:, 0], dif[:, 1])
         saltos = [int(i) for i in np.nonzero(dist > self.umbral_celda_gigante)[0]]
@@ -473,10 +392,10 @@ class EstrategiaPerfil:
         cerrada = False
         if cierre <= self.umbral_cierre:
             if saltos and varias_camaras:
-                # La grabación empezó en mitad de la porción: [mitad B,
-                # salto, mitad A]. Se rota para empezar justo tras el salto
-                # (el salto es el resto del circuito, que ven otras cámaras,
-                # y desaparece de esta cadena)
+                # La meta cae en mitad de la porción visible, así que la
+                # vuelta grabada llega como [mitad B, salto, mitad A]. Se rota
+                # para empezar justo tras el salto (el salto es el resto del
+                # circuito, que ven otras cámaras, y desaparece de esta cadena)
                 k = saltos[0]
                 if len(saltos) > 1:
                     self.saveLogFile(
@@ -487,11 +406,11 @@ class EstrategiaPerfil:
                     )
                 filtrados = np.vstack([filtrados[k + 1:], filtrados[: k + 1]])
                 self.saveLogFile(
-                    f"[TRAY] Filtrado: el final conecta con el inicio "
+                    f"[TRAY] Cierre: el final conecta con el inicio "
                     f"({cierre:.1f} px <= {self.umbral_cierre:.0f}) y hay un "
-                    f"salto de {dist[k]:.1f} px en el punto {k}: la grabación "
-                    f"empezó en mitad de la porción -> lista ROTADA para "
-                    f"empezar tras el salto; cadena ABIERTA"
+                    f"salto de {dist[k]:.1f} px en el punto {k}: la meta cae "
+                    f"en mitad de la porción -> lista ROTADA para empezar "
+                    f"tras el salto; cadena ABIERTA"
                 )
             else:
                 cerrada = True
@@ -502,13 +421,13 @@ class EstrategiaPerfil:
                          f"gigantes (única cámara)"
                 )
                 self.saveLogFile(
-                    f"[TRAY] Filtrado: el final conecta con el inicio "
+                    f"[TRAY] Cierre: el final conecta con el inicio "
                     f"({cierre:.1f} px <= {self.umbral_cierre:.0f}), {motivo} "
                     f"-> cadena CERRADA (esta cámara ve el circuito completo)"
                 )
         else:
             self.saveLogFile(
-                f"[TRAY] Filtrado: el final NO conecta con el inicio "
+                f"[TRAY] Cierre: el final NO conecta con el inicio "
                 f"({cierre:.1f} px > {self.umbral_cierre:.0f}) -> cadena "
                 f"ABIERTA (porción del circuito); saltos interiores "
                 f"tapados: {len(saltos)}"
@@ -517,7 +436,7 @@ class EstrategiaPerfil:
 
     def _construir_celdas(self, p):
         """
-        Paso 2 de setTrayectoria: remuestrea la polilínea filtrada colocando
+        Paso 2 de setTrayectoria: remuestrea la polilínea colocando
         una celda cada `paso_celda` px, interpolando linealmente entre los
         puntos de calibración (así los huecos pequeños quedan rellenos con
         puntos nuestros y las celdas uniformemente repartidas). Los saltos
@@ -619,41 +538,14 @@ class EstrategiaPerfil:
     # ======================================================================
     # LOCALIZACIÓN
     # ======================================================================
-    
-    def _dist_a_curva_local(self, p, P_prev, P_curr, P_next, n_muescas=16):
-        """
-        Calcula la distancia ortogonal desde el punto `p` a una curva parabólica suave
-        (polinomio de Lagrange C^1) que pasa exactamente por P_prev, P_curr y P_next.
-        Evita la congelación en vértices y genera una curva de off-tracking limpia.
-        """
-        # Vector de parámetros u desde -1 (P_prev) hasta 1 (P_next) pasando por 0 (P_curr)
-        u = np.linspace(-1.0, 1.0, n_muescas, dtype=np.float32).reshape(-1, 1)
-
-        # Pesos vectorizados del polinomio de Lagrange
-        L_prev = 0.5 * u * (u - 1.0)
-        L_curr = 1.0 - (u**2)
-        L_next = 0.5 * u * (u + 1.0)
-
-        # Generación de la micro-curva suave (matriz de n_muescas x 2)
-        curva = L_prev * P_prev + L_curr * P_curr + L_next * P_next
-
-        # Proyección ortogonal sobre los micro-segmentos de la curva continua
-        mejor_dist = float("inf")
-        for i in range(len(curva) - 1):
-            dist = self._dist_a_segmento(p, curva[i], curva[i + 1])
-            if dist < mejor_dist:
-                mejor_dist = dist
-
-        return mejor_dist
-
     def _dist_a_segmento(self, p, A, B):
         """
         Distancia del punto p al segmento AB (proyección con t acotado a
         [0, 1]: si p "cae" más allá de un extremo, la distancia es al propio
         extremo). Es el paso fino de `localizar`: el punto de celda más
         cercano da la resolución "de celda"; proyectar sobre los segmentos
-        adyacentes da la distancia perpendicular exacta, clave para que el
-        umbral de derrape de 8 px tenga sentido.
+        adyacentes da la distancia perpendicular a la trayectoria, que es lo
+        que da sentido a un umbral de derrape de unos pocos píxeles.
         """
         AB = B - A
         l2 = float(np.dot(AB, AB))
@@ -670,10 +562,17 @@ class EstrategiaPerfil:
         no hay trayectoria cargada.
 
         Paso GRUESO: celda cuyo punto está más cerca (argmin vectorizado).
-        Paso FINO: intenta formar un trío de celdas consecutivas (anterior,
-                   actual, siguiente) para construir una curva local suave (C^1).
-                   Si hay cortes por celdas gigantes o extremos abiertos, recae
-                   con elegancia en la proyección por segmentos.
+        Paso FINO: se proyecta el punto sobre los DOS segmentos que unen esa
+                   celda con su anterior y su siguiente, y se conserva la
+                   menor de las dos distancias. Medir contra el punto de la
+                   celda daría una distancia escalonada (depende de dónde
+                   cayeran las celdas); contra los segmentos se obtiene la
+                   distancia perpendicular a la trayectoria.
+
+        Un segmento solo existe si la celda vecina es realmente contigua sobre
+        la trayectoria: en los extremos de la cadena abierta y a ambos lados
+        de una celda gigante no hay recorrido conocido sobre el que proyectar,
+        y ahí se usa la distancia al punto de la celda sin más.
         """
         if self._puntos is None or len(self._puntos) == 0:
             return None
@@ -701,7 +600,9 @@ class EstrategiaPerfil:
             ) % self.n_celdas == int(self._celda_de_punto[0]):
                 f_next = 0
 
-        # Comprobar si existe continuidad lógica en la cuadrícula (sin celdas gigantes por medio)
+        # Un vecino solo sirve si su celda es la contigua sobre la cadena: si
+        # no lo es, entre ambos hay una celda gigante (o el final de la cadena
+        # abierta) y no hay trayectoria sobre la que proyectar
         tengo_prev = (
             f_prev >= 0
             and self._celda_de_punto[f_prev] == (idx - 1) % self.n_celdas
@@ -711,29 +612,16 @@ class EstrategiaPerfil:
             and self._celda_de_punto[f_next] == (idx + 1) % self.n_celdas
         )
 
-        # CASO IDEAL: Trío continuo -> Proyectamos sobre curva suave C^1
-        if tengo_prev and tengo_next:
-            mejor_dist = self._dist_a_curva_local(
-                p,
-                self._puntos[f_prev],
-                self._puntos[fila],
-                self._puntos[f_next],
-            )
-        else:
-            # CASO DE DEGRADACIÓN (extremos abiertos o junto a celda gigante):
-            # Recaemos en tu lógica original de segmentos adyacentes
-            segmentos = []
-            if tengo_prev:
-                segmentos.append((f_prev, fila))
-            if tengo_next:
-                segmentos.append((fila, f_next))
+        segmentos = []
+        if tengo_prev:
+            segmentos.append((f_prev, fila))
+        if tengo_next:
+            segmentos.append((fila, f_next))
 
-            for fa, fb in segmentos:
-                dist = self._dist_a_segmento(
-                    p, self._puntos[fa], self._puntos[fb]
-                )
-                if dist < mejor_dist:
-                    mejor_dist = dist
+        for fa, fb in segmentos:
+            dist = self._dist_a_segmento(p, self._puntos[fa], self._puntos[fb])
+            if dist < mejor_dist:
+                mejor_dist = dist
 
         return idx, mejor_dist
 
@@ -1386,26 +1274,3 @@ class EstrategiaPerfil:
                 log_file.write(f"{marca} {data}\n")
         except IOError as e:
             print(f"Error escribiendo log: {e}")
-
-    def saveData(self, vueltas):
-        """
-        Vuelca a CSV el historial de zonas castigadas para analizarlo
-        después. Una columna por zona con historial (cabecera
-        "tipo[ini-fin]") y una fila por vuelta; la celda lleva el número de
-        vuelta si esa zona registró un castigo en esa vuelta.
-        """
-        try:
-            with open(self.csv_file, "w", newline="") as archivoCSV:
-                castigadas = [z for z in self.zonas if z["vueltas"]]
-                fichero = csv.writer(archivoCSV)
-                fichero.writerow(
-                    ["vueltas"]
-                    + [f"{z['tipo']}[{z['ini']}-{z['fin']}]" for z in castigadas]
-                )
-                for v in range(0, vueltas + 1):
-                    fila = [v]
-                    for z in castigadas:
-                        fila.append(v if v in z["vueltas"] else None)
-                    fichero.writerow(fila)
-        except IOError as e:
-            print(f"Error guardando CSV: {e}")

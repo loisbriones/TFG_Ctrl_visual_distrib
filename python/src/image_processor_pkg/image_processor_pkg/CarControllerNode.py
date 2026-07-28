@@ -58,6 +58,33 @@ class CarControllerNode(Node):
         self.declare_parameter("carril_asignado", "2")
         self.carril = self.get_parameter("carril_asignado").value
 
+        # --- PARÁMETROS DEL ALGORITMO DE VELOCIDAD ---
+        # EstrategiaPerfil no es un nodo ROS y no puede leer params.yaml por
+        # su cuenta: los lee este nodo y se los pasa al construir cada
+        # instancia (ver procesar_trayectorias). Se declaran con el mismo
+        # valor que tiene por defecto la clase, así que un params.yaml sin
+        # el bloque controller.algoritmo se comporta exactamente igual.
+        # Para qué sirve cada uno está comentado en params.yaml.
+        self.params_algoritmo = {}
+        for nombre, defecto in (
+            ("umbral_derrape", 12.0),
+            ("max_dist_ruta", 80.0),
+            ("margen_extremo_celdas", 2),
+            ("paso_celda", 15.0),
+            ("umbral_celda_gigante", 150.0),
+            ("umbral_cierre", 60.0),
+            ("incremento_vuelta", 1.0),
+            ("reduccion_derrape", 2.0),
+            ("retroceso_creacion", 150.0),
+            ("retroceso_fusion", 60.0),
+            ("margen_fusion_celdas", 1),
+            ("vueltas_proteccion", 2),
+        ):
+            self.declare_parameter(f"controller.algoritmo.{nombre}", defecto)
+            self.params_algoritmo[nombre] = self.get_parameter(
+                f"controller.algoritmo.{nombre}"
+            ).value
+
         # --- MODO MANUAL: el coche lo conduce una persona ---
         # False (el valor con el que arranca BrainLaunch, que no pasa el
         # parámetro) = carrera autónoma de siempre. True (lo pone
@@ -105,9 +132,12 @@ class CarControllerNode(Node):
         # El cruce se detecta con la pegatina DELANTERA sola: se mide su
         # distancia perpendicular CON SIGNO a la recta de meta (el signo
         # dice de qué lado de la recta está) y se da la meta por cruzada
-        # cuando ese signo cambia entre dos fotogramas. Frente a cortar el
-        # segmento delantera->trasera contra el de meta (el método del TFG
-        # de Adrián, que sigue disponible en crosses_segment):
+        # cuando ese signo cambia entre dos fotogramas.
+        #
+        # Sustituye al método del TFG de Adrián, que fue el primero que se
+        # implementó: cortar el segmento delantera->trasera contra el de
+        # meta. Se cambió por tres razones, y las tres siguen justificando
+        # el método actual:
         #   - Es un FLANCO por naturaleza: un coche parado a caballo de la
         #     línea tiene signo constante y no cuenta vueltas. Con el corte
         #     de segmentos la condición era cierta de forma continua y hacía
@@ -140,7 +170,8 @@ class CarControllerNode(Node):
         # cruce interpolado cae sobre la RECTA de meta, pero la meta es un
         # SEGMENTO; si su prolongación corta la pista en otro sitio, el
         # cambio de signo de allí se descarta por esta distancia
-        self.umbral_meta = 30.0
+        self.declare_parameter("controller.umbral_meta", 30.0)
+        self.umbral_meta = self.get_parameter("controller.umbral_meta").value
 
         # --- ORDEN SECUENCIAL DE CÁMARAS ---
         # El coche recorre las cámaras siempre en el mismo orden (se va por
@@ -158,7 +189,10 @@ class CarControllerNode(Node):
         self.t_ultimo_frame_valido = None
         # Segundos sin frames válidos de la activa para darla por perdida y
         # conmutar a la que sí está entregando (~10 frames a 30 Hz)
-        self.timeout_camara_activa = 0.3
+        self.declare_parameter("controller.timeout_camara_activa", 0.3)
+        self.timeout_camara_activa = self.get_parameter(
+            "controller.timeout_camara_activa"
+        ).value
         # {cámara: cámara anterior en el orden de paso}: se rellena en cada
         # conmutación y tras una vuelta completa queda el ciclo entero
         self.camara_precedente = {}
@@ -300,8 +334,6 @@ class CarControllerNode(Node):
         if fx == 0 and fy == 0:
             return
 
-        bx, by = float(msg.back.center.x), float(msg.back.center.y)
-
         punto_front = np.array([fx, fy], dtype=np.float32)
 
         # Solo se graba la vuelta que va del PRIMER paso por meta al
@@ -317,9 +349,8 @@ class CarControllerNode(Node):
 
             self.puntos_crudos[camara].append((fx, fy))
 
-        punto_back = np.array([bx, by], dtype=np.float32)
         # Como ya dimos una vuelta podemos terminar la calibración
-        if self.verificar_linea_meta(camara, punto_front, punto_back, msg.stamp):
+        if self.verificar_linea_meta(camara, punto_front, msg.stamp):
             msg_fin_calibracion = Bool()
             msg_fin_calibracion.data = False
             self.pub_modo_calibracion.publish(msg_fin_calibracion)
@@ -354,9 +385,11 @@ class CarControllerNode(Node):
             # varias_camaras desambigua dentro de setTrayectoria el caso
             # "el final conecta con el inicio y hay un salto grande": con una
             # sola cámara es el circuito completo con un hueco tapado; con
-            # varias, la grabación empezó en mitad de la porción visible
+            # varias, la meta cae en mitad de la porción que ve esta cámara y
+            # el salto es el resto del circuito, que ven las demás
             self.algoritmos[camara] = EstrategiaPerfil(
-                self.v_max, self.v_min, self.get_name(), camara
+                self.v_max, self.v_min, self.get_name(), camara,
+                **self.params_algoritmo,
             )
             self.algoritmos[camara].setTrayectoria(
                 self.trayectoria_base[camara],
@@ -414,7 +447,7 @@ class CarControllerNode(Node):
         punto_front = np.array([fx, fy], dtype=np.float32)
         punto_back = np.array([bx, by], dtype=np.float32)
 
-        if self.verificar_linea_meta(camara, punto_front, punto_back, msg.stamp):
+        if self.verificar_linea_meta(camara, punto_front, msg.stamp):
             self.registrar_vuelta_algoritmos()
 
         # El número de fotograma lo pone la cámara emisora y se guarda por
@@ -621,52 +654,6 @@ class CarControllerNode(Node):
         msg_time_per_lap.stamp = self.get_clock().now().to_msg()
         self.pub_time_per_lap.publish(msg_time_per_lap)
 
-    def crosses_segment(self, p1, p2, A, B):
-        # MÉTODO ALTERNATIVO DE PASO POR META (el del TFG de Adrián), hoy
-        # sin usar: ¿se cortan el segmento p1-p2 (delantera->trasera) y el
-        # segmento A-B (la meta)? Test clásico de orientaciones con los
-        # casos colineales, más un filtro previo de distancia para descartar
-        # rápido. Se conserva por si se quiere volver a él, pero tiene dos
-        # inconvenientes que llevaron a detectar el cruce con el cambio de
-        # signo de la delantera (ver verificar_linea_meta): necesita ver las
-        # DOS pegatinas, y es cierto durante toda la pasada en vez de en un
-        # instante, así que un coche parado sobre la línea lo cumple
-        # indefinidamente.
-        thr = 30.0
-        d1 = self.distancia_punto_segmento(p1, A, B)
-        d2 = self.distancia_punto_segmento(p2, A, B)
-        if d1 > thr and d2 > thr:
-            return False
-
-        def orientation(a, b, c):
-            val = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1])
-            if abs(val) < 1e-6:
-                return 0
-            return 1 if val > 0 else 2
-
-        def on_segment(a, b, c):
-            return min(a[0], c[0]) <= b[0] <= max(a[0], c[0]) and min(a[1], c[1]) <= b[
-                1
-            ] <= max(a[1], c[1])
-
-        o1 = orientation(p1, p2, A)
-        o2 = orientation(p1, p2, B)
-        o3 = orientation(A, B, p1)
-        o4 = orientation(A, B, p2)
-
-        if o1 != o2 and o3 != o4:
-            return True
-        if o1 == 0 and on_segment(p1, A, p2):
-            return True
-        if o2 == 0 and on_segment(p1, B, p2):
-            return True
-        if o3 == 0 and on_segment(A, p1, B):
-            return True
-        if o4 == 0 and on_segment(A, p2, B):
-            return True
-
-        return False
-
     def distancia_con_signo(self, P, A, B):
         # Distancia perpendicular de P a la RECTA que pasa por A y B, con
         # signo: el signo dice de qué lado de la recta cae P, y por eso un
@@ -677,7 +664,7 @@ class CarControllerNode(Node):
         AP = P - A
         return float(AB[0] * AP[1] - AB[1] * AP[0]) / float(np.linalg.norm(AB))
 
-    def verificar_linea_meta(self, camara_id, p_front, p_back, stamp):
+    def verificar_linea_meta(self, camara_id, p_front, stamp):
         """
         Procesa un mensaje de la cámara que ve la meta y devuelve True si
         con él se ha completado una vuelta.
@@ -688,8 +675,7 @@ class CarControllerNode(Node):
         exacto se interpola dentro de ese intervalo, proporcionalmente a lo
         cerca que estaba la delantera de la recta en cada extremo.
 
-        `p_back` no se usa: sigue en la firma porque es lo que necesita el
-        método alternativo (crosses_segment) si se quiere volver a él.
+        La pegatina trasera no interviene: basta con la delantera.
         """
         if (
             self.finish_line["camara_id"] is None
