@@ -1,26 +1,17 @@
 \chapter{Arquitectura y diseño}
 \label{chap:arquitectura}
 
-
 \section{Arquitectura general del sistema}
 \label{sec:arquitectura}
 
-El proyecto cuenta con cuatro nodos diferentes interconectados através de la red, lo que permite el intercambio de información para lograr el correcto funcionamiento del sistema. El tener que compartir la información por la red y no compartir un estado común de memoria complica el diseño. Cada uno atiende a un subconjunto de los requisitos totales del proyecto:
 
-\begin{itemize}
-    \item El nodo de captura y detección de posición
-    \item El nodo de control de rail 
-    \item El nodo de actuación sobre el hardware
-    \item El nodo de almacenamiento de logs 
-\end{itemize}
+En un Scalextric analógico cada carril alimenta a un único coche y a través del mando se regula la tensión que se le aplica, de modo que controlar un coche se reduce a decidir en cada instante qué tensión aplicar a su carril. En la arquitectura propuesta, recogida en la figura~\ref{fig:arquitectura-general}, de eso se encarga el \textbf{nodo de potencia}, que recibe órdenes a través de la red y las aplica sobre el circuito mediante señales PWM, es el único nodo con acceso al hardware. Esas órdenes las publican los \textbf{nodos de control}, uno por cada carril del circuito, que reciben como entrada la posición del coche y deciden a partir de ella qué potencia aplicar en cada momento; además, miden el tiempo que tarda el coche en completar una vuelta, que es la referencia para valorar lo bien que se está controlando. La posición la emiten los \textbf{nodos cámara}, encargados de localizar el coche en la pista. Cada uno trabaja con una única cámara física, que es la que le suministra los fotogramas. En cada fotograma se buscan las dos pegatinas que lleva el coche, una delantera y otra trasera, y mediante técnicas de visión artificial se obtienen sus centroides, que son la información que se publica en la red. El nodo cámara que cubre el tramo de la meta detecta también la línea que la marca y la publica, sin la cual los nodos de control no podrían contar las vueltas.
 
-El \textbf{nodo de captura y detección} siempre hay que conectarle una camara fisica. Cada uno de estos nodos recibe los fotogramas que captura su cámara, detecta en ellos los coches presentes en su porción visible del circuito y publica la posición de cada uno de ellos. Para poder lograr la detección de los coches cada uno lleva dos pegatinas de color, una en su parte delantera y otra en la trasera, que son lo que el sistema realmente reconoce en la image. Los nodos de captura no detectan coches, detectan pegatinas, y todo lo que el sistema sabe de un vehículo se deriva de esos dos puntos. La pegatina delantera es la que define la posición del coche sobre el trazado, y es también la que identifica a qué coche corresponde la detección, ya que cada vehículo lleva un color distinto. La trasera aporta la desviación de la parte trasera del coche con respecto de la trayectoria, por tnato, es lo que permite detectar los derrapes. 
+El proceso explicado anteriormente se corresponde con el modo de operación normal del sistema, donde pasa la mayor parte del tiempo, aunque inicialmente es necesario un modo de calibración para ajustar diferentes parámetros del circuito, que se detalla en la sección~\ref{sec:modo-calibracion}.
 
-El \textbf{nodo de control del rail} recibe la posición de los coches que publica el nodo de captura, que utiliza para crear un mapa mental del circuito, apartir del cual, es capaz de aplicar un algoritmo que junto con las posiciones que recibe por cada uno de los frames que captura el nodo de captura determinar un valor de tensión que hay que aplicar sobre el carril para lograr controlar el coche. Tiene que haber un nodo por cada uno de los railes físicos que hay en el circuito de Scalextric. 
+Fuera del lazo de control queda un último nodo, que escucha todo lo que circula por la red y lo almacena para su posterior análisis en diferido, permitiendo también ver el fotograma que las cámaras capturan durante el funcionamiento. 
 
-El \textbf{nodo de actuación sobre el hardware} centraliza en un único nodo la comunicación con el circuito. Apartir de los valores de potencia que envía el controlador lo transforma en comandos que envía al modulo de actuación hardware para que aplique esos valores sobre el rail correspondiente. El nodo puente es el único nodo del sistema con acceso al hardware, el resto de nodos se limitan a publicar mensajes através de la red y es este nodo quien las traslada, una a una, al hardware a través del puerto serie.
-
-El \textbf{nodo de visualización y logging} se compone de un nodo de \emph{logging} que recibe toda la información que se publica en la red y la almacena para su posterior analisis y explotación. Además también permite visualizar con un poco de retraso lo que están viendo las cámaras en directo. Este nodo no interviene para nada en el lazo de control, se limita simplemente a escuchar todo lo que se envía por la red.
+Cabe destacar que la arquitectura no obliga a repartir los nodos por la red, por tanto cualquier combinación de ellos puede convivir en la misma máquina, hasta el punto de poder ejecutar el sistema completo en una sola.
 
 \begin{figure}[tbp]
     \centering
@@ -42,106 +33,90 @@ El \textbf{nodo de visualización y logging} se compone de un nodo de \emph{logg
 % =====================================================================
 
 \section{Intercambio de información entre nodos}
-\label{sec:modelo-datos}
+\label{sec:intercambio-informacion-nodos}
 
-Los nodos no comparten memoria, de modo que cada uno solo conoce aquello que los demás le envían explícitamente por la red. Definir el modelo de datos consiste, por tanto, en decidir qué mensajes se intercambian, entre qué nodos, qué información transporta cada uno y con qué garantía debe entregarse.
+En esta sección se explica el modelo de datos del sistema y la garantía de entrega que hay que aplicar sobre cada mensaje. Con garantía de entrega nos referimos a si el sistema puede permitirse o no perder ese mensaje.
 
-El cuadro~\ref{tab:mensajes} resume los mensajes del sistema, que se describen a continuación.
+La tabla~\ref{tab:mensajes} recoge ambas cosas. Cada mensaje se describe en la subsección~\ref{subsec:modelo-datos} y la última columna se justifica en la subsección~\ref{subsec:garantia-entrega}.
 
-\begin{table}[ht]
+\begin{table}[tbp]
 	\centering
-    \setlength{\tabcolsep}{4pt}
+	\setlength{\tabcolsep}{4pt}
 	\small
 	\begin{tabular}{p{2.8cm} p{2.6cm} p{2.8cm} p{2.4cm} p{2.7cm}}
 		\hline
 		\textbf{Mensaje} & \textbf{Emisor} & \textbf{Receptor} & \textbf{Cadencia} & \textbf{Entrega} \\
 		\hline
-		Posición del coche & Nodo de captura & Controlador de su rail & Por coche y fotograma & Prima la actualidad \\
-		Línea de meta & Nodo de captura que la ve & Todos los controladores & Una vez, al arranque & Garantizada y persistente \\
-		Consigna de potencia & Controlador & Nodo de actuación & Por cada posición recibida& Prima la actualidad \\
-		Cambio de modo & Controlador & Todos los nodos & Por evento & Garantizada \\
-		Tiempo de vuelta & Controlador & Nodo de logs & Por vuelta completada & Garantizada \\
-		Vista de la cámara & Nodo de captura & Nodo de logs & Periódica & Prima la actualidad \\
+		Posición del coche & Nodo cámara & Nodo de control de su carril & Por coche y fotograma & Prima la actualidad \\
+		Línea de meta & Nodo cámara que la ve & Todos los nodos de control & Una vez, al arranque & Garantizada y persistente \\
+		Consigna de potencia & Nodo de control & Nodo de potencia & Por cada posición recibida & Prima la actualidad \\
+		Cambio de modo & Nodo de control & Todos los nodos & Por evento & Garantizada \\
+		Tiempo de vuelta & Nodo de control & Nodo de logs & Por vuelta completada & Garantizada \\
+		Vista de la cámara & Nodo cámara & Nodo de logs & Periódica & Prima la actualidad \\
 		\hline
 	\end{tabular}
 	\caption{Mensajes que intercambian los nodos del sistema.}
 	\label{tab:mensajes}
 \end{table}
 
-\subsection*{Mensajes lazo de control}
+\subsection{Modelo de datos}
+\label{subsec:modelo-datos}
+
+Definir el modelo de datos consiste en decidir qué mensajes se intercambian, entre qué nodos y qué información transporta cada uno. Se describen separados en dos grupos: los del lazo de control, que intervienen directamente en el control del coche, y los de telemetría, que aportan información adicional sobre el funcionamiento del sistema.
+
+\subsubsection{Mensajes del lazo de control}
 
 \begin{itemize}
-	\item \textbf{Posición del coche.} Es el mensaje principal del sistema. Cada uno de los nodos de captura envía uno por cada coche que reconoce en cada fotograma, enviado desde la cámara. Contiene la información que permite determinar la posición del coche. Es necesario también identificar al emisor porque cada nodo de captura cubre un tramo distinto del circuito y el receptor necesita saber de cuál procede el dato.
+	\item \textbf{Posición del coche.} Es el mensaje principal del sistema. Cada nodo cámara envía uno por cada coche que reconoce en cada fotograma. Contiene la información que permite determinar la posición del coche e identifica al emisor, porque cada nodo cámara cubre un tramo distinto del circuito y el receptor necesita saber de cuál procede el dato.
 
-	\item \textbf{Línea de meta.} Contiene los dos extremos del segmento que define la meta y el nodo de captura que la observa. Solo un nodo la ve, pero todos los controladores la necesitan para contar vueltas y solo deben comprobar el cruce sobre las posiciones que llegan de ese nodo. Se envía una única vez al arranque, así que su entrega debe ser además persistente: un controlador que arranque más tarde tiene que recibirla igualmente, sin imponer un orden de arranque entre nodos.
+	\item \textbf{Línea de meta.} Contiene el segmento que define la meta y el nodo cámara que la observa. Solo un nodo la ve, pero todos los nodos de control la necesitan para contar vueltas, y solo deben comprobar el cruce sobre las posiciones que llegan de ese nodo.
 
-	\item \textbf{Voltaje publicado} Es la salida del controlador. Contiene un identificador que permite saber sobre que carril queremos aplicar el valor que también se envía dentro del mensaje. 
+	\item \textbf{Consigna de potencia.} Es la salida del nodo de control. Contiene el valor que hay que aplicar y el identificador del carril sobre el que aplicarlo.
 
 	\item \textbf{Cambio de modo.} Comunica a todos los nodos la transición entre los modos de funcionamiento descritos en la sección~\ref{sec:modos_funcionamiento}. No transporta datos, pero si un nodo no lo recibe el sistema queda inconsistente, con unos nodos operando en un modo y otros en el contrario.
 \end{itemize}
 
-\subsection*{Mensajes de telemetría}
+\subsubsection{Mensajes de telemetría}
 
 Los mensajes que siguen van dirigidos al nodo de logs, que se limita a escuchar y registrar. No intervienen en el lazo de control, de forma que el sistema se comporta igual esté ese nodo presente o no.
 
 \begin{itemize}
 	\item \textbf{Tiempo de vuelta.} Se envía cada vez que un coche cruza la meta e indica el tiempo empleado, el número de vuelta y el instante del cruce. Es la métrica con la que se mide el rendimiento del sistema, por lo que ninguna vuelta puede perderse.
 
-	\item \textbf{Vista de la cámara.} Se envía por la red los fotogramas que la camara le entrega al nodo de control. Permite ver en directo la información que están viendo las camaras y que están recibiendo los nodos de control. Es con diferencia el mensaje más pesado, por lo que se genera al margen del procesamiento de las posiciones.
+	\item \textbf{Vista de la cámara.} Son los fotogramas que capta la cámara, publicados en la red para poder ver en directo lo que está procesando cada nodo cámara. Es con diferencia el mensaje más pesado, por lo que se genera al margen del procesamiento de las posiciones.
 \end{itemize}
 
-\subsection*{Garantías de entrega}
+\subsection{Garantías de entrega}
+\label{subsec:garantia-entrega}
 
-La última columna del cuadro~\ref{tab:mensajes} divide los mensajes en dos grupos: aquellos en los que se permite la pérdida de información y aquellos en los que no.
+En los mensajes en los que prima la actualidad solo interesa el dato más reciente, porque cada uno sustituye al anterior. Reenviar uno perdido entregaría tarde una información ya caducada y retrasaría además la del mensaje vigente, con el riesgo de que el control acabe decidiendo a partir de un dato desactualizado.
 
-En los tres mensajes en los que prima la actualidad lo que se necesita es el dato más reciente posible. Cada nuevo mensaje sustituye al anterior, de modo que reenviar uno perdido solo consigue entregar tarde una información ya caducada y retrasar de paso la entrega de la vigente, con el riesgo de que el control acabe tomando una decisión a partir de un dato desactualizado.
+En el resto ocurre lo contrario, perder un solo mensaje afecta al funcionamiento del sistema, mientras que recibirlo con retraso no supone problema. Un nodo de control que no reciba la \emph{línea de meta} no podrá contar vueltas ni dar por terminada la calibración.
 
-En los tres restantes ocurre lo contrario. Perder un solo mensaje tiene efectos sobre el funcionamiento del sistema, mientras que recibirlo con retraso no supone problema. Por ejemplo, si un controlador no recibe la \emph{línea de meta}, no solo será incapaz de contar las vueltas durante toda la carrera, sino que tampoco podrá dar por terminada la calibración, ya que es el paso por meta lo que determina el cambio de modo (sección~\ref{sec:modos_funcionamiento}).
+\section{Modo de calibración}
+\label{sec:modo-calibracion}
 
-Los mensajes que se emiten una única vez, como la propia \emph{línea de meta}, requieren además que se conserve el último valor emitido y se entregue a quien se incorpore después. De este modo, un nodo que arranque más tarde lo recibe igualmente, sin necesidad de imponer un orden de arranque entre nodos ni de recurrir a reenvíos periódicos.
+Todo lo descrito hasta ahora corresponde al modo de operación, en el que el sistema pasa la
+mayor parte del tiempo. Antes de llegar a él hace falta una fase de calibración, cuyo objetivo
+es obtener la trayectoria que sigue cada coche sobre su carril. Durante esta fase los nodos de
+control todavía no publican consigna, así que es el nodo de potencia el que aplica una tensión
+constante para que los coches recorran el circuito. Los nodos cámara buscan sobre el
+fotograma completo, al no disponer aún de ninguna referencia con la que acotar la búsqueda,
+y publican la posición igual que en operación; los nodos de control acumulan esas posiciones
+hasta reconstruir el recorrido completo de su coche.
 
-La capa de comunicación debe permitir, por tanto, ajustar esta garantía mensaje a mensaje en lugar de imponer el mismo comportamiento a todo el sistema. Este fue uno de los criterios que determinaron la elección de la tecnología de soporte, que se justifica en el capítulo~\ref{chap:implementacion}.
+Esa trayectoria es la base sobre la que se apoya el resto del sistema: permite discretizar el
+circuito para el control, como se explica en la sección~\ref{sec:algoritmo}, y delimitar la zona
+de la imagen en la que buscar el coche, lo que reduce el coste computacional. La fase consume
+una única vuelta y termina por sí sola, sin intervención humana, a diferencia de los trabajos
+previos. Ambas cosas importan porque es tiempo perdido para quien va a competir y porque,
+con los nodos repartidos por la red, nadie tiene desde dónde supervisarla.
 
-\section{Modos de funcionamiento}
-\label{sec:modos_funcionamiento}
-
-El sistema opera en dos modos: 
-
-\begin{itemize}
-    \item \textbf{Modo de calibración} en el que aprende la forma del circuito. 
-    \item \textbf{Modo de operación}, en el que controlan los coches
-
-\end{itemize}
-
-La transición entre ambos es automática y no requiere intervención humana.
-
-\subsection{Modo de calibración}
-\label{subsec:modo-calibracion}
-
-La idea de tener un modo de calibración se hereda de los trabajos previos y su finalidad es obtener la trayectoria que sigue cada coche sobre su carril. Los coches recorren el circuito a una velocidad constante. Debe de conseguirse sin la intervención del nodo de control. Es el propio nodo de actuación el que aplica un voltaje que lo permita. Esto es porque los controladores todavía no emiten \emph{consigna de potencia}, \ref{tab:mensajes}.
-
-Mientras tanto, los nodos de captura analizan el fotograma completo, al no disponer aún de ninguna referencia con la que acotar la búsqueda, y emiten la \emph{posición del coche} igual que en operación. Los controladores acumulan esas posiciones hasta reconstruir el recorrido completo de su coche.
-
-Este modo es muy importante porque la trayectoria es la base sobre la que se apoya el resto del sistema, permite realizar dos tareas criticas:
-
-\begin{itemize}
-    \item Permite discretizar el circuito para el control, \ref{sec:algoritmo-arquitectura}.
-    \item Delimitar la zona de la imagen en la que buscar los coches, lo que reduce el coste computacional.
-\end{itemize}
-
-Frente a los trabajos anteriores, esta fase consume una única vuelta y termina por sí sola, sin intervención humana. Ambas cosas importan porque se trata de tiempo perdido desde el punto de vista de quien va a competir, y porque nadie tiene que estar pendiente de darla por concluida.
-
-\subsection{Modo de operación}
-\label{subsec:modo-operacion}
-
-Es el modo en el que el sistema pasa la mayor parte del tiempo. Los nodos de captura siguen emitiendo la \emph{posición del coche}, \ref{tab:mensajes}, pero ahora restringen la búsqueda a la zona que delimita la trayectoria aprendida. Los controladores, en lugar de acumular posiciones, las convierten en \emph{consigna de potencia} y emiten además el \emph{tiempo de vuelta} cada vez que su coche cruza la meta.
-
-Cualquier cambio que invalide la trayectoria aprendida, como una modificación del trazado o un desplazamiento de las cámaras, obliga a repetir la calibración. Para ello basta con ordenar de nuevo la transición, sin necesidad de reiniciar el sistema.
-
-\subsection{Transición entre modos}
-\label{subsec:transicion-modos}
-
-La transición se coordina mediante el mensaje \emph{cambio de modo} (cuadro~\ref{tab:mensajes}), que emite el controlador y reciben todos los nodos, de manera que el cambio se propaga simultáneamente a todo el sistema.
+La transición entre modos se coordina mediante el mensaje de cambio de modo
+(tabla~\ref{tab:mensajes}), que emite el nodo de control y reciben todos los nodos, de manera
+que se propaga a la vez a todo el sistema. Cualquier alteración que invalide la trayectoria
+aprendida, como modificar el trazado o desplazar una cámara, obliga a repetir la calibración,
+para lo que basta con ordenar de nuevo la transición sin reiniciar el sistema.
  
 \section{Algoritmo de control}
 \label{sec:algoritmo-arquitectura}
@@ -153,7 +128,7 @@ El diseño parte de una idea propuesta por Mario López Cea \cite{tfgmario}: los
 \subsection{La trayectoria base}
 \label{subsec:trayectoria-base}
 
-La representación del circuito con la que trabaja el algoritmo es la \textbf{trayectoria base} obtenida durante la calibración (sección~\ref{subsec:modo-calibracion}). No se maneja como una curva continua, sino discretizada en una sucesión ordenada de \textbf{celdas} repartidas de forma uniforme a lo largo del recorrido, de modo que cada celda representa un punto concreto e identificable del circuito y la posición del coche en carrera se expresa siempre refiriéndola a una de ellas. La discretización introduce una pérdida de precisión acotada por el tamaño de celda. Pero permite tratarlas como un conjunto sobre el que tomar decisiones y permite acumular conocimiento sobre esas mismas undidades vuelta tras vuelta.
+La representación del circuito con la que trabaja el algoritmo es la \textbf{trayectoria base} obtenida durante la calibración (sección~\ref{sec:modo-calibracion}). No se maneja como una curva continua, sino discretizada en una sucesión ordenada de \textbf{celdas} repartidas de forma uniforme a lo largo del recorrido, de modo que cada celda representa un punto concreto e identificable del circuito y la posición del coche en carrera se expresa siempre refiriéndola a una de ellas. La discretización introduce una pérdida de precisión acotada por el tamaño de celda. Pero permite tratarlas como un conjunto sobre el que tomar decisiones y permite acumular conocimiento sobre esas mismas undidades vuelta tras vuelta.
 
 \subsection{El derrape como señal de exceso de velocidad}
 \label{subsec:derrape-arquitectura}
@@ -180,16 +155,75 @@ El equilibrio entre ambas es lo que hace que el sistema converja. El castigo evi
  
 %Por último, el algoritmo no opera sobre el circuito completo, sino sobre la porción que observa cada cámara, de la que se mantiene una instancia independiente. Las decisiones que requieren una visión global del trazado, como determinar si una vuelta ha sido limpia o resolver un derrape repartido entre dos porciones, corresponden al nodo controlador. Los mecanismos concretos de esa coordinación se detallan en el capítulo \ref{chap:implementacion}.
 
-\section{Modelo concurrente}
-\label{sec:concurrencia}
+\section{Concreción de la arquitectura en ROS 2}
+\label{sec:arquitectura_ros2}
 
-Cada nodo atiende a la vez tareas con ritmos distintos: un flujo de datos de alta frecuencia, órdenes de control esporádicas y peticiones de reconfiguración. Un nodo secuencial las procesaría de una en una, de modo que la tarea más lenta causaría un retraso al resto y el nodo dejaría de enviar mensajes críticos que tienen que deben tener un flujo constante. La concurrencia dentro del nodo es, por tanto, un requisito de la arquitectura y un criterio de selección de la plataforma sobre la que se despliegue.
+La arquitectura descrita se materializa sobre ROS~2 (sección~\ref{sec:ros2}), el comportamiento descrito en la sección~\ref{sec:arquitectura} es el mismo. Cada tipo de nodo pasa a ser un nodo de ROS~2 y cada mensaje de la tabla~\ref{tab:mensajes} se convierte en un \emph{topic}. El nodo de potencia se concreta en un nodo puente que envia los valores que recibe por la red para después enviarlo atraves del protocolo serie de un Arduino, conectado a la pista junto con un L293D. La figura~\ref{fig:arquitectura-ros2} recoge el despliegue completo y la tabla~\ref{tab:topics-ros2} resume los \emph{topics} implicados.
 
-\section{Despliegue del sistema}
-\label{sec:despliegue_sistema}
+% El color ArqAzulClaro de las cabeceras de las tablas está definido en
+% estilo_tfg.sty, junto al resto de la paleta.
 
-El número de cámaras, de coches y de raíles que se quieren controlar no es algo que esté fijado por la arquitectura, es una decisión del usuario y la arquitectura tiene que estar preparada para asumirla. Por ello, lo que se define son los tipos de nodo que componen el sistema, mientras que cuántas instancias de cada tipo existen y con qué parámetros opera cada una se declara al desplegar el sistema. Es importante destacar que cada nodo recibe un identificador propio al arrancar para diferenciarse dentro de la red. Permite delimitar la información que puede recibir y además permite la identificación dentro de los mensajes.
+\begin{figure}[tbp]
+    \centering
+    \includegraphics[width=1.1\textwidth]{imaxes/IMPLEMENTACION/arquitectura_con_ros2.pdf}
+    \caption{Arquitectura general pensado para el control distribuido de coches tipo scalextric implementado usando nodos de ROS~2}
+    \label{fig:arquitectura-ros2}
+\end{figure}
 
-El sistema está pensado para repartirse entre varias máquinas, y ese reparto es precisamente lo que suele complicar la puesta en marcha. Cada máquina necesitaría tener instaladas las dependencias correctas, en las versiones correctas, antes de poder alojar un nodo. Para evitarlo, cada nodo se concibe como una unidad de despliegue autónoma que se distribuye empaquetada junto con todo lo que necesita para ejecutarse. Una máquina no tiene que estar preparada para un nodo concreto basta con que sea capaz de ejecutar el paquete y con que tenga conectividad de red.
+Cada instancia arranca dentro de su propio espacio de nombres (sección~\ref{sec:ros2-namespaces}), lo que liga sus \emph{topics} al coche o a la cámara que le corresponde y evita que las instancias de un mismo tipo se pisen entre sí.
 
-La consecuencia es que el reparto de nodos entre máquinas no está fijado por la arquitectura, sino que es una decisión de despliegue que puede cambiarse sin tocar el código ni la configuración de los demás nodos. Un mismo despliegue puede realizarse en un único equipo para pruebas o repartirse entre varios para cubrir un circuito mayor, y levantar el sistema completo se reduce a arrancar en cada máquina los nodos que le correspondan. Los detalles de este mecanismo, así como el formato concreto de la configuración, se describen en la sección~\ref{sec:configuracion_despliegue}.
+\begin{table}[tbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|l|l|l|l|}
+\hline
+\rowcolor{ArqAzulClaro}
+\textbf{Topic} & \textbf{Mensaje} & \textbf{Publica} & \textbf{Suscribe} \\
+\hline
+\texttt{/carN/position} & \texttt{CarLocation} & Nodos cámara & Nodo de control $N$ \\
+\hline
+\texttt{/finish\_line\_position} & \texttt{FinishLine} & Cámara que la observa & Nodos de control \\
+\hline
+\texttt{/carN/pwd} & \texttt{SpeedCarril} & Nodo de control $N$ & Nodo puente \\
+\hline
+\texttt{/carN/modo\_calibracion} & \texttt{Bool} & Nodo de control $N$ & Cámaras, control y puente \\
+\hline
+\texttt{/telemetria/carN/car\_control} & \texttt{CarControlTelemetry} & Nodo de control $N$ & Visualización \\
+\hline
+\texttt{/telemetria/carN/time\_per\_lap} & \texttt{TimePerLap} & Nodo de control $N$ & Visualización \\
+\hline
+\texttt{/camaraX/camara\_debug} & \texttt{CompressedImage} & Nodo cámara $X$ & Visualización \\
+\hline
+\end{tabular}%
+}
+\caption{Resumen de los \emph{topics} del sistema, el tipo de mensaje que transportan y los nodos implicados en cada comunicación.}
+\label{tab:topics-ros2}
+\end{table}
+
+\subsection{Mensajes propios del sistema}
+\label{subsec:mensajes-propios}
+
+Los tipos que ROS~2 trae por defecto no bastan para modelar la información del cuadro~\ref{tab:mensajes}, de modo que fue necesario crear mensajes propios (sección~\ref{sec:ros2-interfaces}). Al bajar al detalle, cada uno incorpora además campos que el diseño no recogía: identificadores de origen, marcas de tiempo y contadores de fotograma, que son los que después permiten medir latencias y cruzar entre sí las distintas fuentes durante el análisis. El listado~\ref{lst:msg-carlocation} recoge la definición de \texttt{CarLocation}, la \emph{posición del coche}, y sirve de ejemplo del formato que siguen todos los demás.
+
+\begin{lstlisting}[float=htbp, caption={Definición del mensaje \texttt{CarLocation} (\texttt{msg/CarLocation.msg}).}, label={lst:msg-carlocation}]
+string camara_id
+string coche
+Stiker front
+Stiker back
+builtin_interfaces/Time stamp
+float64 proc_time
+BoundingRect bounding_rect_stiker_front
+BoundingRect bounding_rect_stiker_back
+uint32 n_frame
+\end{lstlisting}
+
+Los dos primeros campos identifican el origen del dato, y \texttt{front} y \texttt{back} son las dos pegatinas detectadas, cada una con su centroide y su color, acompañadas de los rectángulos que las encierran. \texttt{stamp} es la marca de tiempo de captura del fotograma y \texttt{proc\_time}, lo que costó procesarlo. \texttt{n\_frame} es el contador de fotogramas de esa cámara. 
+
+Los mensajes \texttt{FinishLine}, \texttt{SpeedCarril} y \texttt{TimePerLap} implementan la \emph{línea de meta}, la \emph{consigna de potencia} y el \emph{tiempo de vuelta} siguiendo ese mismo formato, y se apoyan en cuatro tipos auxiliares que modelan un punto en coordenadas de imagen, una pegatina, el rectángulo delimitador de una detección y un segmento. Sus definiciones completas se recogen en el anexo~\ref{lst:msgs-informacion}. A ellos se suma \texttt{CarControlTelemetry}, que no tiene equivalente en el cuadro~\ref{tab:mensajes} porque nace durante la implementación. Se publica en cada iteración y recoge datos internos del lazo de control, como la distancia de derrape estimada o el tiempo transcurrido desde que llega la posición hasta que se publica el PWM, con los que después se analiza el comportamiento del algoritmo.
+
+Los dos mensajes restantes no necesitan un tipo propio y se resuelven con tipos estándar de ROS~2: el \emph{cambio de modo} es un \texttt{std\_msgs/Bool} en el \emph{topic} de calibración de cada coche, y la \emph{vista de la cámara}, un \texttt{sensor\_msgs/CompressedImage} en los \emph{topics} de depuración, sobre los que cada cámara publica el fotograma procesado con las detecciones superpuestas.
+
+\subsection{Calidad de servicio}
+\label{subsec:qos}
+
+Las garantías de entrega definidas en la sección~\ref{subsec:garantia-entrega} se traducen en las políticas de calidad de servicio que ofrece ROS~2 (sección~\ref{sec:dds-qos}). Los mensajes en los que prima la actualidad, es decir, las posiciones, las consignas de PWM, los dos \emph{topics} de telemetría y las imágenes de depuración, emplean el perfil predefinido para datos de sensores, de fiabilidad \emph{best effort}. La línea de meta usa el perfil opuesto, fiabilidad garantizada y durabilidad \emph{transient local} con profundidad uno, con lo que un nodo de control que arranque más tarde que las cámaras la recibe igualmente sin necesidad de republicarla.
