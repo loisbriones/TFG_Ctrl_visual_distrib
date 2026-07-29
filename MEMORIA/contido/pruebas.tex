@@ -1,105 +1,280 @@
+% =====================================================================
+%  Capítulo de pruebas
+%
+%  Paquetes necesarios en el preámbulo (si no los tienes ya):
+%     \usepackage{graphicx}
+%     \usepackage{subcaption}
+%     \usepackage{booktabs}
+%
+%  Las gráficas se toman de:
+%     imaxes/PRUEBAS/COMPARATIVA_COCHES/
+%     imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/
+%
+%  OJO: pwm_zonas_coche_azul.pdf y pwm_zonas_coche_rojo.pdf tienen DOS
+%  páginas (la segunda es el desbordamiento de la leyenda), por eso se
+%  incluyen con la opción page=1.
+% =====================================================================
+
 \chapter{Pruebas}
 \label{cap:pruebas}
 
-\lettrine{E}{n} este capítulo se detallan las pruebas realizadas durante el desarrollo del proyecto. Las pruebas específicas validan cada nueva funcionalidad antes de pasar a la siguiente iteración, de modo que cada avance parte de una base firme y ya probada. Las pruebas finales se ejecutan al terminar la implementación y validan el sistema en su totalidad, comprobando el cumplimiento de los requisitos planteados inicialmente. Siempre que es posible, los resultados se apoyan en la telemetría grabada durante las sesiones y analizada con la herramienta desarrollada al efecto.
+Todas las gráficas que se muestran en este capítulo proceden de la herramienta de análisis en diferido descrita en la sección~\ref{sec:sistema-visualizacion}.
 
-\section{Pruebas específicas}
-\label{sec:pruebas-especificas}
+\section{Prueba comparativa entre coches}
+\label{sec:prueba-comparativa-coches}
 
-\subsection{Detección por color y calibración}
-\label{subsec:prueba-color}
+Durante las pruebas unitarias de las distintas funcionalidades se apreció que los dos coches no se comportaban igual y que uno de ellos parecía tolerar más voltaje que el otro antes de perder adherencia. Ningún trabajo anterior había comparado los coches entre sí, de modo que no existía ninguna medida de esa diferencia y tampoco había forma de saber si un mismo perfil de velocidad servía para los dos. Esta prueba busca cuantificarla.
 
-\paragraph{¿Para qué?} El objetivo es comprobar que la segmentación por color en el espacio HSV aísla correctamente las pegatinas del coche y que, a partir de las máscaras generadas, se detecta con precisión el centro geométrico de cada etiqueta. Se quiere demostrar que las máscaras se aplican de forma correcta y que la posición reportada corresponde realmente al centro de la pegatina.
+Para que la única variable fuese el coche se fijó todo lo demás. Se escogió el circuito en óvalo, de tamaño reducido para que quepa entero en el campo de visión de una única cámara. Los tres nodos implicados, el de cámara, el controlador y el puente Arduino, se ejecutaron en la misma máquina, de forma que ni la latencia de red ni el retardo de un paquete pudieran afectar. La configuración fue idéntica en las dos ejecuciones, con un rango de PWM de 70 a 94 y un umbral de derrape de 12~px, y cada coche recorrió 50 vueltas.
 
-\paragraph{¿Cómo?} Usando una vuelta a un circuito y viendo se detectan las pegatinas y el centro de la pegatina nunca cambia.
+La figura~\ref{fig:comparativa-trayectorias} muestra las trayectorias de las dos etiquetas en la vuelta 22. En el coche azul se aprecia en la zona señalada un salto grande entre posiciones consecutivas de la etiqueta trasera, lo que corresponde con un derrape. Mientras que en el coche rojo, con el mismo PWM aplicado, la trasera recorre esa misma curva pegada a la trayectoria base sin llegar a separarse de ella.
 
-\paragraph{¿Qué?} Se mostrarán capturas del fotograma original junto a la máscara binaria resultante y el centro detectado marcado sobre la imagen. Se documentará en qué condiciones la detección es fiable y en cuáles se degrada.
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.88\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 42pt},clip,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/dist_derrape_coche_azul.pdf}
+    \caption{Coche azul}
+    \label{fig:comparativa-trayectorias-azul}
+  \end{subfigure}
 
+  \vspace{1em}
 
-\subsection{Seguimiento con ROI extrapolado y oclusiones}
-\label{subsec:prueba-tracking}
+  \begin{subfigure}[b]{0.88\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 42pt},clip,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/dist_derrape_coche_rojo.pdf}
+    \caption{Coche rojo}
+    \label{fig:comparativa-trayectorias-rojo}
+  \end{subfigure}
+  \caption{Trayectoria de las dos etiquetas en la vuelta 22 con la misma configuración del algoritmo.}
+  \label{fig:comparativa-trayectorias}
+\end{figure}
 
-\paragraph{¿Para qué?} El objetivo es verificar que la predicción de la región de interés (ROI) mediante extrapolación lineal funciona correctamente y que el sistema sigue operando ante oclusiones parciales. Se quiere demostrar que el seguimiento mantiene la posición del coche cuando la detección es continua y que, cuando esta falla por una oclusión, la ventana de búsqueda se amplía y el vehículo se readquiere en cuanto vuelve a ser visible.
+Una vez detectado el derrape el algoritmo castiga al coche azul y genera dos zonas, como se aprecia en la figura~\ref{fig:comparativa-zonas-azul}, la zona de derrape, que cubre las celdas 47 a 68 y queda limitada a PWM 89, y la que ya venía de antes, que se mantiene en 91. En el coche rojo no hubo ningún derrape que castigar y por tanto no se abre ninguna zona nueva, de modo que en la figura~\ref{fig:comparativa-zonas-rojo} sigue habiendo una única zona que además ha continuado subiendo hasta PWM 92.
 
-\paragraph{¿Cómo?} Se ejecutará el seguimiento sobre el coche en movimiento y se comprobará que la ROI acompaña a la trayectoria prevista. A continuación se introducirán oclusiones controladas (por ejemplo, un elemento que tape momentáneamente parte del trazado) para forzar el fallo de detección y observar el comportamiento de reexpansión de la ventana y la posterior readquisición del vehículo.
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.88\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 60pt},clip,page=1,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/pwm_zonas_coche_azul.pdf}
+    \caption{Coche azul}
+    \label{fig:comparativa-zonas-azul}
+  \end{subfigure}
 
-\paragraph{¿Qué?} Se mostrará la evolución de la ROI sobre la secuencia de fotogramas, tanto en seguimiento normal como durante y después de una oclusión. Se documentará cuántos fotogramas tarda el sistema en volver a localizar el coche tras perderlo y cómo se comporta la ventana de búsqueda en ese intervalo.
+  \vspace{1em}
 
-\subsection{Detección de la línea de meta y conteo de vueltas}
-\label{subsec:prueba-meta}
+  \begin{subfigure}[b]{0.88\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 60pt},clip,page=1,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/pwm_zonas_coche_rojo.pdf}
+    \caption{Coche rojo}
+    \label{fig:comparativa-zonas-rojo}
+  \end{subfigure}
+  \caption{Partición del circuito en zonas de PWM en la vuelta 22. El coche azul arrastra una zona de derrape ya castigada y el rojo mantiene una única zona libre que sigue subiendo.}
+  \label{fig:comparativa-zonas}
+\end{figure}
 
-\paragraph{¿Para qué?} El objetivo es comprobar que la línea de meta se detecta automáticamente por color y que el conteo de vueltas y la medición de tiempos se realizan de forma fiable. Se quiere demostrar que el cruce de meta se registra una sola vez por vuelta y que los tiempos medidos son consistentes.
+El comportamiento no es puntual, sino que se repite a lo largo de toda la ejecución, como recoge la figura~\ref{fig:comparativa-derrapes}, donde se representa vuelta a vuelta la distancia de derrape registrada junto al PWM medio aplicado. El coche azul encadena picos muy por encima del umbral, varios de ellos por encima de los 20~px, que se corresponden con derrapes lo bastante fuertes como para que el coche estuviera a punto de salirse de la pista. En el coche rojo los máximos se mantienen entre los 4 y los 9~px durante toda la carrera y ninguno llega a superar el umbral.
 
-\paragraph{¿Cómo?} Se harán completar al coche varias vueltas al circuito y se registrará cada paso por la línea de meta. Se comprobará que el mecanismo de intersección entre el segmento que une las dos etiquetas y el segmento de la línea de meta detecta el cruce. Para asegurar que todo funcione con varios valores de pwm. Se puede aplicar un valor constante que se sepa que es controlado entonces hacer dos pruebas distintas con dos valores distintos.
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.95\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 44pt},clip,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/resumen_derrapes_coche_azul.pdf}
+    \caption{Coche azul}
+    \label{fig:comparativa-derrapes-azul}
+  \end{subfigure}
 
-\paragraph{¿Qué?} Se mostrará el número de vueltas contabilizadas frente al número real de vueltas realizadas, junto con los tiempos por vuelta obtenidos de la telemetría. Se documentará si se produce algún fallo de conteo (vueltas duplicadas o no detectadas) y en qué circunstancias.
+  \vspace{1em}
 
-\subsection{Control del Arduino}
-\label{subsec:prueba-arduino}
+  \begin{subfigure}[b]{0.95\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 44pt},clip,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/resumen_derrapes_coche_rojo.pdf}
+    \caption{Coche rojo}
+    \label{fig:comparativa-derrapes-rojo}
+  \end{subfigure}
+  \caption{Resumen por vuelta de cómo varió la distancia de derrape frente al PWM.}
+  \label{fig:comparativa-derrapes}
+\end{figure}
 
-\paragraph{¿Para qué?} El objetivo es validar que el actuador basado en Arduino funciona correctamente: que el programa se carga sin problemas y que, enviando comandos de forma manual, es posible controlar la velocidad del coche mediante señales PWM. Se quiere demostrar el correcto funcionamiento del control de bajo nivel del sistema.
+Los tiempos de las dos ejecuciones, recogidos en el cuadro~\ref{tab:comparativa-coches}, confirman lo que muestran las gráficas. El coche rojo tarda 75,44~s en completar las 50 vueltas frente a los 93,59~s del azul, una diferencia de 18~segundos que supone más de un 19\,\% del tiempo total con el mismo algoritmo y la misma configuración. El origen no está en el control, sino en el propio coche, que pierde adherencia con valores de PWM que el rojo asimila sin problema.
 
-\paragraph{¿Cómo?} Se cargará el programa en la placa Arduino y se enviarán comandos manuales a través del nodo puente por la conexión serie. Se comprobará que la selección automática del puerto funciona (ttyACM*/ttyUSB*) y que los comandos enviados se traducen en cambios reales de la velocidad del coche.
+\begin{table}[htbp]
+  \centering
+  \caption{Métricas de tiempo por vuelta de ambos coches con la misma configuración (PWM 70--94, umbral de derrape 12~px).}
+  \label{tab:comparativa-coches}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+    \toprule
+    Coche & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
+          & (s) & (s) & (s) & (s) & (s) \\
+    \midrule
+    Azul & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 \\
+    Rojo & 75,44 & 1,315 & 1,377 & 1,509 & 0,232 \\
+    \bottomrule
+  \end{tabular*}
+\end{table}
 
-\paragraph{¿Qué?} Se mostrará la correspondencia entre los comandos enviados y la respuesta del coche, describiendo el proceso de carga del programa y de envío manual de consignas. Se documentará el rango de valores de PWM utilizable y el comportamiento observado.
+El problema no afecta solo al algoritmo, porque en las pruebas de conducción manual de la sección~\ref{sec:prueba-algo-vs-personas} a las personas también les cuesta más controlar el coche azul, ya que es mucho más sensible a los valores altos de PWM. La consecuencia práctica de todo esto es que no existe una configuración única válida para los dos coches y que los parámetros del algoritmo, en particular el umbral de derrape, deben ajustarse a las características del vehículo, que es lo que se comprueba en la prueba~\ref{sec:prueba-algo-parametros}.
 
-\subsection{Algoritmo de velocidad y respuesta a derrapes}
-\label{subsec:prueba-algoritmo}
+\section{Prueba de ajuste de los parámetros del algoritmo}
+\label{sec:prueba-algo-parametros}
 
-\paragraph{¿Para qué?} El objetivo es verificar el funcionamiento del algoritmo de velocidad por zonas: comprobar cómo mejora el tiempo por vuelta a medida que el coche completa vueltas limpias, cómo se detectan y se crean las zonas de derrape y cómo en esas zonas se reduce la velocidad para controlar el coche. Se quiere demostrar que el algoritmo aprende el circuito y maximiza la velocidad de forma independiente en cada tramo.
+El resultado de la prueba~\ref{sec:prueba-comparativa-coches} deja abierta la cuestión de si el mal comportamiento del coche azul es una limitación física o si puede compensarse a través del algoritmo. El parámetro sobre el que tiene sentido actuar es el umbral de derrape, que determina a partir de qué separación de la etiqueta trasera respecto a la trayectoria base se considera que el coche está derrapando. Se reprodujeron las mismas condiciones de la sección~\ref{sec:prueba-comparativa-coches}, con el circuito en óvalo cubierto por una sola cámara, todos los nodos en la misma máquina y 50 vueltas por ejecución, y se realizaron tres ejecuciones con el coche azul variando el techo de PWM y el umbral.
 
-\paragraph{¿Cómo?} Se dejará al sistema calibrar y correr durante un número suficiente de vueltas sobre un circuito, partiendo del estado conservador inicial (velocidad mínima en todo el circuito). Se observará la evolución del perfil de velocidad: la subida progresiva del PWM en las vueltas limpias y el castigo de las zonas donde se detecta derrape. La telemetría grabada permitirá analizar a posteriori la formación de las zonas de derrape y su efecto sobre la velocidad.
+La figura~\ref{fig:parametros-tiempos} compara la evolución del tiempo por vuelta con los dos umbrales. Con 9~px el algoritmo detecta los derrapes antes de que empiecen a ser problemáticos (los que se producen cuando el coche empieza a coger velocidad y a ganar inercia), y baja la potencia del carril antes de que el derrape llegue a manifestarse, con lo que la curva se estabiliza a partir de la vuelta 12 y el peor tiempo queda en las primeras vueltas. Con 12~px aparecen entre las vueltas 21 y 38 los picos señalados en la gráfica, que se corresponden con derrapes como el de la figura~\ref{fig:comparativa-trayectorias-azul} y en los que el coche llega casi a salirse de la pista y necesita varias vueltas para recuperar el ritmo, de manera que se vuelve prácticamente a los tiempos que teníamos antes de empezar la carrera.
 
-\paragraph{¿Qué?} Se mostrará la evolución del tiempo por vuelta a lo largo de la sesión y la localización de las zonas de derrape sobre el circuito, junto con el perfil de PWM resultante. Se documentará cómo se van creando y ajustando esas zonas y cómo el resto del circuito continúa ganando velocidad vuelta tras vuelta.
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.95\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 38pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/tiempos_vuelta_mejora_azul.pdf}
+    \caption{Umbral de derrape 9~px}
+    \label{fig:parametros-tiempos-mejor}
+  \end{subfigure}
 
-\subsection{Alta disponibilidad del controlador (tolerancia a fallos)}
-\label{subsec:prueba-tolerancia}
+  \vspace{1em}
 
-\paragraph{¿Para qué?} El objetivo es validar la tolerancia a fallos del sistema distribuido, en concreto el reinicio automático de los nodos. Se quiere demostrar que, si un nodo cae durante la ejecución, el sistema se recupera automáticamente y la carrera puede continuar, comportamiento que constituye una de las aportaciones del proyecto frente a la arquitectura monolítica de partida.
+  \begin{subfigure}[b]{0.95\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 38pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/tiempos_vuelta_peor_azul.pdf}
+    \caption{Umbral de derrape 12~px}
+    \label{fig:parametros-tiempos-peor}
+  \end{subfigure}
+  \caption{Evolución del tiempo por vuelta del coche azul en el circuito en óvalo con PWM 70--94 y dos umbrales de derrape distintos.}
+  \label{fig:parametros-tiempos}
+\end{figure}
 
-\paragraph{¿Cómo?} Se provocará de forma deliberada la caída de un nodo durante una sesión en marcha (por ejemplo, deteniendo su contenedor) y se observará el mecanismo de reinicio automático. Se comprobará que el nodo vuelve a levantarse, se reincorpora al sistema mediante el descubrimiento automático de DDS y la ejecución prosigue.
+La razón de esos picos se ve en la figura~\ref{fig:parametros-derrapes}. Con el umbral en 9~px los derrapes siguen produciéndose, pero se mantienen acotados alrededor de esa misma cifra y solo en unas pocas vueltas llegan a los 10~px, mientras que con el umbral en 12~px el sistema no reacciona hasta que el derrape ya está desarrollado y para entonces el castigo llega tarde, con máximos que se disparan por encima de los 20~px. Ese contraste se aprecia mejor en la figura~\ref{fig:derrape-vuelta}. Con el umbral en 9~px el derrape se detecta mientras todavía está creciendo y el pico se queda en los 10~px, mientras que con 12~px se produce un salto de esa misma franja hasta los 19~px sin ningún paso intermedio. La nube de puntos grises del fondo, que acumula todas las vueltas de la ejecución, se concentra justo entre los 9 y los 10~px, de manera que ahí está la frontera y una vez superada el derrape ya no se puede contener.
 
-\paragraph{¿Qué?} Se mostrará la secuencia de eventos desde la caída del nodo hasta su reincorporación, apoyándose en los registros de la sesión. Se documentará el tiempo aproximado de recuperación y el efecto de la caída sobre el comportamiento del coche.
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.95\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 44pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/resumen_dist_derrapes_mejora_azul.pdf}
+    \caption{Umbral de derrape 9~px}
+    \label{fig:parametros-derrapes-mejor}
+  \end{subfigure}
 
-\subsection{Latencia de red: Ethernet frente a WiFi}
-\label{subsec:prueba-red}
+  \vspace{1em}
 
-\paragraph{¿Para qué?} El objetivo es medir la latencia que introduce la red en el sistema distribuido y determinar si supone un problema para el funcionamiento en tiempo real. En particular se quiere realizar varias combinaciones, indicando también el tipo de wifi que se uso y el tipo de adaptador utilizando para poder usar esa versión de wifi. Después el objetivo será valorar si la diferencia entre los distintos métodos es apreciable en el comportamiento de la aplicación.  
+  \begin{subfigure}[b]{0.95\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 44pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/resumen_dist_derrapes_peor_azul.pdf}
+    \caption{Umbral de derrape 12~px}
+    \label{fig:parametros-derrapes-peor}
+  \end{subfigure}
+  \caption{Resumen por vuelta de la distancia de derrape del coche azul con los dos umbrales.}
+  \label{fig:parametros-derrapes}
+\end{figure}
 
-\paragraph{¿Cómo?} La prueba se realizará en dos fases. En una primera fase, con un publicador y un suscriptor sencillos, se medirán las latencias de red de forma aislada. En una segunda fase, con el sistema completo ya en funcionamiento, se repetirán las mediciones para comprobar si la latencia introducida por la red afecta o no al sistema. Ambas fases se ejecutarán primero sobre Ethernet y después sobre WiFi para poder comparar los dos escenarios. Para poder medir el tiempo entre cada uno de los mensajes, será necesario que todas las maquinas tengan configurado la misma hora, para eso se utiliza NTP. 
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.95\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 43pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/derrape_controlado.pdf}
+    \caption{Umbral de derrape 9~px, vuelta 22}
+    \label{fig:derrape-controlado}
+  \end{subfigure}
 
-\paragraph{¿Qué?} Se mostrarán las latencias medidas en cada configuración, tanto en el test aislado como con el sistema completo, y se compararán los escenarios Ethernet y WiFi. Se documentará si la diferencia se percibe.
+  \vspace{1em}
 
-\subsection{Compatibilidad y rendimiento del hardware}
-\label{subsec:prueba-hardware}
+  \begin{subfigure}[b]{0.95\textwidth}
+    \centering
+    \includegraphics[trim={0 0 0 43pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/derrape_explosivo.pdf}
+    \caption{Umbral de derrape 12~px, vuelta 24}
+    \label{fig:derrape-explosivo}
+  \end{subfigure}
+  \caption{Saltos que se producen en la distancia de derrape, para el coche azul. Cruces rojas marcan las muestras que superan el umbral y los puntos grises del fondo son el acumulado del resto de vueltas de la ejecución.}
+  \label{fig:derrape-vuelta}
+\end{figure}
 
-\paragraph{¿Para qué?} El objetivo es comprobar que el nodo camara puede funcionar correctamente en los dos modelos distintos de Raspberry Pi disponibles y, más allá de si simplemente arranca, valorar el rendimiento que ofrece cada uno.
+Las métricas de las tres ejecuciones se recogen en el cuadro~\ref{tab:parametros-azul} y permiten precisar en qué consiste la mejora. Las medianas de las dos configuraciones con PWM 70--94 son casi iguales, 1,733~s frente a 1,755~s, y las mejores vueltas resultan indistinguibles, 1,663~s frente a 1,661~s, de modo que bajar el umbral no hace al coche más rápido en su vuelta buena, sino que le quita las vueltas malas. Eso se refleja en la media, que cae de 1,872~s a 1,759~s, y en la peor vuelta, que pasa de 2,839~s a 2,418~s, y sobre todo en la desviación típica, que se reduce a menos de la mitad, de 0,228~s a 0,094~s. Sobre las 50 vueltas la diferencia acumulada es de 5,66~segundos, así que en una carrera entre ambas configuraciones ganaría la más conservadora, que mantiene el ritmo, frente a la que pierde varias décimas cada vez que tarda en detectar un derrape.
 
-\paragraph{¿Cómo?} Se desplegará la arquitectura sobre cada modelo de Raspberry Pi mediante los contenedores Docker preparados y se ejecutará el sistema. Sobre cada equipo se medirán indicadores de rendimiento como los fotogramas por segundo del nodo cámara, el uso de CPU y de memoria, y la latencia de procesamiento por fotograma.
+\begin{table}[htbp]
+  \centering
+  \caption{Métricas de tiempo por vuelta del coche azul en el circuito en óvalo para las tres configuraciones probadas.}
+  \label{tab:parametros-azul}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+    \toprule
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
+              & (s) & (s) & (s) & (s) & (s) \\
+    \midrule
+    ALGO 012 (70--90, 12~px) & 96,41 & 1,731 & 1,788 & 1,928 & 0,291 \\
+    ALGO 013 (70--94, 12~px) & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 \\
+    ALGO 014 (70--94, 9~px)  & 87,93 & 1,663 & 1,733 & 1,759 & 0,094 \\
+    \bottomrule
+  \end{tabular*}
+\end{table}
 
-\paragraph{¿Qué?} Se mostrará una comparativa del rendimiento obtenido en cada modelo de Raspberry Pi, indicando si en ambos es posible ejecutar el nodo camara y a qué coste. Se documentará el proceso de despliegue y cualquier limitación observada en el modelo menos potente.
+ALGO 012 mantiene el umbral permisivo de 12~px pero rebaja el techo de PWM de 94 a 90, y es la peor de las tres en todas las métricas, con 96,41~s de tiempo acumulado y una desviación típica de 0,291~s. Bajar el techo de velocidad penaliza el ritmo sin resolver los derrapes, porque el problema no era ir demasiado deprisa sino reaccionar demasiado tarde, y por eso la mejora viene de afinar el umbral y no de conducir más despacio.
 
-%\subsection{Escalabilidad: incorporación de una cámara}
-%\label{subsec:prueba-escalabilidad}
-%% Se me ocurrió la verdad que no lo probé y puede ser interesante mirar si se puede añadir una camara en caliente al sistema. El problema es seguramente el algoritmo y la razón por la que no sé puede hacer porque si movemos las camaras todo explote. Lo que se puede probar es tener una zona del circuito que no sé puede ver y después lo que hacemos es añadir una camara en esa zona. El problema no sería en la camara pero si en el controlador porque no tengo forma de una vez en modo carrera poder cambiar y poner a guardar la información qeu te llega se podría hacer simplemente que si no lo tienes en el diccionario y estas en modo carrera entonces tienes que guardarlo pero solo para esa camara y cuando cruce la linea de meta poner a fcunionar pero solo esa parte no sé que tan complicado podría ser.
+\section{Prueba del algoritmo frente a pilotos humanos}
+\label{sec:prueba-algo-vs-personas}
 
+Las pruebas anteriores comparan configuraciones del algoritmo entre sí, pero no dicen nada sobre si el resultado obtenido es bueno en términos absolutos. Enfrentarlo a pilotos humanos sobre el mismo circuito y con el mismo coche proporciona esa referencia. Existe una prueba equivalente en el trabajo de Adrián~\cite{regoTFG}, pero abarca muy pocas vueltas y no es lo suficientemente preciso en el análisis.
 
-%
-%\paragraph{¿Para qué?} El objetivo es demostrar la escalabilidad horizontal del sistema: que añadir cobertura al circuito se reduce a lanzar un nuevo nodo cámara, sin reconfigurar ningún otro componente. Se quiere validar que el descubrimiento automático de DDS integra la nueva cámara en el sistema sin intervención manual, una de las principales aportaciones frente a los trabajos previos.
-%
-%\paragraph{¿Cómo?} Partiendo de un sistema en funcionamiento con una o varias cámaras, se lanzará un nuevo nodo cámara que cubra una porción adicional del circuito. Se comprobará que el nodo es descubierto automáticamente, que empieza a publicar posiciones y que el controlador las incorpora sin necesidad de modificar la configuración de los demás nodos.
-%
-%\paragraph{¿Qué?} Se mostrará el proceso de incorporación de la nueva cámara y el momento en que sus detecciones comienzan a integrarse en el sistema. Se documentará que no ha sido necesaria ninguna reconfiguración manual y el efecto sobre la cobertura del circuito.
-%
+Para las ejecuciones automáticas se reutilizaron los datos de las pruebas de las secciones~\ref{sec:prueba-comparativa-coches} y~\ref{sec:prueba-algo-parametros}. Para las manuales se levantó un nodo de cámara y un nodo controlador en la misma máquina, con el controlador en modo manual, se detalla cómo funciona en la sección~\ref{sec:modo-manual}. Cada piloto completó también 50 vueltas y después se apagó el sistema, con lo que todas las ejecuciones son directamente comparables.
 
-\section{Pruebas finales}
-\label{sec:pruebas-finales}
+La prueba se repitió en dos circuitos. El primero es el óvalo ya empleado en las pruebas anteriores, cubierto por una sola cámara. El segundo es el circuito en ocho, que necesita dos cámaras, una de ellas en la misma máquina que el nodo controlador y el puente Arduino y la otra en un segundo equipo que envía sus detecciones por red, de modo que este escenario añade la conmutación entre cámaras y la latencia de la red.
 
-\subsection{Demostración del sistema completo}
-\label{subsec:prueba-final}
+Los cuadros~\ref{tab:vs-personas-azul} y~\ref{tab:vs-personas-rojo} recogen los resultados sobre el óvalo y en los dos coches se repite el mismo patrón. Los pilotos humanos firman las mejores vueltas absolutas, 1,276~s y 1,291~s en el coche rojo frente a los 1,315~s de la mejor ejecución automática, pero ninguno de los dos gana la contrarreloj. La explicación está en la desviación típica, de 0,787~s y 1,151~s en el caso de los pilotos frente a valores en torno a 0,22~s en las ejecuciones automáticas. El piloto encuentra el límite del coche en una vuelta concreta y no consigue repetirlo, y cada intento fallido le cuesta más de lo que le había ganado el intento bueno.
 
-\paragraph{¿Para qué?} El objetivo es demostrar el funcionamiento del sistema completo y comprobar que se adapta a circuitos distintos, consiguiendo funcionar correctamente en todos ellos.
+\begin{table}[htbp]
+  \centering
+  \caption{Coche azul en el circuito en óvalo, algoritmo vs pilotos humanos.}
+  \label{tab:vs-personas-azul}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+    \toprule
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
+              & (s) & (s) & (s) & (s) & (s) \\
+    \midrule
+    ALGO 014 (70--94, 9~px)  & 87,93 & 1,663 & 1,733 & 1,759 & 0,094 \\
+    ALGO 013 (70--94, 12~px) & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 \\
+    Manual (piloto 1)        & 94,30 & 1,659 & 1,833 & 1,886 & 0,197 \\
+    ALGO 012 (70--90, 12~px) & 96,41 & 1,731 & 1,788 & 1,928 & 0,291 \\
+    Manual (piloto 2)        & 107,54 & 1,674 & 1,911 & 2,151 & 0,646 \\
+    \bottomrule
+  \end{tabular*}
+\end{table}
 
-\paragraph{¿Cómo?} Se desplegará el sistema completo con varias cámaras sobre distintos circuitos y se dejará correr al coche hasta que el algoritmo aprenda cada trazado.
+\begin{table}[htbp]
+  \centering
+  \caption{Coche rojo en el circuito en óvalo, algoritmo vs pilotos humanos.}
+  \label{tab:vs-personas-rojo}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+    \toprule
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
+              & (s) & (s) & (s) & (s) & (s) \\
+    \midrule
+    ALGO 013 (70--94, 12~px) & 75,44 & 1,315 & 1,377 & 1,509 & 0,232 \\
+    ALGO 014 (70--94, 9~px)  & 75,67 & 1,329 & 1,399 & 1,513 & 0,214 \\
+    ALGO 012 (70--90, 12~px) & 80,82 & 1,436 & 1,510 & 1,616 & 0,220 \\
+    Manual (piloto 1)        & 82,36 & 1,291 & 1,421 & 1,647 & 0,787 \\
+    Manual (piloto 2)        & 93,86 & 1,276 & 1,587 & 1,877 & 1,151 \\
+    \bottomrule
+  \end{tabular*}
+\end{table}
 
-\paragraph{¿Qué?} Se mostrará el comportamiento del sistema completo sobre cada circuito, apoyándose en la telemetría grabada y en los vídeos de la demostración final. Se documentará la evolución de los tiempos por vuelta.
+La diferencia entre los dos coches también reaparece aquí, como ya habíamos intuido en las pruebas anteriores. En el rojo la mejor ejecución automática le saca casi 7~segundos al mejor piloto, mientras que en el azul el margen se estrecha hasta los 0,7~segundos que separan a ALGO 013 del piloto 1, porque el coche es tan sensible que encontrar el punto de funcionamiento correcto resulta difícil para las dos partes. De hecho ALGO 012, con los parámetros mal ajustados, queda por debajo del piloto 1 en una de las ejecuciones.
+
+Los resultados sobre el circuito en ocho se recogen en el cuadro~\ref{tab:vs-personas-ocho}, donde la diferencia se acentúa porque el trazado obliga al piloto a anticipar dos curvas encadenadas y el cruce central, algo que para el algoritmo no supone ninguna complicación adicional al trabajar por zonas independientes. Uno de los pilotos llegó a conseguir una media y una mediana inferiores a las del algoritmo y aun así perdió la contrarreloj, porque al intentar sostener ese ritmo acabó saliéndose de la pista y cada salida obliga a recoger el coche, volver a colocarlo y acelerar de nuevo desde parado.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Circuito en ocho, ejecuciones automáticas frente a pilotos humanos.}
+  \label{tab:vs-personas-ocho}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+    \toprule
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
+              & (s) & (s) & (s) & (s) & (s) \\
+    \midrule
+    % TODO: pendiente de completar con los datos del circuito en ocho
+    \bottomrule
+  \end{tabular*}
+\end{table}
+
+La conclusión de estas pruebas es que la ventaja del algoritmo no está en la velocidad punta sino en la capacidad de sostenerla. Un piloto humano iguala e incluso supera al sistema en una vuelta suelta, porque puede arriesgar deliberadamente donde el algoritmo se limita a lo que ha aprendido, pero no consigue repetir ese riesgo cincuenta veces sin equivocarse y en una carrera lo que cuenta es el acumulado. Esa regularidad es además consecuencia directa de la política de castigo por zonas descrita en la sección~\ref{sec:castigo-zonas}, que sacrifica velocidad puntual en los tramos conflictivos a cambio de no perder vueltas enteras.
