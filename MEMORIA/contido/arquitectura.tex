@@ -4,14 +4,15 @@
 \section{Arquitectura general del sistema}
 \label{sec:arquitectura}
 
-
 En un Scalextric analógico cada carril alimenta a un único coche y a través del mando se regula la tensión que se le aplica, de modo que controlar un coche se reduce a decidir en cada instante qué tensión aplicar a su carril. En la arquitectura propuesta, recogida en la figura~\ref{fig:arquitectura-general}, de eso se encarga el \textbf{nodo de potencia}, que recibe órdenes a través de la red y las aplica sobre el circuito mediante señales PWM, es el único nodo con acceso al hardware. Esas órdenes las publican los \textbf{nodos de control}, uno por cada carril del circuito, que reciben como entrada la posición del coche y deciden a partir de ella qué potencia aplicar en cada momento; además, miden el tiempo que tarda el coche en completar una vuelta, que es la referencia para valorar lo bien que se está controlando. La posición la emiten los \textbf{nodos cámara}, encargados de localizar el coche en la pista. Cada uno trabaja con una única cámara física, que es la que le suministra los fotogramas. En cada fotograma se buscan las dos pegatinas que lleva el coche, una delantera y otra trasera, y mediante técnicas de visión artificial se obtienen sus centroides, que son la información que se publica en la red. El nodo cámara que cubre el tramo de la meta detecta también la línea que la marca y la publica, sin la cual los nodos de control no podrían contar las vueltas.
 
-El proceso explicado anteriormente se corresponde con el modo de operación normal del sistema, donde pasa la mayor parte del tiempo, aunque inicialmente es necesario un modo de calibración para ajustar diferentes parámetros del circuito, que se detalla en la sección~\ref{sec:modo-calibracion}.
+El proceso explicado anteriormente se corresponde con el modo de operación normal del sistema, donde pasa la mayor parte del tiempo, aunque inicialmente es necesario un modo de calibración para ajustar diferentes parámetros del circuito, que se detalla en la sección~\ref{sec:modo-calibracion}. Para alternar entre estos dos modos se utiliza un mensaje para avisar a todo el sistema de cuando hay que realizar el cambio. 
 
 Fuera del lazo de control queda un último nodo, que escucha todo lo que circula por la red y lo almacena para su posterior análisis en diferido, permitiendo también ver el fotograma que las cámaras capturan durante el funcionamiento. 
 
 Cabe destacar que la arquitectura no obliga a repartir los nodos por la red, por tanto cualquier combinación de ellos puede convivir en la misma máquina, hasta el punto de poder ejecutar el sistema completo en una sola.
+
+Cada uno de los nodos descritos anteriormente tiene su equivalente dentro de ROS~2. Hay que destacar que lo único que implica es que en vez de mensajes tenemos que trabajar con \emph{topics}, como se explica en la sección~\ref{subsec:mensajes-propios}. También es necesario que cada instancia arranque dentro de su propio espacio de nombres (sección~\ref{sec:ros2-namespaces}), lo que liga sus \emph{topics} al coche o a la cámara que le corresponde y evita que las instancias de un mismo nodo se pisen entre sí.
 
 \begin{figure}[tbp]
     \centering
@@ -20,17 +21,16 @@ Cabe destacar que la arquitectura no obliga a repartir los nodos por la red, por
     \label{fig:arquitectura-general}
 \end{figure}
 
+\subsection{Modo de calibración}
+\label{subsec:modo-calibracion}
 
-% =====================================================================
-%  Sección 5.2 — Modelo de datos  (Capítulo 5: Arquitectura y diseño)
-%
-%  Se describe QUÉ información se intercambian los nodos, entre quiénes
-%  y con qué garantía de entrega. Sin nombrar ROS 2, topics, tipos de
-%  mensaje, tipos de campo ni perfiles de QoS, y sin mencionar la
-%  pegatina de color (eso va en el capítulo de implementación).
-%
-%  No requiere paquetes adicionales.
-% =====================================================================
+Todo lo descrito hasta ahora corresponde al modo de operación, en el que el sistema pasa la mayor parte del tiempo. Antes de llegar a él hace falta una fase de calibración, cuyo objetivo es obtener la trayectoria que sigue cada coche sobre su carril. Durante esta fase los nodos de control todavía no publican nada, así que es el nodo de potencia el que aplica una tensión constante para que los coches recorran el circuito. Los nodos cámara buscan sobre el fotograma completo, al no disponer aún de ninguna referencia con la que acotar la búsqueda, y publican la posición igual que en operación; los nodos de control acumulan esas posiciones hasta reconstruir el recorrido completo de su coche.
+
+Esa trayectoria es la base sobre la que se apoya el resto del sistema. Permite discretizar el circuito para el control, como se explica en la sección~\ref{sec:algoritmo}, y delimitar la zona de la imagen en la que buscar el coche, lo que reduce el coste computacional. 
+
+El proceso de calibración empieza al cruzar la meta y termina al volver a pasar por ella. De forma que siempre se mide la misma inforamción, todo lo que había hasta ese momento se descarta. Consume una única vuelta y termina por sí sola, sin intervención humana, a diferencia de los trabajos previos. Ambas cosas importan porque es tiempo perdido para quien va a competir y porque, con los nodos repartidos por la red, nadie tiene desde dónde supervisarla.
+
+La transición entre modos se coordina mediante el mensaje de cambio de modo (tabla~\ref{tab:mensajes}). Cualquier alteración que invalide la trayectoria aprendida, como modificar el trazado o desplazar una cámara, obliga a repetir la calibración, para lo que basta con ordenar de nuevo la transición sin reiniciar el sistema.
 
 \section{Intercambio de información entre nodos}
 \label{sec:intercambio-informacion-nodos}
@@ -41,8 +41,10 @@ La tabla~\ref{tab:mensajes} recoge ambas cosas. Cada mensaje se describe en la s
 
 \begin{table}[tbp]
 	\centering
-	\setlength{\tabcolsep}{4pt}
 	\small
+	\setlength{\tabcolsep}{4pt}
+	\caption{Mensajes que intercambian los nodos del sistema.}
+	\label{tab:mensajes}
 	\begin{tabular}{p{2.8cm} p{2.6cm} p{2.8cm} p{2.4cm} p{2.7cm}}
 		\hline
 		\textbf{Mensaje} & \textbf{Emisor} & \textbf{Receptor} & \textbf{Cadencia} & \textbf{Entrega} \\
@@ -51,12 +53,10 @@ La tabla~\ref{tab:mensajes} recoge ambas cosas. Cada mensaje se describe en la s
 		Línea de meta & Nodo cámara que la ve & Todos los nodos de control & Una vez, al arranque & Garantizada y persistente \\
 		Consigna de potencia & Nodo de control & Nodo de potencia & Por cada posición recibida & Prima la actualidad \\
 		Cambio de modo & Nodo de control & Todos los nodos & Por evento & Garantizada \\
-		Tiempo de vuelta & Nodo de control & Nodo de logs & Por vuelta completada & Garantizada \\
-		Vista de la cámara & Nodo cámara & Nodo de logs & Periódica & Prima la actualidad \\
+		Tiempo de vuelta & Nodo de control & Nodo de \emph{logs} & Por vuelta completada & Garantizada \\
+		Vista de la cámara & Nodo cámara & Nodo de \emph{logs} & Periódica & Prima la actualidad \\
 		\hline
 	\end{tabular}
-	\caption{Mensajes que intercambian los nodos del sistema.}
-	\label{tab:mensajes}
 \end{table}
 
 \subsection{Modelo de datos}
@@ -69,16 +69,16 @@ Definir el modelo de datos consiste en decidir qué mensajes se intercambian, en
 \begin{itemize}
 	\item \textbf{Posición del coche.} Es el mensaje principal del sistema. Cada nodo cámara envía uno por cada coche que reconoce en cada fotograma. Contiene la información que permite determinar la posición del coche e identifica al emisor, porque cada nodo cámara cubre un tramo distinto del circuito y el receptor necesita saber de cuál procede el dato.
 
-	\item \textbf{Línea de meta.} Contiene el segmento que define la meta y el nodo cámara que la observa. Solo un nodo la ve, pero todos los nodos de control la necesitan para contar vueltas, y solo deben comprobar el cruce sobre las posiciones que llegan de ese nodo.
+	\item \textbf{Línea de meta.} Contiene el segmento que define la meta y el nodo cámara que la observa. Solo un nodo la ve, pero todos los nodos de control la necesitan para contar vueltas, y solo deben comprobar el cruce cuando las posiciones son del nodo que la detecto.
 
-	\item \textbf{Consigna de potencia.} Es la salida del nodo de control. Contiene el valor que hay que aplicar y el identificador del carril sobre el que aplicarlo.
+	\item \textbf{Consigna de potencia.} Es la salida del nodo de control. Contiene el valor que hay que aplicar y el identificador del carril sobre el que aplicarlo. Cada nodo de control envía el suyo, de forma que hay uno por cada carril que tiene el circuito.
 
-	\item \textbf{Cambio de modo.} Comunica a todos los nodos la transición entre los modos de funcionamiento descritos en la sección~\ref{sec:modos_funcionamiento}. No transporta datos, pero si un nodo no lo recibe el sistema queda inconsistente, con unos nodos operando en un modo y otros en el contrario.
+	\item \textbf{Cambio de modo.} Comunica la transición entre el modo calibración, explicado en la sección~\ref{subsec:modo-calibracion} y el modo normal de operación. Cada nodo de control emite el suyo, referido únicamente a su carril, porque nada obliga a que dos coches la cierren a la vez, de modo que un carril puede estar ya en carrera mientras el otro sigue calibrando. Lo reciben todos los nodos que intervienen en ese coche. No transporta datos, pero si alguno no lo recibe el sistema queda inconsistente, con unos nodos en un modo y otros en el contrario.
 \end{itemize}
 
 \subsubsection{Mensajes de telemetría}
 
-Los mensajes que siguen van dirigidos al nodo de logs, que se limita a escuchar y registrar. No intervienen en el lazo de control, de forma que el sistema se comporta igual esté ese nodo presente o no.
+Los mensajes que siguen van dirigidos al nodo de \emph{logs}, que se limita a escuchar y registrar. No intervienen en el lazo de control, de forma que el sistema se comporta igual esté ese nodo presente o no.
 
 \begin{itemize}
 	\item \textbf{Tiempo de vuelta.} Se envía cada vez que un coche cruza la meta e indica el tiempo empleado, el número de vuelta y el instante del cruce. Es la métrica con la que se mide el rendimiento del sistema, por lo que ninguna vuelta puede perderse.
@@ -86,124 +86,31 @@ Los mensajes que siguen van dirigidos al nodo de logs, que se limita a escuchar 
 	\item \textbf{Vista de la cámara.} Son los fotogramas que capta la cámara, publicados en la red para poder ver en directo lo que está procesando cada nodo cámara. Es con diferencia el mensaje más pesado, por lo que se genera al margen del procesamiento de las posiciones.
 \end{itemize}
 
-\subsection{Garantías de entrega}
-\label{subsec:garantia-entrega}
-
-En los mensajes en los que prima la actualidad solo interesa el dato más reciente, porque cada uno sustituye al anterior. Reenviar uno perdido entregaría tarde una información ya caducada y retrasaría además la del mensaje vigente, con el riesgo de que el control acabe decidiendo a partir de un dato desactualizado.
-
-En el resto ocurre lo contrario, perder un solo mensaje afecta al funcionamiento del sistema, mientras que recibirlo con retraso no supone problema. Un nodo de control que no reciba la \emph{línea de meta} no podrá contar vueltas ni dar por terminada la calibración.
-
-\section{Modo de calibración}
-\label{sec:modo-calibracion}
-
-Todo lo descrito hasta ahora corresponde al modo de operación, en el que el sistema pasa la
-mayor parte del tiempo. Antes de llegar a él hace falta una fase de calibración, cuyo objetivo
-es obtener la trayectoria que sigue cada coche sobre su carril. Durante esta fase los nodos de
-control todavía no publican consigna, así que es el nodo de potencia el que aplica una tensión
-constante para que los coches recorran el circuito. Los nodos cámara buscan sobre el
-fotograma completo, al no disponer aún de ninguna referencia con la que acotar la búsqueda,
-y publican la posición igual que en operación; los nodos de control acumulan esas posiciones
-hasta reconstruir el recorrido completo de su coche.
-
-Esa trayectoria es la base sobre la que se apoya el resto del sistema: permite discretizar el
-circuito para el control, como se explica en la sección~\ref{sec:algoritmo}, y delimitar la zona
-de la imagen en la que buscar el coche, lo que reduce el coste computacional. La fase consume
-una única vuelta y termina por sí sola, sin intervención humana, a diferencia de los trabajos
-previos. Ambas cosas importan porque es tiempo perdido para quien va a competir y porque,
-con los nodos repartidos por la red, nadie tiene desde dónde supervisarla.
-
-La transición entre modos se coordina mediante el mensaje de cambio de modo
-(tabla~\ref{tab:mensajes}), que emite el nodo de control y reciben todos los nodos, de manera
-que se propaga a la vez a todo el sistema. Cualquier alteración que invalide la trayectoria
-aprendida, como modificar el trazado o desplazar una cámara, obliga a repetir la calibración,
-para lo que basta con ordenar de nuevo la transición sin reiniciar el sistema.
- 
-\section{Algoritmo de control}
-\label{sec:algoritmo-arquitectura}
- 
-El algoritmo es el componente que decide, en cada instante y para cada punto del circuito, qué tensión debe aplicarse al carril por el que circula el coche. Es la única pieza del sistema que toma decisiones de control. Su objetivo es buscar el control del coche dentro de la arquitectura distribuida buscando conseguir mejoras de velocidad.
- 
-El diseño parte de una idea propuesta por Mario López Cea \cite{tfgmario}: los derrapes de un circuito dado no se reparten al azar, sino que se concentran siempre en las mismas zonas, de modo que esas zonas pueden aprenderse en carrera y tratarse de forma diferenciada. Adrián Rego \cite{tfgadrian} trasladó esa idea a un escenario de varias cámaras, aunque el resultado no llegó a ofrecer un control estable sobre el circuito completo. Este trabajo retoma el concepto original de zona de derrape y lo rediseña como un mecanismo de aprendizaje por vueltas que funciona sobre una porción del circuito y, por tanto, admite la ejecución distribuida.
- 
-\subsection{La trayectoria base}
-\label{subsec:trayectoria-base}
-
-La representación del circuito con la que trabaja el algoritmo es la \textbf{trayectoria base} obtenida durante la calibración (sección~\ref{sec:modo-calibracion}). No se maneja como una curva continua, sino discretizada en una sucesión ordenada de \textbf{celdas} repartidas de forma uniforme a lo largo del recorrido, de modo que cada celda representa un punto concreto e identificable del circuito y la posición del coche en carrera se expresa siempre refiriéndola a una de ellas. La discretización introduce una pérdida de precisión acotada por el tamaño de celda. Pero permite tratarlas como un conjunto sobre el que tomar decisiones y permite acumular conocimiento sobre esas mismas undidades vuelta tras vuelta.
-
-\subsection{El derrape como señal de exceso de velocidad}
-\label{subsec:derrape-arquitectura}
- 
-Un \textbf{derrape} se produce cuando el coche entra en una curva a una velocidad para la que la adherencia disponible no consigue controlar el coche y la fuerza centripeta causa que la parte trasera se abra y el vehículo deja de seguir el trazado. Lejos de aportar ninguna ventaja, es siempre una pérdida. En el mejor de los casos el coche pierde velocidad y empeora el tiempo de vuelta; en el peor abandona la pista, lo que obliga a recolocarlo manualmente y penaliza la carrera con un tiempo muy superior al de cualquier tramo mal recorrido.
- 
-Para la arquitectura, lo relevante no es cómo se determina que se ha producido un derrape, sino que existe una señal capaz de indicar en qué punto del circuito el coche ha superado el límite de tensión admisible, y por tanto el limite de velocidad. Cómo se obtiene esa señal es una decisión de implementación, y admite soluciones muy distintas.
- 
-\subsection{Zonas y políticas de ajuste}
-\label{subsec:zonas-politicas}
-
-Una \textbf{zona} es un conjunto contiguo de celdas, delimitado por una celda inicial y una final, que el algoritmo trata como una única unidad, de modo que las decisiones tomadas sobre ella afectan por igual a todas las celdas que forman parte de ella. Las zonas particionan la trayectoria base y se dividen en dos clases: las \textbf{zonas de derrape}, que agrupan las celdas en las que se ha detectado derrape, y las zonas libres de él. La zona es, por tanto, la granularidad con la que el algoritmo aprende el circuito.
-
-Ahora bien, una zona de derrape no puede limitarse a las celdas en las que el derrape se manifiesta, sino que debe extenderse hacia atrás para incluir un tramo de anticipación previo. El motivo es que corregir en el momento de la detección llega tarde por partida doble. Por un lado, el error se cometió antes, cuando el coche empieza a abrirse en mitad de una curva, la velocidad equivocada es la que llevaba al entrar en ella. Por otro, entre que la posición que delata el derrape se procesa y la nueva orden llega al carril transcurre un tiempo durante el cual el coche sigue avanzando, y aun después la respuesta no es inmediata, porque la inercia hace que la velocidad baje de forma progresiva. Extender la zona hacia atrás traslada la decisión al único punto en el que todavía es útil, la entrada de la curva, de forma que en las siguientes vueltas el coche llegue ya frenado al punto conflictivo.
-
-Sobre esta estructura actúan dos políticas complementarias:
-
-\begin{itemize}
-    \item \textbf{Política de castigo.} Se dispara al recibir la señal de derrape y se aplica sobre las zonas de derrape, el castigo debe provocar una reducción en la velocidad, porque para este tramo demostro que no soporta la velocidad que llevababa.
-    \item \textbf{Política de mejora.} Se aplica al completarse una vuelta y solo sobre las zonas que no los han registrado. Mientras un tramo no dé problemas, el algoritmo asume que aún queda margen y lo busca.
-\end{itemize}
-
-El equilibrio entre ambas es lo que hace que el sistema converja. El castigo evita que el coche reincida en un tramo conflictivo y la mejora evita que ningún tramo se quede permanentemente por debajo de su potencial. La condición que la arquitectura sí impone es que ambas actúen \textbf{zona a zona y no sobre el circuito completo}, porque con un ajuste global una única curva exigente bastaría para limitar la velocidad de todo el trazado. Aplicándolo por zonas, esa curva limita solo la suya mientras las rectas y las curvas rápidas siguen ganando velocidad vuelta tras vuelta siempre que sea posible para no salirse en la curva, y el resultado es un tratamiento diferenciado por tramo.
- 
-%Por último, el algoritmo no opera sobre el circuito completo, sino sobre la porción que observa cada cámara, de la que se mantiene una instancia independiente. Las decisiones que requieren una visión global del trazado, como determinar si una vuelta ha sido limpia o resolver un derrape repartido entre dos porciones, corresponden al nodo controlador. Los mecanismos concretos de esa coordinación se detallan en el capítulo \ref{chap:implementacion}.
-
-\section{Concreción de la arquitectura en ROS 2}
-\label{sec:arquitectura_ros2}
-
-La arquitectura descrita se materializa sobre ROS~2 (sección~\ref{sec:ros2}), el comportamiento descrito en la sección~\ref{sec:arquitectura} es el mismo. Cada tipo de nodo pasa a ser un nodo de ROS~2 y cada mensaje de la tabla~\ref{tab:mensajes} se convierte en un \emph{topic}. El nodo de potencia se concreta en un nodo puente que envia los valores que recibe por la red para después enviarlo atraves del protocolo serie de un Arduino, conectado a la pista junto con un L293D. La figura~\ref{fig:arquitectura-ros2} recoge el despliegue completo y la tabla~\ref{tab:topics-ros2} resume los \emph{topics} implicados.
-
-% El color ArqAzulClaro de las cabeceras de las tablas está definido en
-% estilo_tfg.sty, junto al resto de la paleta.
-
-\begin{figure}[tbp]
-    \centering
-    \includegraphics[width=1.1\textwidth]{imaxes/IMPLEMENTACION/arquitectura_con_ros2.pdf}
-    \caption{Arquitectura general pensado para el control distribuido de coches tipo scalextric implementado usando nodos de ROS~2}
-    \label{fig:arquitectura-ros2}
-\end{figure}
-
-Cada instancia arranca dentro de su propio espacio de nombres (sección~\ref{sec:ros2-namespaces}), lo que liga sus \emph{topics} al coche o a la cámara que le corresponde y evita que las instancias de un mismo tipo se pisen entre sí.
-
-\begin{table}[tbp]
-\centering
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{|l|l|l|l|}
-\hline
-\rowcolor{ArqAzulClaro}
-\textbf{Topic} & \textbf{Mensaje} & \textbf{Publica} & \textbf{Suscribe} \\
-\hline
-\texttt{/carN/position} & \texttt{CarLocation} & Nodos cámara & Nodo de control $N$ \\
-\hline
-\texttt{/finish\_line\_position} & \texttt{FinishLine} & Cámara que la observa & Nodos de control \\
-\hline
-\texttt{/carN/pwd} & \texttt{SpeedCarril} & Nodo de control $N$ & Nodo puente \\
-\hline
-\texttt{/carN/modo\_calibracion} & \texttt{Bool} & Nodo de control $N$ & Cámaras, control y puente \\
-\hline
-\texttt{/telemetria/carN/car\_control} & \texttt{CarControlTelemetry} & Nodo de control $N$ & Visualización \\
-\hline
-\texttt{/telemetria/carN/time\_per\_lap} & \texttt{TimePerLap} & Nodo de control $N$ & Visualización \\
-\hline
-\texttt{/camaraX/camara\_debug} & \texttt{CompressedImage} & Nodo cámara $X$ & Visualización \\
-\hline
-\end{tabular}%
-}
-\caption{Resumen de los \emph{topics} del sistema, el tipo de mensaje que transportan y los nodos implicados en cada comunicación.}
-\label{tab:topics-ros2}
-\end{table}
-
-\subsection{Mensajes propios del sistema}
+\subsection{Mensajes en ROS2}
 \label{subsec:mensajes-propios}
 
-Los tipos que ROS~2 trae por defecto no bastan para modelar la información del cuadro~\ref{tab:mensajes}, de modo que fue necesario crear mensajes propios (sección~\ref{sec:ros2-interfaces}). Al bajar al detalle, cada uno incorpora además campos que el diseño no recogía: identificadores de origen, marcas de tiempo y contadores de fotograma, que son los que después permiten medir latencias y cruzar entre sí las distintas fuentes durante el análisis. El listado~\ref{lst:msg-carlocation} recoge la definición de \texttt{CarLocation}, la \emph{posición del coche}, y sirve de ejemplo del formato que siguen todos los demás.
+\begin{table}[tbp]
+	\centering
+	\small
+	\setlength{\tabcolsep}{4pt}
+	\caption{Resumen de los \emph{topics} del sistema, el tipo de mensaje que transportan y los nodos implicados en cada comunicación.}
+	\label{tab:topics-ros2}
+	\begin{tabular}{p{3.7cm} p{3.5cm} p{3.1cm} p{3.3cm}}
+		\hline
+		\textbf{Topic} & \textbf{Mensaje} & \textbf{Publica} & \textbf{Suscribe} \\
+		\hline
+		\texttt{/carN/position} & \texttt{CarLocation} & Nodos cámara & Nodo de control $N$ \\
+		\texttt{/finish\_\allowbreak line\_position} & \texttt{FinishLine} & Cámara que la observa & Nodos de control \\
+		\texttt{/carN/pwd} & \texttt{SpeedCarril} & Nodo de control $N$ & Nodo puente \\
+		\texttt{/carN/\allowbreak modo\_calibracion} & \texttt{Bool} & Nodo de control $N$ & Cámaras, control y puente \\
+		\texttt{/telemetria/carN/\allowbreak car\_control} & \texttt{CarControl\allowbreak Telemetry} & Nodo de control $N$ & Visualización \\
+		\texttt{/telemetria/carN/\allowbreak time\_per\_lap} & \texttt{TimePerLap} & Nodo de control $N$ & Visualización \\
+		\texttt{/camaraX/\allowbreak camara\_debug} & \texttt{CompressedImage} & Nodo cámara $X$ & Visualización \\
+		\hline
+	\end{tabular}
+\end{table}
+
+Los tipos que ROS~2 trae por defecto no bastan para modelar la información del cuadro~\ref{tab:mensajes}, de modo que fue necesario crear mensajes propios (sección~\ref{sec:ros2-interfaces}). Al bajar al detalle, cada uno incorpora identificadores de origen, marcas de tiempo y contadores de fotograma, que permiten medir latencias durante el análisis. El listado~\ref{lst:msg-carlocation} recoge la definición de \texttt{CarLocation}, la \emph{posición del coche}, y sirve de ejemplo del formato que siguen todos los demás. Los dos primeros campos identifican el origen del dato, y \texttt{front} y \texttt{back} son las dos pegatinas detectadas, cada una con su centroide y su color, acompañadas de los rectángulos que las encierran. \texttt{stamp} es la marca de tiempo de captura del fotograma y \texttt{proc\_time}, es el tiempo de procesado. \texttt{n\_frame} es el contador de fotogramas de esa cámara. 
 
 \begin{lstlisting}[float=htbp, caption={Definición del mensaje \texttt{CarLocation} (\texttt{msg/CarLocation.msg}).}, label={lst:msg-carlocation}]
 string camara_id
@@ -217,13 +124,67 @@ BoundingRect bounding_rect_stiker_back
 uint32 n_frame
 \end{lstlisting}
 
-Los dos primeros campos identifican el origen del dato, y \texttt{front} y \texttt{back} son las dos pegatinas detectadas, cada una con su centroide y su color, acompañadas de los rectángulos que las encierran. \texttt{stamp} es la marca de tiempo de captura del fotograma y \texttt{proc\_time}, lo que costó procesarlo. \texttt{n\_frame} es el contador de fotogramas de esa cámara. 
-
 Los mensajes \texttt{FinishLine}, \texttt{SpeedCarril} y \texttt{TimePerLap} implementan la \emph{línea de meta}, la \emph{consigna de potencia} y el \emph{tiempo de vuelta} siguiendo ese mismo formato, y se apoyan en cuatro tipos auxiliares que modelan un punto en coordenadas de imagen, una pegatina, el rectángulo delimitador de una detección y un segmento. Sus definiciones completas se recogen en el anexo~\ref{lst:msgs-informacion}. A ellos se suma \texttt{CarControlTelemetry}, que no tiene equivalente en el cuadro~\ref{tab:mensajes} porque nace durante la implementación. Se publica en cada iteración y recoge datos internos del lazo de control, como la distancia de derrape estimada o el tiempo transcurrido desde que llega la posición hasta que se publica el PWM, con los que después se analiza el comportamiento del algoritmo.
 
 Los dos mensajes restantes no necesitan un tipo propio y se resuelven con tipos estándar de ROS~2: el \emph{cambio de modo} es un \texttt{std\_msgs/Bool} en el \emph{topic} de calibración de cada coche, y la \emph{vista de la cámara}, un \texttt{sensor\_msgs/CompressedImage} en los \emph{topics} de depuración, sobre los que cada cámara publica el fotograma procesado con las detecciones superpuestas.
 
-\subsection{Calidad de servicio}
-\label{subsec:qos}
+\subsection{Garantías de entrega}
+\label{subsec:garantia-entrega}
 
-Las garantías de entrega definidas en la sección~\ref{subsec:garantia-entrega} se traducen en las políticas de calidad de servicio que ofrece ROS~2 (sección~\ref{sec:dds-qos}). Los mensajes en los que prima la actualidad, es decir, las posiciones, las consignas de PWM, los dos \emph{topics} de telemetría y las imágenes de depuración, emplean el perfil predefinido para datos de sensores, de fiabilidad \emph{best effort}. La línea de meta usa el perfil opuesto, fiabilidad garantizada y durabilidad \emph{transient local} con profundidad uno, con lo que un nodo de control que arranque más tarde que las cámaras la recibe igualmente sin necesidad de republicarla.
+En los mensajes en los que prima la actualidad solo interesa el dato más reciente, porque cada uno sustituye al anterior. Reenviar uno perdido entregaría tarde una información ya caducada y retrasaría además la del mensaje vigente, con el riesgo de que el control acabe decidiendo a partir de un dato desactualizado.
+
+En el resto ocurre lo contrario, perder un solo mensaje afecta al funcionamiento del sistema, mientras que recibirlo con retraso no supone problema. Un nodo de control que no reciba la \emph{línea de meta} no podrá contar vueltas ni dar por terminada la calibración. 
+
+Para lograr tener las garantías de entrega en los mensajes de ROS~2 se utilizan políticas de calidad de servicio (sección~\ref{sec:dds-qos}). Los mensajes en los que prima la actualidad, emplean el perfil predefinido para datos de sensores, de fiabilidad \emph{best effort}. En cambio para los que necesitan entrega garantizada se usa el perfil opuesto, fiabilidad garantizada y durabilidad \emph{transient local} con profundidad uno, con lo que un nodo de control que arranque más tarde que las cámaras la recibe igualmente sin necesidad de republicarla.
+
+\section{Algoritmo de control}
+\label{sec:algoritmo-arquitectura}
+ 
+El algoritmo es el componente que decide, en cada instante y para cada punto del circuito, qué tensión debe aplicarse al carril por el que circula el coche. Es la única pieza del sistema que toma decisiones de control. Su objetivo es el control del coche buscando conseguir mejoras de velocidad.
+ 
+El diseño parte de una idea propuesta por Mario López Cea \cite{tfgmario}: los derrapes de un circuito dado no se reparten al azar, sino que se concentran siempre en las mismas zonas, de modo que esas zonas pueden aprenderse en carrera y tratarse de forma diferenciada. Adrián Rego \cite{tfgadrian} trasladó esa idea a un escenario de varias cámaras, aunque el resultado no llegó a ofrecer un control estable sobre el circuito completo. Este trabajo retoma el concepto original de zona de derrape y lo rediseña como un mecanismo de aprendizaje por vueltas que funciona sobre una porción del circuito y, por tanto, admite la ejecución distribuida.
+ 
+\subsection{La trayectoria base}
+\label{subsec:trayectoria-base}
+
+La representación del circuito con la que trabaja el algoritmo es la \textbf{trayectoria base} obtenida durante la calibración (sección~\ref{sec:modo-calibracion}). No se maneja como una curva continua, sino discretizada en una sucesión ordenada de \textbf{celdas} repartidas de forma uniforme a lo largo del recorrido, de modo que cada celda representa un punto concreto e identificable del circuito y la posición del coche en carrera se expresa siempre refiriéndola a una de ellas. La discretización introduce una pérdida de precisión acotada por el tamaño de celda. Pero permite tratarlas como un conjunto sobre el que tomar decisiones y permite acumular conocimiento sobre esas mismas undidades vuelta tras vuelta.
+
+Habría que decir que a cada una de las celdas se le aplica un valor de pwm que es lo que se va modificando
+
+Los saltos entre puntos consecutivos que superan un umbral reciben otro tratamiento. Corresponden a tramos que la cámara no ve, porque un puente o otro elemento tapan la pista, y no tiene sentido interpolar dentro de ellos. En su lugar se crea una única \emph{celda gigante} que registra la longitud real del hueco. Dentro de ella no puede localizarse el coche ni detectarse derrapes, pero se trata todo con un mismo valor de PWM.
+
+\subsection{Localización del coche sobre la trayectoria}
+\label{subsec:algoritmo-localizacion}
+
+Para poder realizar el control es necesario saber donde están las dos pegatinas del coche, tanto la delantera como la trasera, con respecto a la trayectoria base, (sección~\ref{subsec:trayectoria-base}). Razón por la cual, para cada una se obtiene la celda más cerca y su distancia a ella.
+
+Después cada una tiene un uso distinto. La distancia de la delantera es una comprobación realizada para comprobar que el coche sigue el recorrido esperado, si supera un umbral se considera que la detección no es válida y el fotograma se descarta sin llegar a calcular un PWM nuevo. La distancia de la trasera es la señal con la que se detectan los derrapes, como se detalla en la sección~\ref{subsec:algoritmo-derrapes}.
+
+El procedimiento es el mismo para ambas. Primero se busca la celda cuyo punto está más próximo al centroide de la pegatina. Después se proyecta ese centroide sobre los dos segmentos que unen la celda escogida con su anterior y su posterior, y se conserva la menor de las dos distancias. La proyección hace falta porque medir contra la celda daría una distancia que no es precisa, en cambio contra los segmentos se obtiene la distancia perpendicular a la trayectoria.
+
+La proyección solo puede hacerse entre celdas consecutivas, porque a través de una celda gigante no hay trayectoria conocida sobre la que proyectar. .
+
+\subsection{El derrape como señal de exceso de velocidad}
+\label{subsec:derrape-arquitectura}
+ 
+Un \textbf{derrape} se produce cuando el coche entra en una curva a una velocidad para la que la adherencia disponible no consigue controlar el coche y la fuerza centrípeta causa que la parte trasera se abra y el vehículo deja de seguir el trazado. Lejos de aportar ninguna ventaja, es siempre una pérdida. En el mejor de los casos el coche pierde velocidad y empeora el tiempo de vuelta; en el peor abandona la pista, lo que obliga a recolocarlo manualmente y penaliza la carrera con un tiempo muy superior al de cualquier tramo mal recorrido.
+ 
+Para la arquitectura, lo relevante no es cómo se determina que se ha producido un derrape, sino que existe una señal capaz de indicar en qué punto del circuito el coche ha superado el límite de velocidad. Cómo se obtiene esa señal es una decisión de implementación, y admite soluciones muy distintas.
+ 
+\subsection{Zonas y políticas de ajuste}
+\label{subsec:zonas-politicas}
+
+Una \textbf{zona} es un conjunto contiguo de celdas, delimitado por una celda inicial y una final, que el algoritmo trata como una única unidad. Las zonas particionan la trayectoria base y se dividen en dos clases: las zonas de derrape, que agrupan las celdas en las que se ha detectado derrape, y las zonas libres de él.
+
+Ahora bien, una zona de derrape no puede limitarse a las celdas en las que el derrape se manifiesta debe extenderse hacia atrás para incluir un tramo de anticipación. Corregir donde se detecta llega tarde por dos razones. La primera es que el error se cometió antesm si el coche se abre en mitad de la curva, la velocidad equivocada es la que llevaba al entrar en ella. La segunda es que la corrección tarda en surtir efecto, porque entre procesar la posición y aplicar la nueva orden el coche sigue avanzando, y después la inercia hace que la velocidad baje de forma progresiva. Extendiendo la zona hacia atrás, la decisión se traslada a la entrada de la curva y en las siguientes vueltas el coche llega ya frenado al punto conflictivo.
+
+Cada zona recibe su propia política, pero la arquitectura impone una condición sobre ambas, deben actuar zona a zona y no sobre el circuito completo. Con un ajuste global, una única curva exigente bastaría para limitar la velocidad de todo el trazado; por zonas, esa curva limita solo la suya mientras las rectas y las curvas rápidas siguen ganando velocidad vuelta tras vuelta.
+
+Sobre esta estructura actúan dos políticas complementarias:
+
+\begin{itemize}
+    \item \textbf{Política de castigo.} Se dispara al recibir la señal de derrape y se aplica sobre las zonas de derrape, el castigo debe provocar una reducción en la velocidad.
+    \item \textbf{Política de mejora.} Se aplica al completarse una vuelta y solo sobre las zonas que no registraron derrape. Mientras un tramo no de problemas, el algoritmo asume que aún queda margen de mejora.
+\end{itemize}
+
+El equilibrio entre ambas es lo que hace que el sistema converja. El castigo evita que el coche reincida en un tramo conflictivo y la mejora evita que ningún tramo se quede permanentemente por debajo de su potencial. 
