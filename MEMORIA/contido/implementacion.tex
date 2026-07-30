@@ -166,7 +166,7 @@ El controlador solo necesita concurrencia a nivel de nodo. Recibe tres \emph{cal
 
 El puente crea un grupo por cada controlador desplegado, ya que cada uno publica en su propio \emph{topic}, más un grupo para las suscripciones de calibración y el grupo por defecto (figura~\ref{fig:concurrencia-puente}). Así, si el mensaje de un carril se demora no impide recibir y tratar los del resto.
 
-Esta concurrencia en la recepción no puede trasladarse al envío. Existe un único Arduino y un único puerto serie, de modo que el acceso al hardware está necesariamente serializado. La serialización la impone la propia interfaz de comunicación (sección~\ref{subsec:actuacion-interfaz}).
+Esta concurrencia en la recepción no puede trasladarse al envío. Existe un único Arduino y un único puerto serie, de modo que el acceso al hardware está necesariamente serializado. La serialización la impone la propia interfaz de comunicación (anexo~\ref{subsec:actuacion-interfaz}).
 
 \begin{figure}[H]
     \centering
@@ -178,199 +178,40 @@ Esta concurrencia en la recepción no puede trasladarse al envío. Existe un ún
 \section{Nodo de captura y detección}
 \label{sec:nodo-camara}
 
-El nodo de captura (sección~\ref{sec:arquitectura}) se divide en dos componentes: el nodo de ROS~2, que gestiona la comunicación y los modos de funcionamiento, y un objeto que encapsula la operaciones de visión artificial con las que se obtiene el centroide de cada pegatina. Logrando desacoplar el procesamiento de imagen de la comunicación.
+Todo lo que hace este nodo para localizar el coche sobre la pista está heredado de los trabajos de Mario López~\cite{tfgmario} y de Adrián Rego~\cite{tfgadrian}, y ninguna de las técnicas que emplea es aportación de este trabajo. La detección se hace por color: el fotograma se pasa al espacio HSV, se genera una máscara con los píxeles que caen dentro del rango del color de cada pegatina y, después de limpiarla con operaciones morfológicas, el centroide del contorno de mayor área da la posición de la pegatina. Durante la calibración esa búsqueda se hace sobre el fotograma completo, y las posiciones que se van acumulando sirven para construir una máscara que deja fuera todo lo que no esté junto al carril; en carrera la búsqueda se restringe a una región de interés de $150 \times 150$ píxeles, centrada en la posición que se predice extrapolando el movimiento de los dos últimos fotogramas, e intersecada con esa máscara. Si el coche se pierde, por una oclusión o por un derrape, la región se va ampliando hasta recuperarlo. Con ese mismo procedimiento de detección por color, cada nodo busca al arrancar la etiqueta que marca la línea de meta y, si la ve, publica el segmento que la define, que es lo que permite a los controladores contar vueltas.
 
-\subsection{Detección de las pegatinas por color}
-\label{subsec:deteccion-etiquetas}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.6\textwidth]{imaxes/IMPLEMENTACION/deteccion_2_pegatinas.png}
-    \caption{Ejemplo de detección de las dos pegatinas del coche}
-    \label{fig:deteccion-2-pegatinas}
-\end{figure}
-
-La detección hereda el procedimiento del trabajo de Mario López~\cite{tfgmario}. El fotograma se convierte al espacio HSV, que resiste mejor las variaciones de iluminación, y se genera una máscara binaria por pegatina con los píxeles que caen dentro del rango de su color. Están predefinidos para cada uno de los siete colores admitidos. Sobre cada máscara se encadenan una apertura morfológica, que elimina los píxeles aislados, y un cierre morfológico, que rellena los huecos de las regiones válidas.
-
-Se extraen entonces los contornos externos y se toma el de mayor área, descartándolo si no supera un área mínima configurable. De este proceso se obtiene el rectángulo delimitador y el centroide de la pegatina, el significado para cada pegatina se describió en la sección~\ref{sec:arquitectura}. La figura~\ref{fig:deteccion-color} recorre estas etapas sobre un fotograma real.
-
-\begin{figure}[tbp]
-    \centering
-    \begin{subfigure}[b]{0.48\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/det_color_a_original.png}
-        \caption{Fotograma capturado por la cámara}
-        \label{fig:deteccion-color-a}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.48\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/det_color_b_mascara.png}
-        \caption{Máscara del color de la pegatina verde delantera del coche azul}
-        \label{fig:deteccion-color-b}
-    \end{subfigure}
-
-    \vspace{0.7em}
-    \begin{subfigure}[b]{0.34\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/det_color_c_resultado.png}
-        \caption{Rectángulo y centroide detectados después de realizar las operaciones pertinentes}
-        \label{fig:deteccion-color-c}
-    \end{subfigure}
-    \caption{Ejemplo del proceso de detección que realiza el nodo camara para detectar una de las pegatinas del coche}
-    \label{fig:deteccion-color}
-\end{figure}
-
-\subsection{Diferencias entre calibración y carrera}
-\label{subsec:modos-funcionamiento}
-
-El nodo implementa los dos modos descritos en la sección~\ref{sec:modos_funcionamiento}, y la diferencia entre ambos está en la región del fotograma sobre la que busca.
-
-En calibración, cada detección de la pegatina delantera se añade a la lista que reconstruye la trayectoria del coche. Basta con la delantera, que es la que da una trayectoria limpia~\cite{tfgadrian}. Esto es porque la trasera puede quedar oculta a ratos y la ruta base debe registrarse sin interrupciones. Al mantener una trayectoria por coche, la cámara puede filtrar por carril en carrera y dos coches pueden compartir el color de la pegatina trasera. Durante todo este proceso se busca sobre el fotograma completo como el que se puede ver \ref{fig:deteccion-color-a}, es por ello que las pegatinas delanteras sí que tienen que ser de diferente color.
-
-La calibración termina por coche, no para todo el sistema. El nodo se suscribe al \emph{topic} de calibración de cada coche configurado y, al recibir el aviso de que uno ha completado su vuelta, genera su máscara con los puntos acumulados. Desde ese momento la búsqueda de ese coche queda restringida a una franja alrededor del recorrido conocido, como recoge la figura~\ref{fig:mascara-trayectoria}.
-
-\begin{figure}[tbp]
-    \centering
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/mascara_a_puntos.png}
-        \caption{Posiciones acumuladas durante la vuelta de calibración}
-        \label{fig:mascara-trayectoria-a}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/mascara_b_mascara.png}
-        \caption{Máscara generada a partir de la posición que sigue el coche}
-        \label{fig:mascara-trayectoria-b}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/mascara_c_filtrado.png}
-        \caption{Fotograma filtrado después de aplicar la mascara generada durante la calibración}
-        \label{fig:mascara-trayectoria-c}
-    \end{subfigure}
-    \caption{Ejemplo de proceso de generación de la máscara de trayectoria para un coche. Deja fuera el carril contrario, con lo que el coche que circula por él deja de ser un falso positivo posible.}
-    \label{fig:mascara-trayectoria}
-\end{figure}
-
-\subsection{Seguimiento mediante región de interés}
-\label{subsec:seguimiento-roi}
-
-En carrera la búsqueda se restringe a una región de interés de $150 \times 150$ píxeles centrada en la posición predicha para el coche. La predicción es la extrapolación lineal que introdujo Mario López~\cite{tfgmario}. Conocidas las dos últimas posiciones, el centro de la región es la actual más el vector de movimiento del último fotograma.
-
-Sobre ella se aplica además la máscara de trayectoria, de modo que solo sobreviven los píxeles que pertenecen a la vez a la región y a las proximidades del carril; la intersección de ambos filtros procede también de los trabajos previos~\cite{tfgmario,tfgadrian}. La detección de las pegatinas (\ref{subsec:deteccion-etiquetas}) se realiza sobre esa imagen reducida, se puede ver un ejemplo en \ref{fig:roi-filtrado}. El problema que presenta hacerlo de esta manera es que sus coordenadas son relativas a la región y hay que trasladarlas al sistema de referencia de la cámara antes de publicarlas.
-
-\begin{figure}[tbp]
-    \centering
-    \begin{subfigure}[b]{0.55\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/roi_a_recuadro.png}
-        \caption{Región de interés marcada sobre todo el fotograma}
-        \label{fig:roi-filtrado-a}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.38\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/roi_b_extrapolacion.png}
-        \caption{Extrapolación de la posición}
-        \label{fig:roi-filtrado-b}
-    \end{subfigure}
-
-    \vspace{0.7em}
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/roi_c_recorte.png}
-        \caption{Recorte de la región}
-        \label{fig:roi-filtrado-c}
-    \end{subfigure}
-    \hspace{0.04\textwidth}
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/roi_d_filtrado.png}
-        \caption{Región tras la intersección entre la mascara y el ROI}
-        \label{fig:roi-filtrado-d}
-    \end{subfigure}
-    \caption{Explicación del proceso de obtención del ROI y aplicación dentro del sistema. En el detalle, las dos flechas encadenadas son el desplazamiento medido entre los dos últimos fotogramas. La cruz marca la posición predicha, que en este fotograma cae a 1,6 píxeles de la real. El último panel es lo único que llega al detector de color.}
-    \label{fig:roi-filtrado}
-\end{figure}
-
-\subsection{Readquisición del seguimiento}
-\label{subsec:readquisicion}
-
-Las oclusiones son habituales en un circuito de Scalextric~\cite{tfgmario}, y un derrape brusco puede alejar el coche de la posición predicha. En ambos casos la detección fracasa y hay que recuperar el seguimiento.
-
-La estrategia es ampliar progresivamente la zona de búsqueda. Cada fotograma sin detección incrementa el tamaño de la región en 50 píxeles, hasta abarcar como máximo la imagen completa. Los trabajos previos pasaban de golpe a examinar toda la proximidad de la trayectoria; el crecimiento gradual acota el coste de los fotogramas inmediatamente posteriores a la pérdida.
-
-Al perder el seguimiento se descartan las posiciones anteriores, como ya hacía Mario López~\cite{tfgmario}, para que la extrapolación no combine un punto previo a la pérdida con el primero posterior y sitúe la región lejos del coche. La primera detección tras readquirir centra la región sobre la posición encontrada.
-
-\subsection{Detección de la línea de meta}
-\label{subsec:deteccion-meta}
-
-La línea de meta se señaliza con una etiqueta alargada de un color reservado que atraviesa la pista. Se detecta una sola vez, al arrancar el nodo, porque su posición no cambia durante la carrera.
-
-El procedimiento empleado para la detección de la línea de meta es el de Adrián Rego~\cite{tfgadrian}. Al igual que en la detección de las pegatinas, el fotograma se convierte al espacio de color HSV y se genera una máscara binaria con el rango del color reservado para la meta (se puede cambiar desde el fichero de configuración \ref{subsec:params-yaml}), de forma que se genera una mascara binaria con los píxeles de la etiqueta. Sobre está se aplica un cierre morfólogico con un tamaño de \emph{kernel} muy grande, porque los raíles y las ranuras de la pista atraviesan la etiqueta y la fragmentan en trozos que hay que unir en una única región. Sobre está región se calcula el rectángulo de área mínima que lo encierra, el cual, a diferencia del rectángulo delimitador convencional, puede estar rotado y se adapta así a la orientación real de la linea de meta. De sus cuatro vértices se identifican los dos lados cortos comparando las longitudes de las aristas adyacentes, y el segmento que une sus puntos medios define la línea de meta. La figura~\ref{fig:deteccion-meta} muestra las tres etapas del proceso.
-
-\begin{figure}[tbp]
-    \centering
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/meta_a_mascara.png}
-        \caption{Máscara del color de la meta}
-        \label{fig:deteccion-meta-a}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/meta_b_cierre.png}
-        \caption{Tras el cierre morfológico}
-        \label{fig:deteccion-meta-b}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/meta_c_segmento.png}
-        \caption{Rectángulo y segmento}
-        \label{fig:deteccion-meta-c}
-    \end{subfigure}
-    \caption{Detección de la línea de meta en la cámara~2. Los raíles parten la etiqueta en tres trozos que el cierre morfológico vuelve a unir; sobre la región resultante se ajusta el rectángulo de área mínima, rotado, y los puntos medios de sus lados cortos dan el segmento de meta.}
-    \label{fig:deteccion-meta}
-\end{figure}
-
-Cada nodo la busca al arrancar y, si no la ve, no publica línea de meta alguna. Por lo que en un despliegue multicámara solo lo hace la que observa la linea y generando el mensaje correspondiente (cuadro~\ref{tab:mensajes}). No hay, por tanto, una cámara de meta designada de antemano por el usuario.
+Aunque las ideas son heredadas, hubo que implementarlas de nuevo. El código de los trabajos previos era una aplicación de escritorio monolítica, con el procesamiento de imagen entrelazado con la interfaz gráfica y con el resto del control, de modo que no había ningún componente que pudiera extraerse y reutilizarse como nodo que publicase posiciones en la red. En la parte de detección por color esa reescritura no fue inmediata, porque además de trasladarla a un nodo tenía que sostener varios coches a la vez sobre la misma cámara. El detalle de cada etapa, con ejemplos sobre fotogramas reales, se recoge en el anexo~\ref{chap:anexo-captura}.
 
 \section{Nodo de control de carril}
 \label{sec:control-rail}
 
 El nodo controlador, uno por raíl según la sección~\ref{sec:arquitectura}, se divide como el de captura en dos componentes: el nodo de ROS~2, que gestiona la comunicación, los modos de funcionamiento y la detección del paso por meta, y un objeto que encapsula el algoritmo de velocidad, cuya implementación se detalla en la sección~\ref{sec:implementacion-algoritmo}.
 
-\subsection{Construcción de la trayectoria base}
-\label{subsec:control-modos}
-
-El nodo implementa los dos modos descritos en la sección~\ref{sec:modos_funcionamiento}, y su comportamiento cambia por completo de uno a otro.
-
-Durante la calibración el controlador acumula la posición de la pegatina delantera en un diccionario indexado por cámara: cada nodo de captura del que recibe mensajes tiene su propia lista de puntos y en ningún momento se construye una lista única con el circuito completo. Lo que delimita la acumulación es el paso por meta. Los puntos se recogen entre el primer cruce y el segundo, de modo que cada trayectoria base es una única vuelta que empieza en la meta; todo lo anterior, colocar el coche, arrancarlo y las vueltas que dé mientras se levanta el sistema, se descarta. El nodo sabe por sí solo cuándo terminar, porque es él quien detecta el paso por meta de su coche (sección~\ref{subsec:control-meta}).
-
-Al cerrarse la vuelta el controlador lo notifica en su \emph{topic} de calibración, filtra cada lista descartando los puntos que queden a menos de un umbral configurable del último aceptado, crea una instancia del algoritmo por cada cámara del diccionario, le inyecta su trayectoria y guarda una copia en la caché de la sección~\ref{subsec:cache-calibracion}.
-	
-Que se cierre sola es un requisito de la arquitectura. En los trabajos previos la arrancaba y la daba por concluida una persona desde una interfaz gráfica: había que delimitar el coche con un rectángulo y marcar la meta a mano~\cite{tfgmario}, o seleccionar el vehículo, activar el modo de búsqueda y confirmar los valores obtenidos~\cite{tfgadrian}. Con los nodos repartidos entre varias máquinas y sin interfaz desde la que supervisarlos, la calibración tiene que delimitarse y terminarse con la información que ya circula por la red.
-
-En modo carrera el controlador deja de acumular puntos y pasa a enrutar. Cada mensaje de posición de su coche se entrega a la instancia del algoritmo de la cámara que lo originó, identificada por el campo \texttt{camara\_id} del mensaje (sección~\ref{subsec:mensajes-propios}). La instancia devuelve el valor de PWM que hay que aplicar, que el controlador publica en su \emph{topic} de consigna, o bien la indicación de descartar el fotograma, en cuyo caso se mantiene el último valor válido. El funcionamiento interno del algoritmo se detalla en la sección~\ref{sec:implementacion-algoritmo}.
-
-Si se ordena volver al modo calibración, se descartan las trayectorias y las instancias y el proceso empieza de cero.
-
-\subsection{Control automático y control manual}
-\label{subsec:control-automatico-manual}
-
-Cerrada la calibración, el controlador entra en modo carrera y pasa de acumular puntos a enrutar posiciones. Es la pieza del sistema que aplica el algoritmo de velocidad, y cómo lo hace depende del indicador \texttt{modo\_manual} del coche, que se declara en el fichero de parámetros (sección~\ref{subsec:params-yaml}) y determina desde qué fichero de lanzamiento se levanta el nodo (sección~\ref{subsec:launch-files}).
-
-En control automático, cada mensaje de posición de su coche se entrega a la instancia del algoritmo de la cámara que lo originó, identificada por el campo \texttt{camara\_id} del mensaje (sección~\ref{subsec:mensajes-propios}). La instancia devuelve el valor de PWM que hay que aplicar, que el controlador publica en su \emph{topic} de consigna para que lo recoja el nodo puente, o bien la indicación de descartar el fotograma, en cuyo caso se mantiene el último valor válido. El controlador no decide nada por su cuenta: toda la lógica de control reside en el algoritmo, cuya implementación se detalla en la sección~\ref{sec:implementacion-algoritmo}.
-
-En control manual conduce una persona con el mando y el controlador no publica consigna alguna, de modo que el nodo puente nunca toca ese carril (sección~\ref{subsec:actuacion-topics}). El nodo hace por lo demás el mismo trabajo: calibra, sigue recibiendo posiciones, cuenta las vueltas de su coche y publica su telemetría. Sirve para registrar una carrera conducida por una persona con el mismo formato de datos que una automática, de manera que ambas puedan compararse después con la herramienta de análisis (sección~\ref{subsec:visualizacion-analisis}).
-
-Una carrera mixta, con coches de los dos tipos, se consigue levantando a la vez los dos ficheros de lanzamiento, tal como se describe en la sección~\ref{subsec:launch-files}.
+%\subsection{Construcción de la trayectoria base}
+%\label{subsec:control-modos}
+%
+%El nodo implementa los dos modos descritos en la sección~\ref{sec:modos_funcionamiento}, y su comportamiento cambia por completo de uno a otro.
+%
+%Durante la calibración el controlador acumula la posición de la pegatina delantera en un diccionario indexado por cámara: cada nodo de captura del que recibe mensajes tiene su propia lista de puntos y en ningún momento se construye una lista única con el circuito completo. Lo que delimita la acumulación es el paso por meta. Los puntos se recogen entre el primer cruce y el segundo, de modo que cada trayectoria base es una única vuelta que empieza en la meta; todo lo anterior, colocar el coche, arrancarlo y las vueltas que dé mientras se levanta el sistema, se descarta. El nodo sabe por sí solo cuándo terminar, porque es él quien detecta el paso por meta de su coche (sección~\ref{subsec:control-meta}).
+%
+%Al cerrarse la vuelta el controlador lo notifica en su \emph{topic} de calibración, filtra cada lista descartando los puntos que queden a menos de un umbral configurable del último aceptado, crea una instancia del algoritmo por cada cámara del diccionario, le inyecta su trayectoria y guarda una copia en la caché de la sección~\ref{subsec:cache-calibracion}.
+%	
+%Que se cierre sola es un requisito de la arquitectura. En los trabajos previos la arrancaba y la daba por concluida una persona desde una interfaz gráfica: había que delimitar el coche con un rectángulo y marcar la meta a mano~\cite{tfgmario}, o seleccionar el vehículo, activar el modo de búsqueda y confirmar los valores obtenidos~\cite{tfgadrian}. Con los nodos repartidos entre varias máquinas y sin interfaz desde la que supervisarlos, la calibración tiene que delimitarse y terminarse con la información que ya circula por la red.
+%
+%En modo carrera el controlador deja de acumular puntos y pasa a enrutar. Cada mensaje de posición de su coche se entrega a la instancia del algoritmo de la cámara que lo originó, identificada por el campo \texttt{camara\_id} del mensaje (sección~\ref{subsec:mensajes-propios}). La instancia devuelve el valor de PWM que hay que aplicar, que el controlador publica en su \emph{topic} de consigna, o bien la indicación de descartar el fotograma, en cuyo caso se mantiene el último valor válido. El funcionamiento interno del algoritmo se detalla en la sección~\ref{sec:implementacion-algoritmo}.
+%
+%Si se ordena volver al modo calibración, se descartan las trayectorias y las instancias y el proceso empieza de cero.
+%
+%\subsection{Control automático y control manual}
+%\label{subsec:control-automatico-manual}
+%
+%Cerrada la calibración, el controlador entra en modo carrera y pasa de acumular puntos a enrutar posiciones. Es la pieza del sistema que aplica el algoritmo de velocidad, y cómo lo hace depende del indicador \texttt{modo\_manual} del coche, que se declara en el fichero de parámetros (sección~\ref{subsec:params-yaml}) y determina desde qué fichero de lanzamiento se levanta el nodo (sección~\ref{subsec:launch-files}).
+%
+%En control automático, cada mensaje de posición de su coche se entrega a la instancia del algoritmo de la cámara que lo originó, identificada por el campo \texttt{camara\_id} del mensaje (sección~\ref{subsec:mensajes-propios}). La instancia devuelve el valor de PWM que hay que aplicar, que el controlador publica en su \emph{topic} de consigna para que lo recoja el nodo puente, o bien la indicación de descartar el fotograma, en cuyo caso se mantiene el último valor válido. El controlador no decide nada por su cuenta: toda la lógica de control reside en el algoritmo, cuya implementación se detalla en la sección~\ref{sec:implementacion-algoritmo}.
+%
+%En control manual conduce una persona con el mando y el controlador no publica consigna alguna, de modo que el nodo puente nunca toca ese carril (anexo~\ref{subsec:actuacion-topics}). El nodo hace por lo demás el mismo trabajo: calibra, sigue recibiendo posiciones, cuenta las vueltas de su coche y publica su telemetría. Sirve para registrar una carrera conducida por una persona con el mismo formato de datos que una automática, de manera que ambas puedan compararse después con la herramienta de análisis (sección~\ref{subsec:visualizacion-analisis}).
+%
+%Una carrera mixta, con coches de los dos tipos, se consigue levantando a la vez los dos ficheros de lanzamiento, tal como se describe en la sección~\ref{subsec:launch-files}.
 
 \subsection{Detección del paso por meta y medición de tiempos}
 \label{subsec:control-meta}
@@ -437,7 +278,7 @@ La sección~\ref{subsec:derrape-arquitectura} exige que exista una señal capaz 
 
 La detección se implementa como una máquina de estados que se alimenta en cada fotograma con la celda y la distancia perpendicular de la pegatina trasera. Cuando la distancia supera el umbral de derrape se abre uno y se anota la celda inicial, mientras se mantenga por encima, el derrape se prolonga actualizando su celda final; cuando vuelve a caer por debajo, se cierra. No se abren derrapes junto a los extremos de la cadena ni junto a las celdas gigantes, donde la medida no es fiable.
 
-La figura~\ref{fig:secuencia-derrape} ejemplifica un caso donde se puede ver el proceso real de derrape del coche. Con el coche alineado la pegatina trasera va sobre el carril y su distancia a la trayectoria es casi nula; al abrirse la parte trasera la distancia perpendicular del centroide de la pegatina a la trayectoria crece hasta superar el umbral, que es lo que abre el derrape, se puede ver en la figura~\ref{fig:derrape-trazas-b}. En el instante más violento el coche queda atravesado y ninguna de las dos pegatinas se detecta, situación que resuelve la readquisición de la sección~\ref{subsec:readquisicion}.
+La figura~\ref{fig:secuencia-derrape} ejemplifica un caso donde se puede ver el proceso real de derrape del coche. Con el coche alineado la pegatina trasera va sobre el carril y su distancia a la trayectoria es casi nula; al abrirse la parte trasera la distancia perpendicular del centroide de la pegatina a la trayectoria crece hasta superar el umbral, que es lo que abre el derrape, se puede ver en la figura~\ref{fig:derrape-trazas-b}. En el instante más violento el coche queda atravesado y ninguna de las dos pegatinas se detecta, situación que resuelve la readquisición del seguimiento (anexo~\ref{subsec:readquisicion}).
 
 \begin{figure}[tbp]
     \centering
@@ -544,32 +385,9 @@ Las figuras~\ref{fig:derrape-trazas} y~\ref{fig:derrape-dist} recorren el ciclo 
 \section{Nodo de actuación}
 \label{sec:sistema-actuacion}
 
-El nodo de actuación envía hacia el Arduino los valores de PWM calculados por los controladores. Está formado por dos componentes, en primer lugar el nodo puente de ROS~2, que centraliza la recepción de las consignas de todos los controladores, y en segundo lugar el subsistema hardware, compuesto por la placa Arduino y el módulo controlador de motores (L293D).
+El último eslabón del sistema es el que convierte en tensión sobre los raíles las consignas que llegan por la red. Detrás del nodo puente hay una placa Elegoo Uno R3 con un módulo controlador L293D (sección~\ref{sec:tecnoloxias-hardware}), conectada por USB a la máquina en la que corre el nodo, y de la que salen hacia la pista dos salidas de potencia, una por carril. La traducción es directa: el nodo puente recibe el PWM que publica cada controlador y lo escribe en el puerto serie como una línea de texto con el carril y el valor, y el firmware de la placa aplica ese valor como ciclo de trabajo del pin PWM del carril indicado, siendo 0 el carril detenido y 255 el ciclo completo. De ahí sale el rango de valores con el que trabaja todo el sistema. Como el puente es el único nodo con acceso al hardware, es también donde se serializan los envíos y donde se descartan las consignas repetidas y las que caen fuera de ese rango.
 
-\subsection{Tratamiento de las consignas recibidas}
-\label{subsec:actuacion-topics}
-
-El nodo puente es un nodo puramente consumidor, no publica nada, se limita a suscribirse a los \emph{topics} en los que cada controlador anuncia el PWM de su carril. Las suscripciones se generan dinámicamente, una por cada coche declarado en la lista de configuración, \ref{subsec:params-yaml}.
-
-De cada mensaje extrae el identificador del carril y su valor de PWM, y le aplica dos comprobaciones antes de mandarlo al puerto serie. La primera es un filtro de repetición, el nodo guarda el último valor enviado a cada carril y descarta el mensaje si coincide con él. Como los controladores publican una consigna por cada posición recibida y el PWM se mantiene estable durante tramos enteros del circuito, este filtro reduce drásticamente el tráfico sobre el puerto. La segunda es una validación del rango admitido por el hardware, entre 0 y 255, como última barrera frente a consignas mal formadas.
-
-El nodo se suscribe también al \emph{topic} de calibración de cada coche que este configurado para control automatico. Durante esa fase es él quien aplica al carril un valor de potencia que permite tener una velocidad de calibración constante, porque los controladores todavía no publican consigna alguna. En cuanto un coche cierra su vuelta se pasa a aplicar el valor que publica el controlador. Los carriles de los coches marcados como manuales no se tocan en ningún momento.
-
-\subsection{Comunicación con el Arduino}
-\label{subsec:actuacion-interfaz}
-
-La comunicación con la placa se encapsula, como en el trabajo de Adrián Rego~\cite{tfgadrian}, en una clase independiente que forma parte del nodo y que abstrae, la complejidad de la comunicación con el puerto serie, en operaciones de alto nivel: fijar la velocidad de un carril, la de ambos o detenerlos. Al inicializarse enumera los puertos disponibles y, si el configurado no está, toma el primer dispositivo compatible que encuentre; después espera a que la placa termine de reiniciarse, vacía el búfer de entrada y detiene ambos carriles, de modo que el sistema arranca siempre desde un estado seguro.
-
-El protocolo es textual y mínimo. Cada orden es una línea de la forma \texttt{r<carril>:<valor>}, por ejemplo \texttt{r1:120}, donde el primer campo identifica el carril y el segundo el PWM a aplicar. El envío es bloqueante, tras escribir la orden la interfaz espera la confirmación de la placa (\texttt{OK}) y solo entonces da la operación por completada; si no llega dentro del tiempo límite, el envío se considera fallido. Aquí ese carácter bloqueante es lo que serializa el acceso.
-
-\subsection{Subsistema hardware}
-\label{subsec:actuacion-hardware}
-
-El subsistema hardware traduce las órdenes recibidas por el puerto serie en la tensión que se aplica sobre los raíles. El montaje es el del trabajo de Adrián Rego~\cite{tfgadrian} y se reutiliza sin cambios. La placa se conecta al ordenador por USB, que es a la vez el canal serie y la alimentación de los motores, y del módulo controlador parten hacia la pista una masa común y dos salidas de potencia, una por carril. Los componentes se describen en la sección~\ref{sec:tecnoloxias-hardware}.
-
-Sobre la placa corre un firmware sencillo, cargado con el IDE de Arduino, que configura los pines de salida PWM, lee el puerto serie a la espera de órdenes y, por cada línea recibida, aplica la señal sobre el pin del carril indicado y responde con la confirmación que la interfaz espera. El ciclo de trabajo del pin es proporcional al valor recibido: 0 corresponde a un ciclo nulo, con el carril detenido, y 255 al ciclo completo; de ahí sale el rango que valida el nodo puente.
-
-Lo que aporta este trabajo no es el montaje, sino su encaje en la arquitectura distribuida. En el trabajo previo la interfaz vivía dentro de una aplicación de escritorio que era también quien procesaba las imágenes y decidía las velocidades; aquí queda detrás del nodo puente el cual permite una comunicación y controla el acceso.
+Tanto el montaje como la comunicación con la placa son los del trabajo de Adrián Rego~\cite{tfgadrian} y se reutilizan sin cambios: bastó con recuperar su interfaz serie, comprobar que funcionaba y dejarla detrás del nodo puente. El anexo~\ref{chap:anexo-actuacion} recoge el detalle del nodo, del protocolo serie y del subsistema hardware.
 
 \section{Sistema de visualización y análisis}
 \label{sec:sistema-visualizacion}

@@ -1,0 +1,29 @@
+\chapter{Detalle del nodo de actuación}
+\label{chap:anexo-actuacion}
+
+\lettrine{E}{n} este anexo se detalla el nodo de actuación, resumido en la sección~\ref{sec:sistema-actuacion}. El nodo envía hacia el Arduino los valores de PWM calculados por los controladores y está formado por dos componentes, en primer lugar el nodo puente de ROS~2, que centraliza la recepción de las consignas de todos los controladores, y en segundo lugar el subsistema hardware, compuesto por la placa Arduino y el módulo controlador de motores (L293D).
+
+\section{Tratamiento de las consignas recibidas}
+\label{subsec:actuacion-topics}
+
+El nodo puente es un nodo puramente consumidor, no publica nada, se limita a suscribirse a los \emph{topics} en los que cada controlador anuncia el PWM de su carril. Las suscripciones se generan dinámicamente, una por cada coche declarado en la lista de configuración, \ref{subsec:params-yaml}.
+
+De cada mensaje extrae el identificador del carril y su valor de PWM, y le aplica dos comprobaciones antes de mandarlo al puerto serie. La primera es un filtro de repetición, el nodo guarda el último valor enviado a cada carril y descarta el mensaje si coincide con él. Como los controladores publican una consigna por cada posición recibida y el PWM se mantiene estable durante tramos enteros del circuito, este filtro reduce drásticamente el tráfico sobre el puerto. La segunda es una validación del rango admitido por el hardware, entre 0 y 255, como última barrera frente a consignas mal formadas.
+
+El nodo se suscribe también al \emph{topic} de calibración de cada coche que este configurado para control automatico. Durante esa fase es él quien aplica al carril un valor de potencia que permite tener una velocidad de calibración constante, porque los controladores todavía no publican consigna alguna. En cuanto un coche cierra su vuelta se pasa a aplicar el valor que publica el controlador. Los carriles de los coches marcados como manuales no se tocan en ningún momento.
+
+\section{Comunicación con el Arduino}
+\label{subsec:actuacion-interfaz}
+
+La comunicación con la placa se encapsula, como en el trabajo de Adrián Rego~\cite{tfgadrian}, en una clase independiente que forma parte del nodo y que abstrae, la complejidad de la comunicación con el puerto serie, en operaciones de alto nivel: fijar la velocidad de un carril, la de ambos o detenerlos. Al inicializarse enumera los puertos disponibles y, si el configurado no está, toma el primer dispositivo compatible que encuentre; después espera a que la placa termine de reiniciarse, vacía el búfer de entrada y detiene ambos carriles, de modo que el sistema arranca siempre desde un estado seguro.
+
+El protocolo es textual y mínimo. Cada orden es una línea de la forma \texttt{r<carril>:<valor>}, por ejemplo \texttt{r1:120}, donde el primer campo identifica el carril y el segundo el PWM a aplicar. El envío es bloqueante, tras escribir la orden la interfaz espera la confirmación de la placa (\texttt{OK}) y solo entonces da la operación por completada; si no llega dentro del tiempo límite, el envío se considera fallido. Aquí ese carácter bloqueante es lo que serializa el acceso.
+
+\section{Subsistema hardware}
+\label{subsec:actuacion-hardware}
+
+El subsistema hardware traduce las órdenes recibidas por el puerto serie en la tensión que se aplica sobre los raíles. El montaje es el del trabajo de Adrián Rego~\cite{tfgadrian} y se reutiliza sin cambios. La placa se conecta al ordenador por USB, que es a la vez el canal serie y la alimentación de los motores, y del módulo controlador parten hacia la pista una masa común y dos salidas de potencia, una por carril. Los componentes se describen en la sección~\ref{sec:tecnoloxias-hardware}.
+
+Sobre la placa corre un firmware sencillo, cargado con el IDE de Arduino, que configura los pines de salida PWM, lee el puerto serie a la espera de órdenes y, por cada línea recibida, aplica la señal sobre el pin del carril indicado y responde con la confirmación que la interfaz espera. El ciclo de trabajo del pin es proporcional al valor recibido: 0 corresponde a un ciclo nulo, con el carril detenido, y 255 al ciclo completo; de ahí sale el rango que valida el nodo puente.
+
+Lo que aporta este trabajo no es el montaje, sino su encaje en la arquitectura distribuida. En el trabajo previo la interfaz vivía dentro de una aplicación de escritorio que era también quien procesaba las imágenes y decidía las velocidades; aquí queda detrás del nodo puente el cual permite una comunicación y controla el acceso.
