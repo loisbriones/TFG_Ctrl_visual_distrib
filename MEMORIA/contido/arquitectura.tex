@@ -4,15 +4,23 @@
 \section{Arquitectura general del sistema}
 \label{sec:arquitectura}
 
-En esta sección vamos a ver las dos fases por las que pasa el sistema. En primer lugar en la sección~\ref{subsec:fase-operacion}, donde explicaremos el funcionamiento normal del sistema. En segundo lugar veremos en la sección~\ref{subsec:fase-calibracion}, donde se detalla una etapa que el sistema tiene que pasar para inicializar correctamente el sistema y finalmente veremos los diferentes modos de control que puede aplicar el sistema en la sección~\ref{subsec:modos-funcionamiento}
+En esta sección se describen las dos fases por las que pasa el sistema. Primero la fase de operación, que es el funcionamiento normal y en el que transcurre la mayor parte del tiempo. Después la fase de calibración, por la que hay que pasar antes para inicializarlo correctamente. Y por último, los distintos modos de control que se pueden aplicar sobre el coche.
 
 \subsection{Fase operacion}
 \label{subsec:fase-operacion}
-En un Scalextric analógico cada carril alimenta a un único coche y a través del mando se regula la tensión que se le aplica, de modo que controlar un coche se reduce a decidir en cada instante qué tensión aplicar a su carril. En la arquitectura propuesta, recogida en la figura~\ref{fig:arquitectura-general}, de eso se encarga el \textbf{nodo de potencia}, que recibe órdenes a través de la red y las aplica sobre el circuito mediante señales PWM, es el único nodo con acceso al hardware. Esas órdenes las publican los \textbf{nodos de control}, uno por cada carril del circuito, que reciben como entrada la posición del coche y deciden a partir de ella qué potencia aplicar en cada momento. La forma en la que toma la decisión depende del modo de funcionamiento que se detalle en la sección~\ref{subsec:modos-funcionamiento}; además, miden el tiempo que tarda el coche en completar una vuelta, que es la referencia para valorar lo bien que se está controlando. La posición la emiten los \textbf{nodos cámara}, encargados de localizar el coche en la pista. Cada uno trabaja con una única cámara física, que es la que le suministra los fotogramas. En cada fotograma se buscan las dos pegatinas que lleva el coche, una delantera y otra trasera, y mediante técnicas de visión artificial se obtienen sus centroides, que son la información que se publica en la red. El nodo cámara que cubre el tramo de la meta detecta también la línea que la marca y la publica, sin la cual los nodos de control no podrían contar las vueltas.
+
+\begin{figure}[tbp]
+    \centering
+    \includegraphics[width=0.4\textwidth]{imaxes/IMPLEMENTACION/deteccion_2_pegatinas.png}
+    \caption{Ejemplo de detección de las dos pegatinas del coche}
+    \label{fig:deteccion-2-pegatinas}
+\end{figure}
+
+En un Scalextric analógico cada carril alimenta a un único coche y a través del mando se regula la tensión que se le aplica, de modo que controlar un coche se reduce a decidir en cada instante qué tensión aplicar a su carril. En la arquitectura propuesta, recogida en la figura~\ref{fig:arquitectura-general}, de eso se encarga el \textbf{nodo de potencia}, que recibe órdenes a través de la red y las aplica sobre el circuito mediante señales PWM, es el único nodo con acceso al hardware. Esas órdenes las publican los \textbf{nodos de control}, uno por cada carril del circuito, que reciben como entrada la posición del coche y deciden a partir de ella qué potencia aplicar en cada momento. La forma en la que toma la decisión depende del modo de funcionamiento que se detalle en la sección~\ref{subsec:modos-operacion}; además, miden el tiempo que tarda el coche en completar una vuelta, que es la referencia para valorar lo bien que se está controlando. La posición la emiten los \textbf{nodos cámara}, encargados de localizar el coche en la pista. Cada uno trabaja con una única cámara física, que es la que le suministra los fotogramas. En cada fotograma se buscan las dos pegatinas que lleva el coche, una delantera y otra trasera, y mediante técnicas de visión artificial se obtienen sus centroides, que son la información que se publica en la red, se puede ver un ejemplo en la figura~\ref{fig:deteccion-2-pegatinas}. El nodo cámara que cubre el tramo de la meta detecta también la línea que la marca y la publica, sin la cual los nodos de control no podrían contar las vueltas.
 
 El proceso explicado anteriormente se corresponde con el modo de operación normal del sistema, donde pasa la mayor parte del tiempo, aunque inicialmente es necesario un modo de calibración para ajustar diferentes parámetros del circuito, que se detalla en la sección~\ref{sec:modo-calibracion}. Para alternar entre estos dos modos se utiliza un mensaje para avisar a todo el sistema de cuando hay que realizar el cambio. 
 
-Fuera del lazo de control queda un último nodo, que escucha todo lo que circula por la red y lo almacena para su posterior análisis en diferido, permitiendo también ver el fotograma que las cámaras capturan durante el funcionamiento. 
+Fuera del lazo de control queda un último nodo, que escucha todo lo que circula por la red y lo almacena para su posterior análisis en diferido. También tiene u n sistema de visualización que permite ver información de la carrera en directo mientras está trancurriendo. 
 
 Cabe destacar que la arquitectura no obliga a repartir los nodos por la red, por tanto cualquier combinación de ellos puede convivir en la misma máquina, hasta el punto de poder ejecutar el sistema completo en una sola.
 
@@ -28,27 +36,65 @@ Cada uno de los nodos descritos anteriormente tiene su equivalente dentro de ROS
 \subsection{Fase de calibración}
 \label{subsec:fase-calibracion}
 
-Todo lo descrito hasta ahora corresponde al modo de operación, en el que el sistema pasa la mayor parte del tiempo. Antes de llegar a él hace falta una fase de calibración, cuyo objetivo es obtener la trayectoria que sigue cada coche sobre su carril. Durante esta fase los nodos de control todavía no publican nada, así que es el nodo de potencia el que aplica una tensión constante para que los coches recorran el circuito. Los nodos cámara buscan sobre el fotograma completo, al no disponer aún de ninguna referencia con la que acotar la búsqueda, y publican la posición igual que en operación; los nodos de control acumulan esas posiciones hasta reconstruir el recorrido completo de su coche.
+Todo lo descrito hasta ahora corresponde al modo de operación, en el que el sistema pasa la mayor parte del tiempo. Antes de llegar a él hace falta una fase de calibración, cuyo objetivo es obtener la trayectoria que sigue cada coche sobre su carril, detallada en la sección~\ref{sec:trayectoria-base}. Durante esta fase los nodos de control todavía no publican nada, así que es el nodo de potencia el que aplica una tensión constante para que los coches recorran el circuito. Los nodos cámara buscan sobre el fotograma completo, al no disponer aún de ninguna referencia con la que acotar la búsqueda. Aunque sigue publicando la posición igual que en operación. Es una fase crítica para el correcto funcionamiento del sistema, porque el resto de funcionalidades se sustentan sobre ella.
 
-Esa trayectoria es la base sobre la que se apoya el resto del sistema. Permite discretizar el circuito para el control, como se explica en la sección~\ref{sec:algoritmo}, y delimitar la zona de la imagen en la que buscar el coche, lo que reduce el coste computacional. 
-
-El proceso de calibración empieza al cruzar la meta y termina al volver a pasar por ella. De forma que siempre se mide la misma inforamción, todo lo que había hasta ese momento se descarta. Consume una única vuelta y termina por sí sola, sin intervención humana, a diferencia de los trabajos previos. Ambas cosas importan porque es tiempo perdido para quien va a competir y porque, con los nodos repartidos por la red, nadie tiene desde dónde supervisarla.
+El proceso de calibración empieza al cruzar la meta y termina al volver a pasar por ella. De forma que siempre se mide la misma información, todo lo que había hasta ese momento se descarta. Consume una única vuelta y termina por sí sola, sin intervención humana, a diferencia de los trabajos previos. Ambas cosas importan porque es tiempo perdido para quien va a competir y porque, con los nodos repartidos por la red, es más complicado indicar que termine siempre en el mismo punto.
 
 La transición entre modos se coordina mediante el mensaje de cambio de modo (tabla~\ref{tab:mensajes}). Cualquier alteración que invalide la trayectoria aprendida, como modificar el trazado o desplazar una cámara, obliga a repetir la calibración, para lo que basta con ordenar de nuevo la transición sin reiniciar el sistema.
 
 \subsection{Modos de operación}
-\label{subsec:modos-funcionamiento}
+\label{subsec:modos-operacion}
 
-El nodo de control admite varios modos según cómo se decida el valor de tensión que se acaba aplicando al coche. En \textbf{modo manual} hace justo lo contrario a lo descrito en la fase de operación (sección~\ref{subsec:fase-operacion}), no publica valor y es la persona quien conduce con el mando. En \textbf{modo incremental} parte de un valor fijo y lo aumenta cada vez que el coche completa un número de vueltas dado. En \textbf{modo automático} la tensión la calcula el algoritmo de la sección~\ref{sec:algoritmo-arquitectura}, que determina en cada punto del circuito la tensión que hay que aplicar para controlar al coche. Por último, en \textbf{modo política} se le carga al nodo un perfil ya fijado, con un valor de tensión asociado a cada punto de la trayectoria base, seccion~\ref{subsec:trayectoria-base}, que se limita a aplicar sin actualizarlo.
+El nodo de control admite cuatro modos según cómo se decida el valor de tensión que se acaba aplicando al coche: manual, incremental, automático y por política.
 
-La política hay que determinarla a mano, indicando para cada punto de la trayectoria base (sección~\ref{subsec:trayectoria-base}) el valor de tensión que se le quiere asociar. El problema es que esa trayectoria no es la misma en dos ejecuciones distintas. Para aplicar una política definida sobre una trayectoria anterior habría que emparejar sus puntos con las de la trayectoria actual. A esto se añade que, si la cámara se ha desplazado, la nueva trayectoria aparece trasladada y rotada respecto a la original, así que antes de emparejar nada hay que llevar ambas a la misma referencia.
+En \textbf{modo manual} hace justo lo contrario a lo descrito en la fase de operación (sección~\ref{subsec:fase-operacion}), no publica valor y es la persona quien conduce con el mando. En \textbf{modo incremental} parte de un valor fijo y lo aumenta cada vez que el coche completa un número de vueltas dado. En \textbf{modo automático} la tensión la calcula el algoritmo de la sección~\ref{sec:algoritmo-arquitectura}, que determina en cada punto del circuito la tensión que hay que aplicar para controlar al coche. Por último, en \textbf{modo política} se le carga al nodo un perfil ya fijado, con un valor de tensión asociado a cada punto de la trayectoria base (sección~\ref{subsec:trayectoria-base}), se limita a aplicar esa politica sobre el circuito.
+
+La política hay que determinarla a mano, indicando para cada punto el valor de tensión que se le quiere asociar. El problema es que esa trayectoria no es la misma en dos ejecuciones distintas, así que para aplicar una política definida sobre una anterior habría que emparejar sus puntos con los de la actual. A esto se añade que, si la cámara se ha desplazado, la nueva trayectoria aparece trasladada y rotada respecto a la original, de modo que antes de emparejar nada hay que llevar ambas a la misma referencia.
+
+\section{Trayectoria base}
+\label{sec:trayectoria-base}
+
+\begin{figure}[tbp]
+    \centering
+    \includegraphics[width=0.4\textwidth]{imaxes/ARQUITECTURA/cacho_trayectoria_base.png}
+    \caption{Tramo de la trayectoria base de un coche}
+    \label{fig:cacho-trayectoria-base}
+\end{figure}
+
+\begin{figure}[tbp]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/mascara_a_puntos.png}
+        \caption{Fotograma original}
+        \label{fig:fotograma-completo}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/mascara_b_mascara.png}
+        \caption{Máscara de la trayectoria}
+        \label{fig:fotograma-mascara}
+    \end{subfigure}
+    \vspace{0.7em}
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/mascara_c_filtrado.png}
+        \caption{Resultado tras aplicarla}
+        \label{fig:fotograma-mascara-aplicada}
+    \end{subfigure}
+    \caption{Máscara generada por el nodo cámara a partir de la trayectoria base}
+    \label{fig:ejemplo-trayectoria-base-nodo-camara}
+\end{figure}
+
+La trayectoria base es el recorrido que sigue el coche sobre la pista, discretizado en una sucesión ordenada de puntos. Se construye durante la calibración (sección~\ref{subsec:fase-calibracion}) a partir de las posiciones de la pegatina delantera que publican los nodos cámara, porque es la que va siempre sobre el carril. Esas posiciones llegan repartidas de forma irregular, porque dependen de la velocidad del coche y de la cadencia de la cámara, así que una vez completada la vuelta el recorrido se interpola y se vuelve a muestrear colocando un punto cada cierta distancia, con lo que todos quedan separados por el mismo intervalo. Un ejemplo de la irregularidad se puede ver en la figura~\ref{fig:fotograma-completo}. Cada punto identifica así una posición concreta del circuito. Con más de un coche en pista hay que obtener una trayectoria por cada uno, ya que cada carril describe un recorrido distinto, y por eso sus pegatinas delanteras tienen que ser de colores diferentes, es lo que permite atribuir cada posición al coche que le corresponde. La figura~\ref{fig:cacho-trayectoria-base} muestra un tramo de la trayectoria base de un coche con sus puntos.
+
+Sobre esa representación se apoyan las dos partes principales del sistema. El nodo cámara la usa para generar una máscara que cubre una franja alrededor del recorrido conocido, con lo que la búsqueda del coche deja de hacerse sobre el fotograma completo y se reduce el coste de procesar cada fotograma, como recoge la figura~\ref{fig:ejemplo-trayectoria-base-nodo-camara}. El algoritmo de control asocia a cada punto un valor de PWM, que es el que se aplica cuando el coche pasa por él y el que se va ajustando a lo largo de la carrera.
 
 \section{Intercambio de información entre nodos}
 \label{sec:intercambio-informacion-nodos}
 
-En esta sección se explica el modelo de datos del sistema y la garantía de entrega que hay que aplicar sobre cada mensaje. Con garantía de entrega nos referimos a si el sistema puede permitirse o no perder ese mensaje.
-
-La tabla~\ref{tab:mensajes} recoge ambas cosas. Cada mensaje se describe en la subsección~\ref{subsec:modelo-datos} y la última columna se justifica en la subsección~\ref{subsec:garantia-entrega}.
+En esta sección se explica el modelo de datos del sistema y la garantía de entrega que hay que aplicar sobre cada mensaje.
 
 \begin{table}[tbp]
 	\centering
@@ -155,36 +201,25 @@ El algoritmo es el componente que decide, en cada instante y para cada punto del
  
 El diseño parte de una idea propuesta por Mario López Cea \cite{tfgmario}: los derrapes de un circuito dado no se reparten al azar, sino que se concentran siempre en las mismas zonas, de modo que esas zonas pueden aprenderse en carrera y tratarse de forma diferenciada. Adrián Rego \cite{tfgadrian} trasladó esa idea a un escenario de varias cámaras, aunque el resultado no llegó a ofrecer un control estable sobre el circuito completo. Este trabajo retoma el concepto original de zona de derrape y lo rediseña como un mecanismo de aprendizaje por vueltas que funciona sobre una porción del circuito y, por tanto, admite la ejecución distribuida.
 
-\subsection{Trayectoria base}
-\label{subsec:trayectoria-base}
-
-La representación del circuito con la que trabaja el algoritmo es la \textbf{trayectoria base} obtenida durante la calibración (sección~\ref{sec:modo-calibracion}). No se maneja como una curva continua, sino discretizada en una sucesión ordenada de \textbf{celdas} repartidas de forma uniforme a lo largo del recorrido, de modo que cada celda representa un punto concreto e identificable del circuito y la posición del coche en carrera se expresa siempre refiriéndola a una de ellas. La discretización introduce una pérdida de precisión acotada por el tamaño de celda. Pero permite tratarlas como un conjunto sobre el que tomar decisiones y permite acumular conocimiento sobre esas mismas undidades vuelta tras vuelta.
-
-Habría que decir que a cada una de las celdas se le aplica un valor de pwm que es lo que se va modificando
-
-Los saltos entre puntos consecutivos que superan un umbral reciben otro tratamiento. Corresponden a tramos que la cámara no ve, porque un puente o otro elemento tapan la pista, y no tiene sentido interpolar dentro de ellos. En su lugar se crea una única \emph{celda gigante} que registra la longitud real del hueco. Dentro de ella no puede localizarse el coche ni detectarse derrapes, pero se trata todo con un mismo valor de PWM.
-
 \subsection{El derrape como señal de exceso de velocidad}
 \label{subsec:derrape-arquitectura}
  
-Un \textbf{derrape} se produce cuando el coche entra en una curva a una velocidad para la que la adherencia disponible no consigue controlar el coche y la fuerza centrípeta causa que la parte trasera se abra y el vehículo deja de seguir el trazado. Lejos de aportar ninguna ventaja, es siempre una pérdida. En el mejor de los casos el coche pierde velocidad y empeora el tiempo de vuelta; en el peor abandona la pista, lo que obliga a recolocarlo manualmente y penaliza la carrera con un tiempo muy superior al de cualquier tramo mal recorrido.
+Un \textbf{derrape} se produce cuando el coche entra en una curva a una velocidad para la que la adherencia no consigue controlar el coche y la fuerza centrípeta causa que la parte trasera se abra y el vehículo deja de seguir el trazado. Lejos de aportar ninguna ventaja, es siempre una pérdida. En el mejor de los casos el coche pierde velocidad y empeora el tiempo de vuelta; en el peor abandona la pista, lo que obliga a recolocarlo manualmente y penaliza la carrera con un tiempo muy superior al de cualquier tramo mal recorrido.
  
 Para la arquitectura, lo relevante no es cómo se determina que se ha producido un derrape, sino que existe una señal capaz de indicar en qué punto del circuito el coche ha superado el límite de velocidad. Cómo se obtiene esa señal es una decisión de implementación, y admite soluciones muy distintas.
  
 \subsection{Zonas y políticas de ajuste}
 \label{subsec:zonas-politicas}
+Una \textbf{zona} es un conjunto de puntos consecutivos de la trayectoria base, delimitado por un punto inicial y uno final, que el algoritmo trata como una única unidad y al que asigna un mismo valor de PWM. Las zonas particionan la trayectoria y se dividen en dos clases: las zonas de derrape, que cubren los puntos en los que se ha detectado derrape, y las zonas libres de él. Al terminar la calibración toda la trayectoria es una única zona, porque todavía no se ha detectado ningún derrape, y es el propio funcionamiento del algoritmo el que la va partiendo a medida que aparecen.
 
-Una \textbf{zona} es un conjunto contiguo de celdas, delimitado por una celda inicial y una final, que el algoritmo trata como una única unidad. Las zonas particionan la trayectoria base y se dividen en dos clases: las zonas de derrape, que agrupan las celdas en las que se ha detectado derrape, y las zonas libres de él.
-
-Ahora bien, una zona de derrape no puede limitarse a las celdas en las que el derrape se manifiesta debe extenderse hacia atrás para incluir un tramo de anticipación. Corregir donde se detecta llega tarde por dos razones. La primera es que el error se cometió antesm si el coche se abre en mitad de la curva, la velocidad equivocada es la que llevaba al entrar en ella. La segunda es que la corrección tarda en surtir efecto, porque entre procesar la posición y aplicar la nueva orden el coche sigue avanzando, y después la inercia hace que la velocidad baje de forma progresiva. Extendiendo la zona hacia atrás, la decisión se traslada a la entrada de la curva y en las siguientes vueltas el coche llega ya frenado al punto conflictivo.
+Ahora bien, una zona de derrape no puede limitarse a los puntos en los que el derrape se manifiesta, sino que debe extenderse hacia atrás para incluir un tramo de anticipación. Y es que el punto donde se detecta no es el punto donde está el problema: la velocidad equivocada es la que el coche llevaba al entrar en la curva, y además bajarla no es inmediato, porque el coche sigue avanzando mientras se procesa su posición. Extendiendo la zona hacia atrás, la corrección se adelanta a la entrada de la curva y en las siguientes vueltas el coche llega ya con menos velocidad al punto conflictivo.
 
 Cada zona recibe su propia política, pero la arquitectura impone una condición sobre ambas, deben actuar zona a zona y no sobre el circuito completo. Con un ajuste global, una única curva exigente bastaría para limitar la velocidad de todo el trazado; por zonas, esa curva limita solo la suya mientras las rectas y las curvas rápidas siguen ganando velocidad vuelta tras vuelta.
 
 Sobre esta estructura actúan dos políticas complementarias:
-
 \begin{itemize}
     \item \textbf{Política de castigo.} Se dispara al recibir la señal de derrape y se aplica sobre las zonas de derrape, el castigo debe provocar una reducción en la velocidad.
-    \item \textbf{Política de mejora.} Se aplica al completarse una vuelta y solo sobre las zonas que no registraron derrape. Mientras un tramo no de problemas, el algoritmo asume que aún queda margen de mejora.
+    \item \textbf{Política de mejora.} Se aplica al completarse una vuelta y solo sobre las zonas que no registraron derrape. Mientras un tramo no dé problemas, el algoritmo asume que aún queda margen de mejora.
 \end{itemize}
 
-El equilibrio entre ambas es lo que hace que el sistema converja. El castigo evita que el coche reincida en un tramo conflictivo y la mejora evita que ningún tramo se quede permanentemente por debajo de su potencial. 
+El equilibrio entre ambas es lo que hace que el sistema converja. El castigo evita que el coche reincida en un tramo conflictivo y la mejora evita que ningún tramo se quede permanentemente por debajo de su potencial.

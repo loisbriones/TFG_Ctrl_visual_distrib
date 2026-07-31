@@ -6,13 +6,6 @@
 \section{Detección de las pegatinas por color}
 \label{subsec:deteccion-etiquetas}
 
-\begin{figure}[tbp]
-    \centering
-    \includegraphics[width=0.6\textwidth]{imaxes/IMPLEMENTACION/deteccion_2_pegatinas.png}
-    \caption{Ejemplo de detección de las dos pegatinas del coche}
-    \label{fig:deteccion-2-pegatinas}
-\end{figure}
-
 La detección hereda el procedimiento del trabajo de Mario López~\cite{tfgmario}. El fotograma se convierte al espacio HSV, que resiste mejor las variaciones de iluminación, y se genera una máscara binaria por pegatina con los píxeles que caen dentro del rango de su color. Están predefinidos para cada uno de los siete colores admitidos. Sobre cada máscara se encadenan una apertura morfológica, que elimina los píxeles aislados, y un cierre morfológico, que rellena los huecos de las regiones válidas.
 
 Se extraen entonces los contornos externos y se toma el de mayor área, descartándolo si no supera un área mínima configurable. De este proceso se obtiene el rectángulo delimitador y el centroide de la pegatina, el significado para cada pegatina se describió en la sección~\ref{sec:arquitectura}. La figura~\ref{fig:deteccion-color} recorre estas etapas sobre un fotograma real.
