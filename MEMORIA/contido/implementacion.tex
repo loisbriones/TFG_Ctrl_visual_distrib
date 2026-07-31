@@ -6,16 +6,18 @@
 \section{Modelo de ejecución concurrente}
 \label{concurrencia}
 
-La concurrencia dentro del nodo que exige la arquitectura (sección~\ref{sec:concurrencia}) se resuelve con los \emph{executors} y los grupos de \emph{callbacks} de ROS~2, descritos en la sección~\ref{sec:ros2-executors}. Todos los nodos del sistema se ejecutan sobre un \emph{MultiThreadedExecutor} y reparten sus tareas entre varios \emph{MutuallyExclusiveCallbackGroup}.
+La concurrencia dentro de cada nodo se resuelve con los \emph{executors} y los grupos de \emph{callbacks} de ROS~2, descritos en la sección~\ref{sec:ros2-executors}. Todos los nodos del sistema se ejecutan sobre un \emph{MultiThreadedExecutor} y reparten sus tareas entre varios \emph{MutuallyExclusiveCallbackGroup}.
 
-Para realizar el reparto se decide con un doble criterio. Los \emph{callbacks} que modificar el mismo estado interno van al mismo grupo y en segundo lugar las tareas que son independientes van a grupos separados. Permite garantizar que ninguna tarea espere por otra.
+Para realizar el reparto se decide con un doble criterio. Los \emph{callbacks} que modifican el mismo estado interno van al mismo grupo y en segundo lugar las tareas que son independientes van a grupos separados. Permite garantizar que ninguna tarea espere por otra.
+
+A esos grupos se suma en todos los nodos el grupo por defecto de ROS~2, con un hilo reservado para él. Ahí quedan los \emph{callbacks} que no forman parte del trabajo del nodo, en la práctica la actualización de parámetros en caliente, de modo que cualquier nodo puede reconfigurarse sin interrumpir lo que esté haciendo. Aparece en los tres esquemas que siguen y no se vuelve a comentar en cada uno de ellos.
 
 \subsection{Nodo de captura}
 \label{subsec:concurrencia-camara}
 
 Es el nodo con más concurrencia, y la reparte en dos niveles.
 
-Primero tenemos la concurrencia nivel de nodo. Debe realizar dos tareas bien diferenciadas. La primera es el procesamiento de los fotogramas para obtener las posiciones de los coches y en segundo lugar debe generar las imagenes de debug. Es por ello que cada uno tiene su propio grupo (\ref{fig:executor-multihilo}). A parte de estos dos grupos se añade un hilo extra que atiende al grupo por defecto de ROS~2, que recoge el resto de los \emph{callbacks}. Permitiendo modificar parametros en caliente y avisar al sistema de que hay que activar el modo de calibración.
+Primero tenemos la concurrencia nivel de nodo. Debe realizar dos tareas bien diferenciadas. La primera es el procesamiento de los fotogramas para obtener las posiciones de los coches y en segundo lugar debe generar las imagenes de debug. Es por ello que cada uno tiene su propio grupo (\ref{fig:executor-multihilo}).
 
 \begin{figure}[tbp]
     \centering
@@ -37,7 +39,7 @@ Para optimizar el tener que buscar dentro de un fotograma varios coches implica 
 \subsection{Nodo de control de carril}
 \label{subsec:concurrencia-controlador}
 
-El controlador solo necesita concurrencia a nivel de nodo. Recibe tres \emph{callbacks} distintos: la posición del coche, la orden de cambio de modo y la línea de meta. Como los tres modifican el mismo estado interno, se asignan a un único grupo, el estado del algoritmo queda de este modo en manos de un solo hilo a la vez. Junto a él se conserva el grupo por defecto de ROS~2, atendido por un segundo hilo, que deja disponible la actualización de parámetros en caliente sin interrumpir el control (figura~\ref{fig:concurrencia-controlador}).
+El controlador solo necesita concurrencia a nivel de nodo. Recibe tres \emph{callbacks} distintos: la posición del coche, la orden de cambio de modo y la línea de meta. Como los tres modifican el mismo estado interno, se asignan a un único grupo, el estado del algoritmo queda de este modo en manos de un solo hilo a la vez (figura~\ref{fig:concurrencia-controlador}).
 
 \begin{figure}[tbp]
     \centering
@@ -49,7 +51,7 @@ El controlador solo necesita concurrencia a nivel de nodo. Recibe tres \emph{cal
 \subsection{Nodo de actuación}
 \label{subsec:concurrencia-puente}
 
-El puente crea un grupo por cada controlador desplegado, ya que cada uno publica en su propio \emph{topic}, más un grupo para las suscripciones de calibración y el grupo por defecto (figura~\ref{fig:concurrencia-puente}). Así, si el mensaje de un carril se demora no impide recibir y tratar los del resto.
+El puente crea un grupo por cada controlador desplegado, ya que cada uno publica en su propio \emph{topic}, más un grupo para las suscripciones de calibración (figura~\ref{fig:concurrencia-puente}). Así, si el mensaje de un carril se demora no impide recibir y tratar los del resto.
 
 Esta concurrencia en la recepción no puede trasladarse al envío. Existe un único Arduino y un único puerto serie, de modo que el acceso al hardware está necesariamente serializado. La serialización la impone la propia interfaz de comunicación (anexo~\ref{subsec:actuacion-interfaz}).
 
