@@ -40,7 +40,7 @@ Se extraen entonces los contornos externos y se toma el de mayor área, descart�
 \section{Diferencias entre calibración y carrera}
 \label{subsec:modos-funcionamiento}
 
-El nodo implementa los dos modos descritos en la sección~\ref{sec:modos_funcionamiento}, y la diferencia entre ambos está en la región del fotograma sobre la que busca.
+El nodo implementa los dos modos descritos en la sección~\ref{sec:arquitectura}, y la diferencia entre ambos está en la región del fotograma sobre la que busca.
 
 En calibración, cada detección de la pegatina delantera se añade a la lista que reconstruye la trayectoria del coche. Basta con la delantera, que es la que da una trayectoria limpia~\cite{tfgadrian}. Esto es porque la trasera puede quedar oculta a ratos y la ruta base debe registrarse sin interrupciones. Al mantener una trayectoria por coche, la cámara puede filtrar por carril en carrera y dos coches pueden compartir el color de la pegatina trasera. Durante todo este proceso se busca sobre el fotograma completo como el que se puede ver \ref{fig:deteccion-color-a}, es por ello que las pegatinas delanteras sí que tienen que ser de diferente color.
 

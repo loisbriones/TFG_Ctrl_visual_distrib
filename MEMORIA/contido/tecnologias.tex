@@ -192,8 +192,10 @@ del coche que circula por él. Sobre los coches se colocan dos pegatinas de colo
 distintivos, una delantera y otra trasera, que el sistema de visión utiliza para determinar
 su posición y orientación. Además, sobre la pista se sitúa una marca de color en la línea de
 meta, que el sistema detecta automáticamente para contabilizar vueltas y finalizar la
-calibración. Este entorno físico constituye el escenario sobre el que interactúan la red de
-cámaras y el control hardware del sistema.
+calibración. La parte delantera del coche va guiada por la ranura del carril, mientras que la
+trasera no lleva imán y es la que se abre en las curvas al superar la adherencia, que es justo
+lo que el sistema interpreta como un derrape. Este entorno físico constituye el escenario sobre
+el que interactúan la red de cámaras y el control hardware del sistema.
 
 \subsection{Placa Elegoo Uno R3}
 
@@ -222,9 +224,6 @@ carrera.
 
 \subsection{Raspberry Pi 5}
 Estan equipadas con un procesador ARM Cortex-A76 de cuatro núcleos de 64 bits a 2,4 GHz, 4GB de RAM y puertos USB 3.0. En la arquitectura del sistema, este dispositivo se uso para conectar las cámaras y ejecutar los nodos de captura de ROS 2, adquiriendo las imágenes y publicando la posición del coche en tiempo real en la red para su posterior procesamiento.
-
-\subsection{Raspberry Pi 4}
-De manera complementaria, se emplean también placas Raspberry Pi 4 Modelo B, provistas de un procesador ARM Cortex-A72 de cuatro núcleos a 1,5 GHz, 4GB de RAM y puertos de comunicación USB. Cumplen una funcionalidad idéntica y paralela a la Raspberry Pi 5 dentro del proyecto.
 
 \subsection{ASUS Vivobook S 14}
 Esta equipado con un procesador AMD Ryzen AI 9 HX 370 de 12 núcleos a una frecuencia de hasta 5,16 GHz, gráficos integrados AMD Radeon 890M, 32 GB de memoria RAM LPDDR5X y 1 TB de almacenamiento SSD NVMe. El equipo opera bajo el sistema operativo Linux CachyOS en arquitectura x86\_64. Duranta las ejecuciones era donde iban los nodos de control y el nodo puente, al tener la conexión serie hacia el Arduino.

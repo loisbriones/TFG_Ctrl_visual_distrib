@@ -1,7 +1,7 @@
 \chapter{Implementación del diseño}
 \label{chap:implementacion}
 
-\lettrine{E}{N} este capítulo se describe cómo se ha implementado la arquitectura definida en el capítulo~\ref{chap:arquitectura}. Se detalla como se paso la arquitectura a nodos de ROS~2, la estructura interna de cada uno de ellos, las decisiones tomadas al programarlos y las desviaciones que aparecieron respecto al diseño inicial.
+\lettrine{E}{N} este capítulo se describe cómo se ha implementado la arquitectura definida en el capítulo~\ref{chap:arquitectura}. Se detalla la concurrencia interna de los nodos, la detección del coche y del paso por meta, el algoritmo de velocidad, el sistema hardware, las herramientas de grabación y análisis y el despliegue del sistema, junto con las decisiones tomadas al programarlos y las desviaciones que aparecieron respecto al diseño inicial.
 
 \section{Modelo de ejecución concurrente}
 \label{concurrencia}
@@ -312,14 +312,14 @@ Se escogio el formato \emph{mcap} porque lleva embebida la definición de cada m
 
 La herramienta de análisis convierte los datos crudos de una sesión en un conjunto de gráficas. Combina dos fuentes: la grabación(\emph{bags}), de la que obtiene todo lo que se publicó en la red, y los ficheros de \emph{logs} que escribe el algoritmo, de los que obtiene su estado interno. La primera describe qué hizo el coche y los segundos explican por qué el sistema decidió lo que decidió, de modo que solo cruzando ambas se puede relacionar un comportamiento con la decisión que lo provocó.
 
-El resultado es un \emph{dashboard}, una página web autocontenida con gráficas interactivas que permiten desplazarse, ampliar una zona y consultar el valor de cada punto, organizada en las secciones numeradas que recoge la tabla~\ref{tab:secciones-dashboard}. Como cada cámara trabaja en sus propias coordenadas de imagen, todas las gráficas espaciales se dibujan sobre un plano global común, aplicando a cada cámara una traslación fija. Desde el propio \emph{dashboard} pueden exportarse las gráficas en PDF, los datos en CSV y descargar un vídeo que combina las imágenes de todas las cámaras.
+El resultado es un \emph{dashboard}, una página web autocontenida con gráficas interactivas que permiten desplazarse, ampliar una zona y consultar el valor de cada punto, organizada en secciones numeradas. Como cada cámara trabaja en sus propias coordenadas de imagen, todas las gráficas espaciales se dibujan sobre un plano global común, aplicando a cada cámara una traslación fija. Desde el propio \emph{dashboard} pueden exportarse las gráficas en PDF, los datos en CSV y descargar un vídeo que combina las imágenes de todas las cámaras.
 
 También el análisis se ejecuta en un contenedor, que a diferencia del resto no forma parte del sistema desplegado. Se levanta bajo demanda indicándole qué sesión analizar, genera el \emph{dashboard}, lo sirve en un puerto accesible desde la máquina anfitriona y termina al pararlo.
 
 \section{Configuración y despliegue}
 \label{sec:configuracion_despliegue}
 
-El número de cámaras y de coches, y su reparto entre máquinas, se decide al desplegar el sistema (sección~\ref{sec:despliegue_sistema}). Esa flexibilidad descansa sobre tres piezas: un fichero de parámetros común, un fichero de lanzamiento por componente y un contenedor que lo ejecuta.
+El número de cámaras y de coches, y su reparto entre máquinas, se decide al desplegar el sistema (sección~\ref{subsec:despliegue-docker}). Esa flexibilidad descansa sobre tres piezas: un fichero de parámetros común, un fichero de lanzamiento por componente y un contenedor que lo ejecuta.
 
 \subsection{Fichero de parámetros}
 \label{subsec:params-yaml}
@@ -339,11 +339,11 @@ Cada nodo tiene su propio fichero de lanzamiento (sección~\ref{sec:ros2-launch}
 
 El del nodo de captura (\ref{lst:camera-launch}) es el más simple. Recibe como argumentos el identificador del nodo y el dispositivo de vídeo, y los inyecta como parámetros junto con la ruta al fichero común, \ref{subsec:params-yaml}.
 
-El número de nodos de control y la existencia de un nodo puente, se decide dentro del launch de forma dinámica justo antes del lanzamiento. Recorre la lista \texttt{coches} del fichero de parámetros y crean un controlador por cada uno, filtrando por el indicador \texttt{modo\_manual}. El principal (anexo~\ref{lst:brain-launch}) se queda con los coches autónomos y añade el nodo puente, que solo tiene sentido si hay que controlar algún coche. El de carrera manual (anexo~\ref{lst:manual-launch}) se queda con los manuales y no arranca el puente, no sé publica el mensaje de potencia \ref{sec:modelo_datos_ros2}. Sus controladores se levantan con el modo manual activo, permite obtener información pero no sé publica ningún valor de voltaje.\footnote{Cada controlador recibe un nombre de nodo único derivado del nombre del coche y del modo, porque el controlador genera sus ficheros de \emph{log} con el nombre del nodo y dos nodos homónimos se pisarían.}
+El número de nodos de control y la existencia de un nodo puente, se decide dentro del launch de forma dinámica justo antes del lanzamiento. Recorre la lista \texttt{coches} del fichero de parámetros y crean un controlador por cada uno, filtrando por el indicador \texttt{modo\_manual}. El principal (anexo~\ref{lst:brain-launch}) se queda con los coches autónomos y añade el nodo puente, que solo tiene sentido si hay que controlar algún coche. El de carrera manual (anexo~\ref{lst:manual-launch}) se queda con los manuales y no arranca el puente, no sé publica el mensaje de potencia \ref{subsec:modelo-datos}. Sus controladores se levantan con el modo manual activo, permite obtener información pero no sé publica ningún valor de voltaje.\footnote{Cada controlador recibe un nombre de nodo único derivado del nombre del coche y del modo, porque el controlador genera sus ficheros de \emph{log} con el nombre del nodo y dos nodos homónimos se pisarían.}
 
 Como ambos ficheros filtran la misma lista por criterios opuestos, una carrera mixta se consigue levantando los dos a la vez.
 
-Todos los nodos se declaran con reinicio automático y un retardo entre intentos. Si un nodo cae durante una sesión, el sistema lo relanza y este se reincorpora por sí solo gracias al descubrimiento del \emph{middleware}, comportamiento que se valida en la prueba de tolerancia a fallos de la sección~\ref{subsec:prueba-tolerancia}.
+Todos los nodos se declaran con reinicio automático y un retardo entre intentos. Si un nodo cae durante una sesión, el sistema lo relanza y este se reincorpora por sí solo gracias al descubrimiento del \emph{middleware}.
 
 \subsection{Despliegue en contenedores}
 \label{subsec:despliegue-docker}
