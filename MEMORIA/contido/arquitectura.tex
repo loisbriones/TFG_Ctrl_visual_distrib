@@ -197,9 +197,17 @@ Para lograr tener las garantías de entrega en los mensajes de ROS~2 se utilizan
 \section{Algoritmo de control}
 \label{sec:algoritmo-arquitectura}
  
-El algoritmo es el componente que decide, en cada instante y para cada punto del circuito, qué tensión debe aplicarse al carril por el que circula el coche. Es la única pieza del sistema que toma decisiones de control. Su objetivo es el control del coche buscando conseguir mejoras de velocidad.
+El algoritmo es el componente que decide, en cada instante y para cada punto del circuito, qué tensión debe aplicarse al carril por el que circula el coche. Es la única pieza del sistema que toma decisiones de control. Su objetivo es el control del coche buscando conseguir mejoras de velocidad. Podemos ver un esquema sencillo en la figura~\ref{fig:arq-algo} donde se explica como funciona el algoritmo.
+
+\begin{figure}[tbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{imaxes/ARQUITECTURA/explicacion_algo_sencilla.png}
+    \caption{Ejemplo visual de como funciona el algoritmo}
+    \label{fig:arq-algo}
+\end{figure}
  
 El diseño parte de una idea propuesta por Mario López Cea \cite{tfgmario}: los derrapes de un circuito dado no se reparten al azar, sino que se concentran siempre en las mismas zonas, de modo que esas zonas pueden aprenderse en carrera y tratarse de forma diferenciada. Adrián Rego \cite{tfgadrian} trasladó esa idea a un escenario de varias cámaras, aunque el resultado no llegó a ofrecer un control estable sobre el circuito completo. Este trabajo retoma el concepto original de zona de derrape y lo rediseña como un mecanismo de aprendizaje por vueltas que funciona sobre una porción del circuito y, por tanto, admite la ejecución distribuida.
+
 
 \subsection{El derrape como señal de exceso de velocidad}
 \label{subsec:derrape-arquitectura}
