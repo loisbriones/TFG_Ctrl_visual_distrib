@@ -52,21 +52,21 @@ La tabla~\ref{tab:mensajes} recoge ambas cosas. Cada mensaje se describe en la s
 
 \begin{table}[tbp]
 	\centering
-	\small
-	\setlength{\tabcolsep}{4pt}
+	\estilotabla
 	\caption{Mensajes que intercambian los nodos del sistema.}
 	\label{tab:mensajes}
-	\begin{tabular}{p{2.8cm} p{2.6cm} p{2.8cm} p{2.4cm} p{2.7cm}}
-		\hline
+	\begin{tabular}{p{2.7cm} p{2.5cm} p{2.7cm} p{2.3cm} p{2.4cm}}
+		\toprule
+		\rowcolor{ArqAzulClaro}
 		\textbf{Mensaje} & \textbf{Emisor} & \textbf{Receptor} & \textbf{Cadencia} & \textbf{Entrega} \\
-		\hline
+		\midrule
 		Posición del coche & Nodo cámara & Nodo de control de su carril & Por coche y fotograma & Prima la actualidad \\
 		Línea de meta & Nodo cámara que la ve & Todos los nodos de control & Una vez, al arranque & Garantizada y persistente \\
 		Consigna de potencia & Nodo de control & Nodo de potencia & Por cada posición recibida & Prima la actualidad \\
 		Cambio de modo & Nodo de control & Todos los nodos & Por evento & Garantizada \\
 		Tiempo de vuelta & Nodo de control & Nodo de \emph{logs} & Por vuelta completada & Garantizada \\
 		Vista de la cámara & Nodo cámara & Nodo de \emph{logs} & Periódica & Prima la actualidad \\
-		\hline
+		\bottomrule
 	\end{tabular}
 \end{table}
 
@@ -102,14 +102,14 @@ Los mensajes que siguen van dirigidos al nodo de \emph{logs}, que se limita a es
 
 \begin{table}[tbp]
 	\centering
-	\small
-	\setlength{\tabcolsep}{4pt}
+	\estilotabla
 	\caption{Resumen de los \emph{topics} del sistema, el tipo de mensaje que transportan y los nodos implicados en cada comunicación.}
 	\label{tab:topics-ros2}
-	\begin{tabular}{p{3.7cm} p{3.5cm} p{3.1cm} p{3.3cm}}
-		\hline
+	\begin{tabular}{p{3.5cm} p{3.3cm} p{3.0cm} p{3.2cm}}
+		\toprule
+		\rowcolor{ArqAzulClaro}
 		\textbf{Topic} & \textbf{Mensaje} & \textbf{Publica} & \textbf{Suscribe} \\
-		\hline
+		\midrule
 		\texttt{/carN/position} & \texttt{CarLocation} & Nodos cámara & Nodo de control $N$ \\
 		\texttt{/finish\_\allowbreak line\_position} & \texttt{FinishLine} & Cámara que la observa & Nodos de control \\
 		\texttt{/carN/pwd} & \texttt{SpeedCarril} & Nodo de control $N$ & Nodo puente \\
@@ -117,13 +117,13 @@ Los mensajes que siguen van dirigidos al nodo de \emph{logs}, que se limita a es
 		\texttt{/telemetria/carN/\allowbreak car\_control} & \texttt{CarControl\allowbreak Telemetry} & Nodo de control $N$ & Visualización \\
 		\texttt{/telemetria/carN/\allowbreak time\_per\_lap} & \texttt{TimePerLap} & Nodo de control $N$ & Visualización \\
 		\texttt{/camaraX/\allowbreak camara\_debug} & \texttt{CompressedImage} & Nodo cámara $X$ & Visualización \\
-		\hline
+		\bottomrule
 	\end{tabular}
 \end{table}
 
-Los tipos que ROS~2 trae por defecto no bastan para modelar la información del cuadro~\ref{tab:mensajes}, de modo que fue necesario crear mensajes propios (sección~\ref{sec:ros2-interfaces}). Al bajar al detalle, cada uno incorpora identificadores de origen, marcas de tiempo y contadores de fotograma, que permiten medir latencias durante el análisis. El listado~\ref{lst:msg-carlocation} recoge la definición de \texttt{CarLocation}, la \emph{posición del coche}, y sirve de ejemplo del formato que siguen todos los demás. Los dos primeros campos identifican el origen del dato, y \texttt{front} y \texttt{back} son las dos pegatinas detectadas, cada una con su centroide y su color, acompañadas de los rectángulos que las encierran. \texttt{stamp} es la marca de tiempo de captura del fotograma y \texttt{proc\_time}, es el tiempo de procesado. \texttt{n\_frame} es el contador de fotogramas de esa cámara. 
+Los tipos que ROS~2 trae por defecto no bastan para modelar la información de la tabla~\ref{tab:mensajes}, de modo que fue necesario crear mensajes propios (sección~\ref{sec:ros2-interfaces}). Al bajar al detalle, cada uno incorpora identificadores de origen, marcas de tiempo y contadores de fotograma, que permiten medir latencias durante el análisis. El listado~\ref{lst:msg-carlocation} recoge la definición de \texttt{CarLocation}, la \emph{posición del coche}, y sirve de ejemplo del formato que siguen todos los demás. Los dos primeros campos identifican el origen del dato, y \texttt{front} y \texttt{back} son las dos pegatinas detectadas, cada una con su centroide y su color, acompañadas de los rectángulos que las encierran. \texttt{stamp} es la marca de tiempo de captura del fotograma y \texttt{proc\_time}, es el tiempo de procesado. \texttt{n\_frame} es el contador de fotogramas de esa cámara. 
 
-\begin{lstlisting}[float=htbp, caption={Definición del mensaje \texttt{CarLocation} (\texttt{msg/CarLocation.msg}).}, label={lst:msg-carlocation}]
+\begin{lstlisting}[float=tbp, caption={Definición del mensaje \texttt{CarLocation} (\texttt{msg/CarLocation.msg}).}, label={lst:msg-carlocation}]
 string camara_id
 string coche
 Stiker front
@@ -135,7 +135,7 @@ BoundingRect bounding_rect_stiker_back
 uint32 n_frame
 \end{lstlisting}
 
-Los mensajes \texttt{FinishLine}, \texttt{SpeedCarril} y \texttt{TimePerLap} implementan la \emph{línea de meta}, la \emph{consigna de potencia} y el \emph{tiempo de vuelta} siguiendo ese mismo formato, y se apoyan en cuatro tipos auxiliares que modelan un punto en coordenadas de imagen, una pegatina, el rectángulo delimitador de una detección y un segmento. Sus definiciones completas se recogen en el anexo~\ref{lst:msgs-informacion}. A ellos se suma \texttt{CarControlTelemetry}, que no tiene equivalente en el cuadro~\ref{tab:mensajes} porque nace durante la implementación. Se publica en cada iteración y recoge datos internos del lazo de control, como la distancia de derrape estimada o el tiempo transcurrido desde que llega la posición hasta que se publica el PWM, con los que después se analiza el comportamiento del algoritmo.
+Los mensajes \texttt{FinishLine}, \texttt{SpeedCarril} y \texttt{TimePerLap} implementan la \emph{línea de meta}, la \emph{consigna de potencia} y el \emph{tiempo de vuelta} siguiendo ese mismo formato, y se apoyan en cuatro tipos auxiliares que modelan un punto en coordenadas de imagen, una pegatina, el rectángulo delimitador de una detección y un segmento. Sus definiciones completas se recogen en el anexo~\ref{lst:msgs-informacion}. A ellos se suma \texttt{CarControlTelemetry}, que no tiene equivalente en la tabla~\ref{tab:mensajes} porque nace durante la implementación. Se publica en cada iteración y recoge datos internos del lazo de control, como la distancia de derrape estimada o el tiempo transcurrido desde que llega la posición hasta que se publica el PWM, con los que después se analiza el comportamiento del algoritmo.
 
 Los dos mensajes restantes no necesitan un tipo propio y se resuelven con tipos estándar de ROS~2: el \emph{cambio de modo} es un \texttt{std\_msgs/Bool} en el \emph{topic} de calibración de cada coche, y la \emph{vista de la cámara}, un \texttt{sensor\_msgs/CompressedImage} en los \emph{topics} de depuración, sobre los que cada cámara publica el fotograma procesado con las detecciones superpuestas.
 

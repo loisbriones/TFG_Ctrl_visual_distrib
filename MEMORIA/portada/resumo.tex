@@ -2,13 +2,72 @@
 
 \pagestyle{empty}
 \begin{abstract}
-  \blindtext % substitúe este comando polo resumo do teu TFG
-             % na lingua principal do documento (tipicamente: galego)
+  Este trabajo lleva el control visual de coches de tipo Scalextric a una arquitectura
+  distribuida. Los trabajos previos resolvían el problema con una aplicación monolítica en la
+  que todas las cámaras colgaban por USB de la misma máquina, lo que acota el tamaño del
+  circuito que es posible cubrir. Aquí el sistema se descompone en nodos ROS~2 que cooperan a
+  través de una red local: un nodo cámara por cada cámara, que detecta la posición de cada
+  coche por segmentación de color; un nodo de control por carril, que reconstruye la
+  trayectoria durante una vuelta de calibración y decide la tensión que hay que aplicar; y un
+  nodo puente, que traduce esas consignas en señales PWM sobre el Arduino que alimenta la
+  pista. Los nodos pueden repartirse por la red en cualquier combinación, incluido el sistema
+  entero en un solo equipo.
+
+  La calibración es automática y consume una única vuelta: arranca y termina al cruzar la
+  meta, sin intervención humana y sin configurar a mano tramos, metas ni coches. La
+  trayectoria obtenida se discretiza en una cadena de celdas que se particiona en zonas de PWM
+  uniforme, sobre las que el algoritmo de control sube la potencia en las zonas limpias y la
+  castiga en las que registran un derrape, detectado por la separación de la etiqueta trasera
+  respecto a la trayectoria base. El algoritmo funciona sobre varias cámaras encadenadas, con
+  o sin solapamiento entre sus campos de visión.
+
+  Al repartir el lazo de control por la red, la latencia pasa a ser un factor de diseño, por lo
+  que todos los mensajes llevan marcas de tiempo y contadores de fotograma, y el sistema
+  incorpora una herramienta de grabación que registra sin pérdidas todo el tráfico y otra de
+  análisis en diferido que construye un panel web con las trayectorias, los tiempos por vuelta
+  y las latencias de cada etapa. Todo el despliegue es reproducible mediante contenedores
+  Docker.
+
+  El sistema se ha evaluado en condiciones reales sobre dos circuitos, uno cubierto por una
+  única cámara y otro en ocho que necesita dos cámaras en máquinas distintas, con dos coches de
+  comportamiento muy diferente y ejecuciones de 50 vueltas. Las pruebas confirman que el
+  control automático bate a los pilotos humanos en tiempo acumulado, no por firmar la vuelta
+  más rápida, sino por la regularidad, y que el ajuste del umbral de derrape debe adaptarse a
+  las características de cada coche.
 
   \vspace*{25pt}
   \begin{segundoresumo}
-    \blindtext % substitúe este comando polo resumo do teu TFG
-               % na lingua secundaria do documento (tipicamente: inglés)
+    This project brings the visual speed control of Scalextric cars to a distributed
+    architecture. Previous work solved the problem with a monolithic application in which every
+    camera hung off the same machine over USB, which bounds the size of the track that can be
+    covered. Here the system is broken down into ROS~2 nodes that cooperate over a local
+    network: one camera node per physical camera, which detects the position of each car by
+    colour segmentation; one control node per lane, which reconstructs the trajectory during a
+    calibration lap and decides the voltage to apply; and a bridge node, which turns those
+    setpoints into PWM signals on the Arduino that powers the track. The nodes can be spread
+    across the network in any combination, including running the whole system on a single
+    machine.
+
+    Calibration is automatic and takes a single lap: it starts and ends when the car crosses
+    the finish line, with no human intervention and without manually configuring sections,
+    finish lines or cars. The resulting trajectory is discretised into a chain of cells that is
+    partitioned into zones of uniform PWM, over which the control algorithm raises the power in
+    clean zones and penalises those where a skid is recorded, detected from the separation
+    between the rear sticker and the base trajectory. The algorithm works across several
+    chained cameras, with or without overlapping fields of view.
+
+    Once the control loop is spread over the network, latency becomes a design factor, so every
+    message carries timestamps and frame counters, and the system includes a recording tool
+    that losslessly logs all the traffic and an offline analysis tool that builds a web
+    dashboard with the trajectories, the lap times and the latency of each stage. The whole
+    deployment is reproducible through Docker containers.
+
+    The system has been evaluated under real conditions on two tracks, one covered by a single
+    camera and an eight-shaped track requiring two cameras on different machines, with two
+    cars of very different behaviour and 50-lap runs. The tests confirm that the automatic
+    control beats human drivers on total time, not by setting the fastest lap but through
+    consistency, and that the skid threshold has to be tuned to the characteristics of each
+    car.
   \end{segundoresumo}
 \vspace*{25pt}
 \input{portada/palabras_chave}

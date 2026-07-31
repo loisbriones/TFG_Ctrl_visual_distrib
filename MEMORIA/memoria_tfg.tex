@@ -8,9 +8,9 @@
 %\def\lingua{gal}
 \def\lingua{esp} % descomenta esta liña se redactarás a memoria en español
 %\def\lingua{eng} % descomenta esta liña se redactarás a memoria en inglés
-\def\nome{Nome Completo}                             % substitúe aquí o teu nome
-\def\nomedirectorA{Outro Nome Completo}              % substitúe aquí o nome de quen dirixe
-%\def\nomedirectorB{Outro Nome Completo}             % duplica esta liña máis veces se o precisas, cambiando
+\def\nome{Lois Briones Oliveira}                     % substitúe aquí o teu nome
+\def\nomedirectorA{Carlos Vázquez Regueiro}          % substitúe aquí o nome de quen dirixe
+\def\nomedirectorB{José Rodrigo Sanjurjo Amado}      % duplica esta liña máis veces se o precisas, cambiando
                                                      % a letra final (A, B, C, D...): úsanse na portada.tex
 \def\titulo{Control visual distribuido de la velocidad de los coches de un circuito tipo Scalextric} % título oficial según el anteproyecto
 %\def\titulacion{gced}                               % descomenta esta liña e comenta a seguinte se es estudante do GCED
@@ -22,7 +22,7 @@
 %\def\mencion{SISTEMAS DE INFORMACIÓN}
 \def\mencion{TECNOLOXÍAS DA INFORMACIÓN}
 
-%\def\renomearcadros{si} % descomenta esta liña se redactas a memoria en español e prefires que
+\def\renomearcadros{si}  % descomenta esta liña se redactas a memoria en español e prefires que
                          % os "cuadros" e o "índice de cuadros" se renomeen
                          % a "tablas" e "índice de tablas" respectivamente
 
@@ -49,6 +49,35 @@
   \usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
   \usepackage{booktabs}
   \usepackage{eurosym}
+
+%%% COLOCACIÓN DOS FLOTANTES %%%
+% Todas as figuras e táboas levan [tbp] (nunca "h" nin "H"), así que LaTeX decide onde
+% van. Cos valores por defecto unha figura que pase do 70 % da mancha xa non pode ir na
+% cabeceira dunha páxina con texto e mándase a unha páxina de flotantes ela soa, que
+% queda medio baleira. Como a memoria ten un límite de 80 páxinas, reláxanse os límites
+% para que as figuras grandes convivan co texto e para que unha páxina de flotantes teña
+% que ir ben chea antes de xerarse.
+\renewcommand{\topfraction}{0.9}        % fracción máxima da páxina que poden ocupar os flotantes de arriba
+\renewcommand{\bottomfraction}{0.7}     % o mesmo para os flotantes colocados abaixo
+\renewcommand{\textfraction}{0.1}       % texto mínimo que ten que quedar nunha páxina con flotantes
+\renewcommand{\floatpagefraction}{0.75} % ocupación mínima para que se xere unha páxina só de flotantes
+\setcounter{topnumber}{3}               % flotantes que caben na cabeceira dunha páxina
+\setcounter{totalnumber}{4}             % flotantes que caben nunha páxina, en total
+
+%%% ESTILO COMÚN DAS TÁBOAS %%%
+% Aplícase xusto detrás do \centering de cada \begin{table}. Os tons son os da paleta
+% definida en estilo_tfg.sty, a mesma dos esquemas da arquitectura, para que as táboas
+% non queden en branco. A fila de cabeceira lévase aparte con \rowcolor{ArqAzulClaro}.
+% O argumento opcional é a primeira fila de datos: 2 cando a cabeceira ocupa unha liña
+% e 3 cando ocupa dúas (as táboas de resultados levan unha segunda liña coas unidades).
+\newcommand{\estilotabla}[1][2]{%
+  \footnotesize                          % tamaño de letra de todas as táboas da memoria
+  \renewcommand{\arraystretch}{1.15}%    % o 1.5 global de estilo_tfg.sty deixa as filas altísimas
+  \setlength{\tabcolsep}{5pt}%           % o 18pt global non colle nas táboas de moitas columnas
+  % \rowcolors colorea segundo a paridade do número de fila, así que hai que pasarlle as
+  % cores na orde que corresponda para que a primeira fila de datos sempre saia sombreada.
+  \ifodd#1\relax\rowcolors{#1}{ArqGrisClaro}{}\else\rowcolors{#1}{}{ArqGrisClaro}\fi
+}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Corpo                                                                        %

@@ -15,13 +15,13 @@
 %  incluyen con la opción page=1.
 %
 %  CAMBIOS RESPECTO A LA VERSIÓN ANTERIOR (sección 3, circuito en ocho):
-%   - Se sustituye el cuadro vacío tab:vs-personas-ocho por dos cuadros,
+%   - Se sustituye la tabla vacía tab:vs-personas-ocho por dos tablas,
 %     tab:vs-personas-ocho-azul y tab:vs-personas-ocho-rojo, siguiendo el
 %     mismo esquema que los del óvalo.
 %   - Se reescribe el párrafo de introducción al circuito en ocho y se
 %     añade el análisis completo de ambos coches.
 %   - Pilotos: piloto 1 = JAICKOB, piloto 2 = LIAM, piloto 3 = LOIS.
-%     REVISAR que esta numeración case con la de los cuadros del óvalo.
+%     REVISAR que esta numeración case con la de las tablas del óvalo.
 % =====================================================================
 
 \chapter{Pruebas}
@@ -38,9 +38,9 @@ Para que la única variable fuese el coche se fijó todo lo demás. Se escogió 
 
 La figura~\ref{fig:comparativa-trayectorias} muestra las trayectorias de las dos etiquetas en la vuelta 22. En el coche azul se aprecia en la zona señalada un salto grande entre posiciones consecutivas de la etiqueta trasera, lo que corresponde con un derrape. Mientras que en el coche rojo, con el mismo PWM aplicado, la trasera recorre esa misma curva pegada a la trayectoria base sin llegar a separarse de ella.
 
-\begin{figure}[htbp]
+\begin{figure}[tbp]
   \centering
-  \begin{subfigure}[b]{0.88\textwidth}
+  \begin{subfigure}[b]{0.80\textwidth}
     \centering
     \includegraphics[trim={0 0 0 42pt},clip,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/dist_derrape_coche_azul.pdf}
     \caption{Coche azul}
@@ -49,7 +49,7 @@ La figura~\ref{fig:comparativa-trayectorias} muestra las trayectorias de las dos
 
   \vspace{1em}
 
-  \begin{subfigure}[b]{0.88\textwidth}
+  \begin{subfigure}[b]{0.80\textwidth}
     \centering
     \includegraphics[trim={0 0 0 42pt},clip,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/dist_derrape_coche_rojo.pdf}
     \caption{Coche rojo}
@@ -61,9 +61,9 @@ La figura~\ref{fig:comparativa-trayectorias} muestra las trayectorias de las dos
 
 Una vez detectado el derrape el algoritmo castiga al coche azul y genera dos zonas, como se aprecia en la figura~\ref{fig:comparativa-zonas-azul}, la zona de derrape, que cubre las celdas 47 a 68 y queda limitada a PWM 89, y la que ya venía de antes, que se mantiene en 91. En el coche rojo no hubo ningún derrape que castigar y por tanto no se abre ninguna zona nueva, de modo que en la figura~\ref{fig:comparativa-zonas-rojo} sigue habiendo una única zona que además ha continuado subiendo hasta PWM 92.
 
-\begin{figure}[htbp]
+\begin{figure}[tbp]
   \centering
-  \begin{subfigure}[b]{0.88\textwidth}
+  \begin{subfigure}[b]{0.80\textwidth}
     \centering
     \includegraphics[trim={0 0 0 60pt},clip,page=1,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/pwm_zonas_coche_azul.pdf}
     \caption{Coche azul}
@@ -72,7 +72,7 @@ Una vez detectado el derrape el algoritmo castiga al coche azul y genera dos zon
 
   \vspace{1em}
 
-  \begin{subfigure}[b]{0.88\textwidth}
+  \begin{subfigure}[b]{0.80\textwidth}
     \centering
     \includegraphics[trim={0 0 0 60pt},clip,page=1,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/pwm_zonas_coche_rojo.pdf}
     \caption{Coche rojo}
@@ -84,9 +84,9 @@ Una vez detectado el derrape el algoritmo castiga al coche azul y genera dos zon
 
 El comportamiento no es puntual, sino que se repite a lo largo de toda la ejecución, como recoge la figura~\ref{fig:comparativa-derrapes}, donde se representa vuelta a vuelta la distancia de derrape registrada junto al PWM medio aplicado. El coche azul encadena picos muy por encima del umbral, varios de ellos por encima de los 20~px, que se corresponden con derrapes lo bastante fuertes como para que el coche estuviera a punto de salirse de la pista. En el coche rojo los máximos se mantienen entre los 4 y los 9~px durante toda la carrera y ninguno llega a superar el umbral.
 
-\begin{figure}[htbp]
+\begin{figure}[tbp]
   \centering
-  \begin{subfigure}[b]{0.95\textwidth}
+  \begin{subfigure}[b]{0.88\textwidth}
     \centering
     \includegraphics[trim={0 0 0 44pt},clip,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/resumen_derrapes_coche_azul.pdf}
     \caption{Coche azul}
@@ -95,7 +95,7 @@ El comportamiento no es puntual, sino que se repite a lo largo de toda la ejecuc
 
   \vspace{1em}
 
-  \begin{subfigure}[b]{0.95\textwidth}
+  \begin{subfigure}[b]{0.88\textwidth}
     \centering
     \includegraphics[trim={0 0 0 44pt},clip,width=\linewidth]{imaxes/PRUEBAS/COMPARATIVA_COCHES/resumen_derrapes_coche_rojo.pdf}
     \caption{Coche rojo}
@@ -105,22 +105,23 @@ El comportamiento no es puntual, sino que se repite a lo largo de toda la ejecuc
   \label{fig:comparativa-derrapes}
 \end{figure}
 
-Los tiempos de las dos ejecuciones, recogidos en el cuadro~\ref{tab:comparativa-coches}, confirman lo que muestran las gráficas. El coche rojo tarda 75,44~s en completar las 50 vueltas frente a los 93,59~s del azul, una diferencia de 18~segundos que supone más de un 19\,\% del tiempo total con el mismo algoritmo y la misma configuración. El origen no está en el control, sino en el propio coche, que pierde adherencia con valores de PWM que el rojo asimila sin problema.
+Los tiempos de las dos ejecuciones, recogidos en la tabla~\ref{tab:comparativa-coches}, confirman lo que muestran las gráficas. El coche rojo tarda 75,44~s en completar las 50 vueltas frente a los 93,59~s del azul, una diferencia de 18~segundos que supone más de un 19\,\% del tiempo total con el mismo algoritmo y la misma configuración. El origen no está en el control, sino en el propio coche, que pierde adherencia con valores de PWM que el rojo asimila sin problema.
 
-\begin{table}[htbp]
+\begin{table}[tbp]
   \centering
+  \estilotabla[3]
   \caption{Métricas de tiempo por vuelta de ambos coches con la misma configuración (PWM 70--94, umbral de derrape 12~px).}
   \label{tab:comparativa-coches}
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+  \begin{tabular}{lrrrrr}
     \toprule
+    \rowcolor{ArqAzulClaro}
     Coche & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-          & (s) & (s) & (s) & (s) & (s) \\
+          \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
     \midrule
     Azul & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 \\
     Rojo & 75,44 & 1,315 & 1,377 & 1,509 & 0,232 \\
     \bottomrule
-  \end{tabular*}
+  \end{tabular}
 \end{table}
 
 El problema no afecta solo al algoritmo, porque en las pruebas de conducción manual de la sección~\ref{sec:prueba-algo-vs-personas} a las personas también les cuesta más controlar el coche azul, ya que es mucho más sensible a los valores altos de PWM. La consecuencia práctica de todo esto es que no existe una configuración única válida para los dos coches y que los parámetros del algoritmo, en particular el umbral de derrape, deben ajustarse a las características del vehículo, que es lo que se comprueba en la prueba~\ref{sec:prueba-algo-parametros}.
@@ -132,9 +133,9 @@ El resultado de la prueba~\ref{sec:prueba-comparativa-coches} deja abierta la cu
 
 La figura~\ref{fig:parametros-tiempos} compara la evolución del tiempo por vuelta con los dos umbrales. Con 9~px el algoritmo detecta los derrapes antes de que empiecen a ser problemáticos (los que se producen cuando el coche empieza a coger velocidad y a ganar inercia), y baja la potencia del carril antes de que el derrape llegue a manifestarse, con lo que la curva se estabiliza a partir de la vuelta 12 y el peor tiempo queda en las primeras vueltas. Con 12~px aparecen entre las vueltas 21 y 38 los picos señalados en la gráfica, que se corresponden con derrapes como el de la figura~\ref{fig:comparativa-trayectorias-azul} y en los que el coche llega casi a salirse de la pista y necesita varias vueltas para recuperar el ritmo, de manera que se vuelve prácticamente a los tiempos que teníamos antes de empezar la carrera.
 
-\begin{figure}[htbp]
+\begin{figure}[tbp]
   \centering
-  \begin{subfigure}[b]{0.95\textwidth}
+  \begin{subfigure}[b]{0.88\textwidth}
     \centering
     \includegraphics[trim={0 0 0 38pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/tiempos_vuelta_mejora_azul.pdf}
     \caption{Umbral de derrape 9~px}
@@ -143,7 +144,7 @@ La figura~\ref{fig:parametros-tiempos} compara la evolución del tiempo por vuel
 
   \vspace{1em}
 
-  \begin{subfigure}[b]{0.95\textwidth}
+  \begin{subfigure}[b]{0.88\textwidth}
     \centering
     \includegraphics[trim={0 0 0 38pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/tiempos_vuelta_peor_azul.pdf}
     \caption{Umbral de derrape 12~px}
@@ -155,9 +156,9 @@ La figura~\ref{fig:parametros-tiempos} compara la evolución del tiempo por vuel
 
 La razón de esos picos se ve en la figura~\ref{fig:parametros-derrapes}. Con el umbral en 9~px los derrapes siguen produciéndose, pero se mantienen acotados alrededor de esa misma cifra y solo en unas pocas vueltas llegan a los 10~px, mientras que con el umbral en 12~px el sistema no reacciona hasta que el derrape ya está desarrollado y para entonces el castigo llega tarde, con máximos que se disparan por encima de los 20~px. Ese contraste se aprecia mejor en la figura~\ref{fig:derrape-vuelta}. Con el umbral en 9~px el derrape se detecta mientras todavía está creciendo y el pico se queda en los 10~px, mientras que con 12~px se produce un salto de esa misma franja hasta los 19~px sin ningún paso intermedio. La nube de puntos grises del fondo, que acumula todas las vueltas de la ejecución, se concentra justo entre los 9 y los 10~px, de manera que ahí está la frontera y una vez superada el derrape ya no se puede contener.
 
-\begin{figure}[htbp]
+\begin{figure}[tbp]
   \centering
-  \begin{subfigure}[b]{0.95\textwidth}
+  \begin{subfigure}[b]{0.88\textwidth}
     \centering
     \includegraphics[trim={0 0 0 44pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/resumen_dist_derrapes_mejora_azul.pdf}
     \caption{Umbral de derrape 9~px}
@@ -166,7 +167,7 @@ La razón de esos picos se ve en la figura~\ref{fig:parametros-derrapes}. Con el
 
   \vspace{1em}
 
-  \begin{subfigure}[b]{0.95\textwidth}
+  \begin{subfigure}[b]{0.88\textwidth}
     \centering
     \includegraphics[trim={0 0 0 44pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/resumen_dist_derrapes_peor_azul.pdf}
     \caption{Umbral de derrape 12~px}
@@ -176,9 +177,9 @@ La razón de esos picos se ve en la figura~\ref{fig:parametros-derrapes}. Con el
   \label{fig:parametros-derrapes}
 \end{figure}
 
-\begin{figure}[htbp]
+\begin{figure}[tbp]
   \centering
-  \begin{subfigure}[b]{0.95\textwidth}
+  \begin{subfigure}[b]{0.88\textwidth}
     \centering
     \includegraphics[trim={0 0 0 43pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/derrape_controlado.pdf}
     \caption{Umbral de derrape 9~px, vuelta 22}
@@ -187,7 +188,7 @@ La razón de esos picos se ve en la figura~\ref{fig:parametros-derrapes}. Con el
 
   \vspace{1em}
 
-  \begin{subfigure}[b]{0.95\textwidth}
+  \begin{subfigure}[b]{0.88\textwidth}
     \centering
     \includegraphics[trim={0 0 0 43pt},clip,width=\linewidth]{imaxes/PRUEBAS/ALGO_VARIOS_PARAMETROS/derrape_explosivo.pdf}
     \caption{Umbral de derrape 12~px, vuelta 24}
@@ -197,23 +198,24 @@ La razón de esos picos se ve en la figura~\ref{fig:parametros-derrapes}. Con el
   \label{fig:derrape-vuelta}
 \end{figure}
 
-Las métricas de las tres ejecuciones se recogen en el cuadro~\ref{tab:parametros-azul} y permiten precisar en qué consiste la mejora. Las medianas de las dos configuraciones con PWM 70--94 son casi iguales, 1,733~s frente a 1,755~s, y las mejores vueltas resultan indistinguibles, 1,663~s frente a 1,661~s, de modo que bajar el umbral no hace al coche más rápido en su vuelta buena, sino que le quita las vueltas malas. Eso se refleja en la media, que cae de 1,872~s a 1,759~s, y en la peor vuelta, que pasa de 2,839~s a 2,418~s, y sobre todo en la desviación típica, que se reduce a menos de la mitad, de 0,228~s a 0,094~s. Sobre las 50 vueltas la diferencia acumulada es de 5,66~segundos, así que en una carrera entre ambas configuraciones ganaría la más conservadora, que mantiene el ritmo, frente a la que pierde varias décimas cada vez que tarda en detectar un derrape.
+Las métricas de las tres ejecuciones se recogen en la tabla~\ref{tab:parametros-azul} y permiten precisar en qué consiste la mejora. Las medianas de las dos configuraciones con PWM 70--94 son casi iguales, 1,733~s frente a 1,755~s, y las mejores vueltas resultan indistinguibles, 1,663~s frente a 1,661~s, de modo que bajar el umbral no hace al coche más rápido en su vuelta buena, sino que le quita las vueltas malas. Eso se refleja en la media, que cae de 1,872~s a 1,759~s, y en la peor vuelta, que pasa de 2,839~s a 2,418~s, y sobre todo en la desviación típica, que se reduce a menos de la mitad, de 0,228~s a 0,094~s. Sobre las 50 vueltas la diferencia acumulada es de 5,66~segundos, así que en una carrera entre ambas configuraciones ganaría la más conservadora, que mantiene el ritmo, frente a la que pierde varias décimas cada vez que tarda en detectar un derrape.
 
-\begin{table}[htbp]
+\begin{table}[tbp]
   \centering
+  \estilotabla[3]
   \caption{Métricas de tiempo por vuelta del coche azul en el circuito en óvalo para las tres configuraciones probadas.}
   \label{tab:parametros-azul}
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+  \begin{tabular}{lrrrrr}
     \toprule
+    \rowcolor{ArqAzulClaro}
     Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              & (s) & (s) & (s) & (s) & (s) \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
     \midrule
     ALGO 012 (70--90, 12~px) & 96,41 & 1,731 & 1,788 & 1,928 & 0,291 \\
     ALGO 013 (70--94, 12~px) & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 \\
     ALGO 014 (70--94, 9~px)  & 87,93 & 1,663 & 1,733 & 1,759 & 0,094 \\
     \bottomrule
-  \end{tabular*}
+  \end{tabular}
 \end{table}
 
 ALGO 012 mantiene el umbral permisivo de 12~px pero rebaja el techo de PWM de 94 a 90, y es la peor de las tres en todas las métricas, con 96,41~s de tiempo acumulado y una desviación típica de 0,291~s. Bajar el techo de velocidad penaliza el ritmo sin resolver los derrapes, porque el problema no era ir demasiado deprisa sino reaccionar demasiado tarde, y por eso la mejora viene de afinar el umbral y no de conducir más despacio.
@@ -227,17 +229,18 @@ Para las ejecuciones automáticas se reutilizaron los datos de las pruebas de la
 
 La prueba se repitió en dos circuitos. El primero es el óvalo ya empleado en las pruebas anteriores, cubierto por una sola cámara. El segundo es el circuito en ocho, que necesita dos cámaras, una de ellas en la misma máquina que el nodo controlador y el puente Arduino y la otra en un segundo equipo que envía sus detecciones por red, de modo que este escenario añade la conmutación entre cámaras y la latencia de la red.
 
-Los cuadros~\ref{tab:vs-personas-azul} y~\ref{tab:vs-personas-rojo} recogen los resultados sobre el óvalo y en los dos coches se repite el mismo patrón. Los pilotos humanos firman las mejores vueltas absolutas, 1,276~s y 1,291~s en el coche rojo frente a los 1,315~s de la mejor ejecución automática, pero ninguno de los dos gana la contrarreloj. La explicación está en la desviación típica, de 0,787~s y 1,151~s en el caso de los pilotos frente a valores en torno a 0,22~s en las ejecuciones automáticas. El piloto encuentra el límite del coche en una vuelta concreta y no consigue repetirlo, y cada intento fallido le cuesta más de lo que le había ganado el intento bueno.
+Las tablas~\ref{tab:vs-personas-azul} y~\ref{tab:vs-personas-rojo} recogen los resultados sobre el óvalo y en los dos coches se repite el mismo patrón. Los pilotos humanos firman las mejores vueltas absolutas, 1,276~s y 1,291~s en el coche rojo frente a los 1,315~s de la mejor ejecución automática, pero ninguno de los dos gana la contrarreloj. La explicación está en la desviación típica, de 0,787~s y 1,151~s en el caso de los pilotos frente a valores en torno a 0,22~s en las ejecuciones automáticas. El piloto encuentra el límite del coche en una vuelta concreta y no consigue repetirlo, y cada intento fallido le cuesta más de lo que le había ganado el intento bueno.
 
-\begin{table}[htbp]
+\begin{table}[tbp]
   \centering
+  \estilotabla[3]
   \caption{Coche azul en el circuito en óvalo, algoritmo vs pilotos humanos.}
   \label{tab:vs-personas-azul}
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+  \begin{tabular}{lrrrrr}
     \toprule
+    \rowcolor{ArqAzulClaro}
     Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              & (s) & (s) & (s) & (s) & (s) \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
     \midrule
     ALGO 014 (70--94, 9~px)  & 87,93 & 1,663 & 1,733 & 1,759 & 0,094 \\
     ALGO 013 (70--94, 12~px) & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 \\
@@ -245,18 +248,19 @@ Los cuadros~\ref{tab:vs-personas-azul} y~\ref{tab:vs-personas-rojo} recogen los 
     ALGO 012 (70--90, 12~px) & 96,41 & 1,731 & 1,788 & 1,928 & 0,291 \\
     Manual (piloto 2)        & 107,54 & 1,674 & 1,911 & 2,151 & 0,646 \\
     \bottomrule
-  \end{tabular*}
+  \end{tabular}
 \end{table}
 
-\begin{table}[htbp]
+\begin{table}[tbp]
   \centering
+  \estilotabla[3]
   \caption{Coche rojo en el circuito en óvalo, algoritmo vs pilotos humanos.}
   \label{tab:vs-personas-rojo}
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+  \begin{tabular}{lrrrrr}
     \toprule
+    \rowcolor{ArqAzulClaro}
     Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              & (s) & (s) & (s) & (s) & (s) \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
     \midrule
     ALGO 013 (70--94, 12~px) & 75,44 & 1,315 & 1,377 & 1,509 & 0,232 \\
     ALGO 014 (70--94, 9~px)  & 75,67 & 1,329 & 1,399 & 1,513 & 0,214 \\
@@ -264,7 +268,7 @@ Los cuadros~\ref{tab:vs-personas-azul} y~\ref{tab:vs-personas-rojo} recogen los 
     Manual (piloto 1)        & 82,36 & 1,291 & 1,421 & 1,647 & 0,787 \\
     Manual (piloto 2)        & 93,86 & 1,276 & 1,587 & 1,877 & 1,151 \\
     \bottomrule
-  \end{tabular*}
+  \end{tabular}
 \end{table}
 
 La diferencia entre los dos coches también reaparece aquí, como ya habíamos intuido en las pruebas anteriores. En el rojo la mejor ejecución automática le saca casi 7~segundos al mejor piloto, mientras que en el azul el margen se estrecha hasta los 0,7~segundos que separan a ALGO 013 del piloto 1, porque el coche es tan sensible que encontrar el punto de funcionamiento correcto resulta difícil para las dos partes. De hecho ALGO 012, con los parámetros mal ajustados, queda por debajo del piloto 1 en una de las ejecuciones.
@@ -273,17 +277,18 @@ La diferencia entre los dos coches también reaparece aquí, como ya habíamos i
 %  Circuito en ocho
 % ---------------------------------------------------------------------
 
-Los resultados sobre el circuito en ocho se recogen en los cuadros~\ref{tab:vs-personas-ocho-azul} y~\ref{tab:vs-personas-ocho-rojo}, y conviene tener presente que este trazado añade dificultad de forma muy distinta a cada uno de los dos contendientes. Al piloto le obliga a encadenar dos curvas de sentidos opuestos y a anticipar el cruce central, con una vuelta que casi duplica en duración a la del óvalo y que por tanto ofrece más ocasiones de equivocarse. Al algoritmo, en cambio, no le supone ninguna complicación conceptual, porque sigue trabajando sobre la cadena de celdas particionada en zonas independientes y cada tramo conflictivo se ajusta por separado, sin que importe el orden en el que se recorren ni que la trayectoria llegue a tocarse consigo misma. Lo que sí se añade en el lado del sistema es infraestructura, ya que aquí hacen falta dos cámaras y una de ellas se ejecuta en un equipo distinto que publica sus detecciones por red, de modo que estas ejecuciones incorporan además la conmutación entre cámaras y la latencia asociada.
+Los resultados sobre el circuito en ocho se recogen en las tablas~\ref{tab:vs-personas-ocho-azul} y~\ref{tab:vs-personas-ocho-rojo}, y conviene tener presente que este trazado añade dificultad de forma muy distinta a cada uno de los dos contendientes. Al piloto le obliga a encadenar dos curvas de sentidos opuestos y a anticipar el cruce central, con una vuelta que casi duplica en duración a la del óvalo y que por tanto ofrece más ocasiones de equivocarse. Al algoritmo, en cambio, no le supone ninguna complicación conceptual, porque sigue trabajando sobre la cadena de celdas particionada en zonas independientes y cada tramo conflictivo se ajusta por separado, sin que importe el orden en el que se recorren ni que la trayectoria llegue a tocarse consigo misma. Lo que sí se añade en el lado del sistema es infraestructura, ya que aquí hacen falta dos cámaras y una de ellas se ejecuta en un equipo distinto que publica sus detecciones por red, de modo que estas ejecuciones incorporan además la conmutación entre cámaras y la latencia asociada.
 
-\begin{table}[htbp]
+\begin{table}[tbp]
   \centering
+  \estilotabla[3]
   \caption{Coche azul en el circuito en ocho, algoritmo vs pilotos humanos.}
   \label{tab:vs-personas-ocho-azul}
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+  \begin{tabular}{lrrrrr}
     \toprule
+    \rowcolor{ArqAzulClaro}
     Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              & (s) & (s) & (s) & (s) & (s) \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
     \midrule
     ALGO 002 (60--75, 9~px)  & 202,89 & 3,588 & 3,804 & 4,058 & 0,626 \\
     ALGO 004 (63--85, 8~px)  & 205,00 & 3,549 & 4,011 & 4,100 & 0,563 \\
@@ -292,22 +297,23 @@ Los resultados sobre el circuito en ocho se recogen en los cuadros~\ref{tab:vs-p
     Manual (piloto 2)        & 276,72 & 3,972 & 4,893 & 5,534 & 1,876 \\
     Manual (piloto 3)        & 427,23 & 4,615 & 6,589 & 8,545 & 4,997 \\
     \bottomrule
-  \end{tabular*}
+  \end{tabular}
 \end{table}
 
 En el coche azul la distancia entre el sistema y los pilotos se dispara respecto a lo que ocurría en el óvalo. La mejor ejecución automática, ALGO 002, completa las 50 vueltas en 202,89~s, mientras que el mejor de los dos pilotos necesita 276,72~s, casi 74~segundos más, un 36\,\% por encima, y el segundo se va hasta los 427,23~s, más del doble. La lectura que valía en el óvalo, en la que el humano al menos firmaba la vuelta rápida, aquí ya no se sostiene, porque ningún piloto consigue siquiera la mejor vuelta absoluta y los 3,972~s del piloto 2 quedan lejos de los 3,549~s de ALGO 004. Tampoco hay ninguna configuración del algoritmo, ni siquiera la peor de las cuatro, que quede por detrás de un piloto, algo que en el óvalo sí llegó a pasar con ALGO 012. La combinación de un coche tan sensible al PWM como el descrito en la sección~\ref{sec:prueba-comparativa-coches} con un trazado que exige anticipar dos curvas encadenadas deja al piloto sin margen, y no hay una sola vuelta en la que consiga arriesgar y salir bien parado.
 
-Entre las propias ejecuciones automáticas del coche azul se reproduce además el patrón de la sección~\ref{sec:prueba-algo-parametros}. ALGO 003, con el techo de PWM en 85 y el umbral en 9~px, es con diferencia la peor de las cuatro, con 243,92~s y una desviación típica de 2,094~s, un orden de magnitud por encima de las otras tres, porque el umbral que bastaba con el techo en 75 se queda corto en cuanto el coche llega a las curvas con más inercia. ALGO 004 mantiene ese mismo techo de 85, baja el umbral a 8~px y recupera el control, con 205,00~s, apenas dos segundos por detrás de ALGO 002, una desviación típica de 0,563~s y, de hecho, la mejor vuelta de todo el cuadro. El techo de velocidad se puede subir, por tanto, pero solo si el umbral se afina al mismo tiempo, ya que subirlo dejando el umbral como estaba no produce vueltas más rápidas sino derrapes más grandes.
+Entre las propias ejecuciones automáticas del coche azul se reproduce además el patrón de la sección~\ref{sec:prueba-algo-parametros}. ALGO 003, con el techo de PWM en 85 y el umbral en 9~px, es con diferencia la peor de las cuatro, con 243,92~s y una desviación típica de 2,094~s, un orden de magnitud por encima de las otras tres, porque el umbral que bastaba con el techo en 75 se queda corto en cuanto el coche llega a las curvas con más inercia. ALGO 004 mantiene ese mismo techo de 85, baja el umbral a 8~px y recupera el control, con 205,00~s, apenas dos segundos por detrás de ALGO 002, una desviación típica de 0,563~s y, de hecho, la mejor vuelta de toda la tabla. El techo de velocidad se puede subir, por tanto, pero solo si el umbral se afina al mismo tiempo, ya que subirlo dejando el umbral como estaba no produce vueltas más rápidas sino derrapes más grandes.
 
-\begin{table}[htbp]
+\begin{table}[tbp]
   \centering
+  \estilotabla[3]
   \caption{Coche rojo en el circuito en ocho, algoritmo vs pilotos humanos.}
   \label{tab:vs-personas-ocho-rojo}
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+  \begin{tabular}{lrrrrr}
     \toprule
+    \rowcolor{ArqAzulClaro}
     Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              & (s) & (s) & (s) & (s) & (s) \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
     \midrule
     ALGO 001 (60--75, 10~px)     & 138,23 & 2,603 & 2,713 & 2,765 & 0,152 \\
     Manual (piloto 1, intento 2) & 141,24 & 2,456 & 2,656 & 2,825 & 0,548 \\
@@ -318,7 +324,7 @@ Entre las propias ejecuciones automáticas del coche azul se reproduce además e
     Manual (piloto 1, intento 3) & 162,10 & 2,424 & 2,689 & 3,242 & 1,659 \\
     Manual (piloto 2)            & 182,11 & 2,523 & 2,944 & 3,642 & 1,981 \\
     \bottomrule
-  \end{tabular*}
+  \end{tabular}
 \end{table}
 
 En el coche rojo el resultado es mucho más ajustado y merece mirarse con detalle, porque el piloto 1 repitió la prueba cuatro veces y esos cuatro intentos permiten ver cómo evoluciona un humano con la práctica. ALGO 001 gana la contrarreloj con 138,23~s y el mejor intento manual queda a 3,01~s, un margen bastante más estrecho que los casi 7~segundos del óvalo. Sus vueltas rápidas mejoran intento tras intento, 2,522, 2,456, 2,424 y 2,387~s, hasta situarse 0,216~s por debajo de la mejor vuelta del algoritmo, pero el tiempo acumulado no acompaña a esa progresión, ya que las cuatro contrarrelojes son de 159,73, 141,24, 162,10 y 154,87~s y no dibujan ninguna tendencia. Lo que la práctica le da al piloto es velocidad punta, no regularidad, y eso se ve en la desviación típica, que no baja de los 0,548~s frente a los 0,152~s de ALGO 001. Si hubiese sido capaz de repetir su mejor vuelta las cincuenta veces habría cerrado la contrarreloj en 119,35~s, casi 19~segundos por debajo del algoritmo, de manera que el margen de mejora existe; lo que no existe es la forma de sostenerlo.
