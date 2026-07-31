@@ -130,36 +130,45 @@ El método arrastra una limitación que ya señalaba Mario López~\cite{tfgmario
 
 Esta sección detalla cómo se implementa el algoritmo cuyo diseño se describió en la sección~\ref{sec:algoritmo-arquitectura}.
 
-\subsection{Instancias por cámara y coordinación entre camaras}
+\subsection{Instancias por cámara y coordinación entre cámaras}
 \label{subsec:algoritmo-instancias}
 
-El algoritmo no trabaja sobre el circuito completo, sino sobre la porción que observa una cámara. El controlador mantiene un diccionario indexado por identificador de cámara (sección~\ref{subsec:control-modos}), que guarda la lista de puntos acumulados de esa cámara durante la calibración. Al cerrarse la vuelta, cada lista da lugar a una instancia independiente del algoritmo, con su propia cadena de celdas, sus propias zonas y su propio perfil de PWM.
+El caso más sencillo es el de una única cámara que ve el circuito completo. De la vuelta de calibración sale una sola trayectoria base (sección~\ref{sec:trayectoria-base}) que recorre todo el trazado y sobre ella se crea una única instancia del algoritmo, con una unica zona que engloba todos los puntos de la trayectoria y todos con el mismo perfil de PWM.
 
-La consecuencia es que no existe una trayectoria global del circuito. Cada trayectoria vive en las coordenadas de imagen de su cámara y ninguna instancia conoce nada de las demás, no hay fusión de trayectorias y  tampoco un sistema de referencia común. El único punto del proyecto en el que todas se llevan a un plano común es la herramienta de análisis en diferido (sección~\ref{subsec:visualizacion-analisis}), que queda fuera del lazo de control. Hacerlo de esta forma es porque permite facilita el trabajo y reduce el esfuerzo que hay que realizar.
+En cuanto se añaden más cámaras esa situación desaparece, porque ninguna ve el circuito completo, sino solo la porción que cae dentro de su campo de visión. La decisión de diseño que se tomó fue no reconstruir una trayectoria global a partir de esas vistas parciales, sino particionar la trayectoria base y trabajar con trozos. Lo que cada cámara graba durante la calibración es su porción del circuito, y cada porción da lugar a su propia instancia del algoritmo. Hay por tanto tantas instancias como cámaras, cada una responsable de su parte, y en ningún momento se construye la trayectoria base completa del circuito. En la implementación esto se traduce en que el controlador guarda los puntos de calibración en un diccionario indexado por identificador de cámara y, al cerrarse la vuelta, crea una instancia del algoritmo por cada entrada.
 
-La visión de conjunto la aporta el controlador, no el algoritmo. Es el controlador quien enruta cada posición a la instancia que le corresponde, quien decide qué cámara está activa en cada momento, quien cierra un derrape en una cámara y abre su continuación en la siguiente, quien propaga hacia atrás las reducciones que no caben en una porción y quien determina si una vuelta ha sido limpia en todo el trazado. Esos mecanismos se describen en la sección~\ref{subsec:algoritmo-coordinacion}.
+El motivo de hacerlo así es que unir las porciones en una única trayectoria obligaría a llevarlas a un sistema de referencia común, con la calibración de las cámaras y las transformaciones que eso implica, y ese trabajo no aporta nada al control. Particionar la trayectoria evita ese esfuerzo y mantiene el algoritmo igual de sencillo que en el caso de una sola cámara, cada trayectoria vive en las coordenadas de su propia cámara.
 
-Cada instancia conoce solo su porción del circuito (sección~\ref{subsec:algoritmo-instancias}), de modo que hay tres situaciones que ninguna puede resolver por sí sola y que asume el controlador.
+El problema del particionar es que introduce problemas que con una única cámara no existen. Cada instancia conoce solo su trozo del circuito, de modo que hay tres situaciones que ninguna puede resolver por sí sola y de las que se encarga el controlador, que es quien tiene la visión de conjunto.
 
-La primera es la transición del coche entre cámaras. Cuando dos campos de visión se solapan, ambas publican posiciones intercaladas del mismo coche, así que la cámara activa se mantiene mientras siga entregando fotogramas válidos y solo se cambia a otra cuando deja de hacerlo durante un breve intervalo y esa otra sí está entregando. En cada cambio el controlador notifica la pérdida de visión a la cámara saliente. Como el coche recorre siempre el circuito en el mismo sentido, tras una vuelta completa ese registro contiene el orden secuencial de las cámaras, aprendido en carrera y sin configuración manual.
+La primera es la transición del coche entre cámaras. Cuando dos campos de visión se solapan, ambas publican posiciones intercaladas del mismo coche, así que la cámara activa se mantiene mientras siga entregando fotogramas válidos y solo se cambia a otra cuando deja de hacerlo durante un breve intervalo y esa otra sí está entregando. En cada cambio el controlador notifica la pérdida de visión a la cámara saliente y anota qué cámara precede a cuál. Como el coche recorre siempre el circuito en el mismo sentido, tras una vuelta completa ese registro contiene el orden secuencial de las cámaras, aprendido en carrera y sin configuración manual.
 
-La segunda es el derrape repartido entre dos cámaras. Al recibir la notificación de pérdida de visión, la instancia saliente cierra el derrape que tuviera abierto y la entrante recibe la orden de abrir uno nuevo, en caso de que el derrape siguiera activo. La zona de derrape se extiende así entre cámaras y el derrape se detecta aunque el corte entre cámaras caiga en mitad de una curva.
+La segunda es el derrape repartido entre dos cámaras. Al recibir la notificación de pérdida de visión, la instancia saliente cierra el derrape que tuviera abierto y la entrante recibe la orden de abrir uno nuevo, en caso de que el derrape siguiera activo. La zona de derrape se extiende así entre cámaras y el derrape se detecta aunque el corte entre ellas caiga en mitad de una curva.
 
-La tercera es la propagación de reducciones. Ocurre cuando un derrape se produce cerca del inicio de la porción visible de una cámara, algo habitual si una curva queda repartida entre dos cámaras. El retroceso del castigo se sale por el inicio antes de agotarse y los píxeles restantes corresponden a un tramo de otra cámara. La instancia anota ese sobrante como reducción pendiente; el controlador la recoge tras procesar cada posición y, según el orden aprendido, ordena a la cámara precedente que la aplique al final de su trayectoria, creando o ampliando allí la zona de derrape. Esa reducción externa no incrementa el contador de derrapes de quien la recibe, porque ese derrape ya lo contabilizó la cámara que lo observó, pero la zona queda protegida igual. Si tampoco llegara la trayectoria de la camara anterior, el sobrante volvería a quedar pendiente y se propagaría en poco hacia atrás hasta terminarse.
+La tercera es la propagación de reducciones. Ocurre cuando un derrape se produce cerca del inicio de la porción visible de una cámara, algo habitual si una curva queda repartida entre dos. El retroceso del castigo se sale por el inicio antes de agotarse y los píxeles restantes corresponden a un tramo de otra cámara. La instancia anota ese sobrante como reducción pendiente; el controlador la recoge tras procesar cada posición y, según el orden aprendido, ordena a la cámara precedente que la aplique al final de su trayectoria, creando o ampliando allí la zona de derrape. Esa reducción externa no incrementa el contador de derrapes de quien la recibe, porque ese derrape ya lo contabilizó la cámara que lo observó, pero la zona queda protegida igual. Si tampoco cupiera en la trayectoria de la cámara anterior, el sobrante volvería a quedar pendiente y se seguiría propagando hacia atrás hasta agotarse.
  
 \subsection{Localización del coche sobre la trayectoria}
 \label{subsec:algoritmo-localizacion}
 
-Para poder realizar el control es necesario saber donde están los dos ejes del coche, tanto el delantero como el trasero, con respecto a la trayectoria base, (sección~\ref{subsec:trayectoria-base}). Razón por la cual, para cada una se obtiene la celda más cerca y su distancia a ella.
+Para poder realizar el control es necesario saber donde están los ejes, tanto el delantero como el trasero, del coche con respecto a la trayectoria base, (sección~\ref{sec:trayectoria-base}).
 
-Después cada una tiene un uso distinto. La distancia de la delantera se debe comprobar para asegurar que el coche sigue el recorrido esperado, si supera un umbral se considera que la detección no es válida y el fotograma se descarta sin llegar a calcular un PWM nuevo. La distancia de la trasera es la señal con la que se detectan los derrapes, como se detalla en la sección~\ref{subsec:algoritmo-derrapes}.
+Hace falta saber donde están los dos ejes porque cada uno tiene un uso distinto. La posición del eje delantero se debe comprobar para asegurar que el coche sigue el recorrido esperado, si supera un umbral se considera que la detección no es válida y el fotograma se descarta. La distancia de la trasera es la señal con la que se detectan los derrapes, como se detalla en la sección~\ref{subsec:algoritmo-derrapes}.
 
-El procedimiento es el mismo para ambas. Primero se busca la celda cuyo punto está más próximo al centroide de la pegatina. Después se proyecta ese centroide sobre los dos segmentos que unen la celda escogida con su anterior y su posterior, y se conserva la menor de las dos distancias. La proyección hace falta porque medir contra la celda daría una distancia que no es precisa, en cambio contra los segmentos se obtiene la distancia perpendicular a la trayectoria.
+\begin{figure}[tbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{imaxes/IMPLEMENTACION/ejemplo_dist_derrape.png}
+    \caption{Distancia perpendicular del eje trasero a la trayectoria base. En azul la
+    trayectoria base con sus celdas, en violeta el centroide de la pegatina trasera y en
+    rojo el segmento que lo une con su proyección sobre la trayectoria.}
+    \label{fig:distancia-perpendicular}
+\end{figure}
+
+El procedimiento es el mismo para ambas. Primero se busca la celda cuyo punto está más próximo al centroide de la pegatina, que es la que indica en qué punto del recorrido se encuentra el eje. Después se proyecta ese centroide sobre los dos segmentos que unen la celda escogida con su anterior y su posterior, y se conserva la menor de las dos distancias, tal y como se muestra en la figura~\ref{fig:distancia-perpendicular}.
 
 \subsection{Detección de derrapes}
 \label{subsec:algoritmo-derrapes}
 
-La sección~\ref{subsec:derrape-arquitectura} exige que exista una señal capaz de indicar en qué punto del circuito el coche ha perdido el control, es decir, derrapado. La señal escogida aquí es la distancia perpendicular de la pegatina trasera a la trayectoria base, seccion~\ref{subsec:trayectoria-base}. Cuando el eje trasero del coche se abre, esa distancia crece, porque el coche está empezando a derrapar.
+La sección~\ref{subsec:derrape-arquitectura} exige que exista una señal capaz de indicar en qué punto del circuito el coche ha perdido el control, es decir, derrapado. La señal escogida aquí es la distancia perpendicular de la pegatina trasera a la trayectoria base, seccion~\ref{sec:trayectoria-base}. Cuando el eje trasero del coche se abre, esa distancia crece, porque el coche está empezando a derrapar, se puede observar en la figura~\ref{fig:distancia-perpendicular}
 
 Cuando la distancia supera el umbral de derrape se marca el inicio, anotamos el punto inicial y mientras se mantenga por encima, el derrape se prolonga hasta que el valor vuelve a caer por debajo y se cierra. De esta forma creamos una zona de derrape, como se explico en la sección~\ref{subsec:zonas-politicas}.
 
@@ -199,15 +208,14 @@ La figura~\ref{fig:secuencia-derrape} ejemplifica un caso donde se puede ver el 
     \label{fig:secuencia-derrape}
 \end{figure}
 
-
 \subsection{Castigo de zonas y ciclo de aprendizaje}
 \label{subsec:algoritmo-aprendizaje}
 
-La política de castigo se dispara al cerrarse un derrape. El intervalo de celdas en las que se detectó se extiende hacia atrás una distancia fija en píxeles, que es el tramo de anticipación, y el resultado pasa a ser una zona de derrape con un PWM igual al mínimo de los de las zonas que cubría menos dos unidades, con el parámetro \texttt{minimum\_speed} (sección~\ref{subsec:params-yaml}) como suelo. Si el intervalo toca una zona de derrape ya existente ambas se fusionan, con la unión de los dos intervalos y el menor de los dos PWM menos la reducción; el retroceso que se añade al fusionar es más corto, para que reincidir en una misma curva no acabe extendiendo la zona sobre el circuito entero. Las celdas gigantes que alcance el castigo se rebajan enteras.
+Las dos políticas de la sección~\ref{subsec:zonas-politicas} se concretan aquí en dos pasos muy simples. El castigo se aplica al cerrarse un derrape: las celdas en las que se detectó, más el tramo de anticipación, forman una zona de derrape con un PWM dos unidades por debajo del más bajo que hubiera en ese intervalo, y si el intervalo toca una zona de derrape anterior ambas se fusionan en una. La mejora se aplica al pasar por meta, si la vuelta fue limpia, cada zona sube una unidad, salvo las que acaban de derrapar, que quedan protegidas durante unas vueltas.
 
-La política de mejora se dispara con el paso por meta. El controlador comprueba si durante la vuelta hubo algún derrape en alguna de las cámaras y comunica el resultado a todas las instancias. Cada zona sin derrape incrementa su PWM en una unidad, con \texttt{maximum\_speed} como techo. Quedan fuera las zonas que registraron un derrape en las últimas vueltas, que permanecen protegidas durante un número configurable de vueltas antes de poder volver a subir.
+Las figuras~\ref{fig:derrape-trazas} y~\ref{fig:derrape-dist} recorren el ciclo sobre tres vueltas consecutivas de una sesión, con las gráficas de la herramienta de análisis (sección~\ref{subsec:visualizacion-analisis}). En la vuelta~21 el eje trasero praticamente esta superpuesto a la trayectoria base, es decir, no hay derrape Al cruzar meta esa zona sube a 91 y en la vuelta~22 el coche ya no aguanta y derrapa, la distancia llega a 22~px.
 
-Las figuras~\ref{fig:derrape-trazas} y~\ref{fig:derrape-dist} recorren el ciclo completo sobre tres vueltas consecutivas de una sesión, con las gráficas de la herramienta de análisis (sección~\ref{subsec:visualizacion-analisis}). En la vuelta~21 la trasera va pegada a la trayectoria base y la distancia nunca se acerca al umbral, de modo que el PWM se mantiene igual en todo el recorrido y solamente hay una zona. En la~22 la trasera se abre en la curva y la distancia lo supera durante diez fotogramas, lo que cierra un derrape y castiga la zona. En la~23 el perfil ya trae el PWM rebajado en ese tramo.
+La vuelta~23 arranca con el perfil ya aprendido. La línea verde baja a 89 solo en ese tramo y vuelve a 91 al salir de él, con la distancia otra vez por debajo del umbral.
 
 \begin{figure}[tbp]
     \centering
@@ -232,11 +240,11 @@ Las figuras~\ref{fig:derrape-trazas} y~\ref{fig:derrape-dist} recorren el ciclo 
         \caption{Vuelta 23, ya castigada}
         \label{fig:derrape-trazas-c}
     \end{subfigure}
-    \caption{Recorrido de la pegatina trasera (magenta) frente a la trayectoria base (azul) en tres vueltas consecutivas. Los segmentos rojos son la distancia perpendicular que mide el algoritmo}
+    \caption{Recorrido de la pegatina trasera (magenta) sobre la trayectoria base (azul). En rojo, la distancia perpendicular medida}
     \label{fig:derrape-trazas}
 \end{figure}
 
-\begin{figure}[t!bp]
+\begin{figure}[tbp]
     \centering
     \begin{subfigure}[b]{0.75\textwidth}
         \centering
@@ -260,7 +268,7 @@ Las figuras~\ref{fig:derrape-trazas} y~\ref{fig:derrape-dist} recorren el ciclo 
         \caption{Vuelta 23}
         \label{fig:derrape-dist-c}
     \end{subfigure}
-    \caption{Distancia de la pegatina trasera a lo largo de cada vuelta (eje izquierdo) frente al PWM aplicado (línea verde, eje derecho). Las aspas rojas marcan las muestras que superan el umbral y abren el derrape. El escalón verde de la vuelta~23 es la zona creada por el castigo de la anterior.}
+    \caption{Distancia de la pegatina trasera en cada fotograma (eje izquierdo) y PWM aplicado (verde, eje derecho). Las aspas rojas marcan las muestras que superan el umbral}
     \label{fig:derrape-dist}
 \end{figure}
 
