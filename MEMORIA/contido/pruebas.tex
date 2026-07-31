@@ -13,6 +13,15 @@
 %  OJO: pwm_zonas_coche_azul.pdf y pwm_zonas_coche_rojo.pdf tienen DOS
 %  páginas (la segunda es el desbordamiento de la leyenda), por eso se
 %  incluyen con la opción page=1.
+%
+%  CAMBIOS RESPECTO A LA VERSIÓN ANTERIOR (sección 3, circuito en ocho):
+%   - Se sustituye el cuadro vacío tab:vs-personas-ocho por dos cuadros,
+%     tab:vs-personas-ocho-azul y tab:vs-personas-ocho-rojo, siguiendo el
+%     mismo esquema que los del óvalo.
+%   - Se reescribe el párrafo de introducción al circuito en ocho y se
+%     añade el análisis completo de ambos coches.
+%   - Pilotos: piloto 1 = JAICKOB, piloto 2 = LIAM, piloto 3 = LOIS.
+%     REVISAR que esta numeración case con la de los cuadros del óvalo.
 % =====================================================================
 
 \chapter{Pruebas}
@@ -260,21 +269,64 @@ Los cuadros~\ref{tab:vs-personas-azul} y~\ref{tab:vs-personas-rojo} recogen los 
 
 La diferencia entre los dos coches también reaparece aquí, como ya habíamos intuido en las pruebas anteriores. En el rojo la mejor ejecución automática le saca casi 7~segundos al mejor piloto, mientras que en el azul el margen se estrecha hasta los 0,7~segundos que separan a ALGO 013 del piloto 1, porque el coche es tan sensible que encontrar el punto de funcionamiento correcto resulta difícil para las dos partes. De hecho ALGO 012, con los parámetros mal ajustados, queda por debajo del piloto 1 en una de las ejecuciones.
 
-Los resultados sobre el circuito en ocho se recogen en el cuadro~\ref{tab:vs-personas-ocho}, donde la diferencia se acentúa porque el trazado obliga al piloto a anticipar dos curvas encadenadas y el cruce central, algo que para el algoritmo no supone ninguna complicación adicional al trabajar por zonas independientes. Uno de los pilotos llegó a conseguir una media y una mediana inferiores a las del algoritmo y aun así perdió la contrarreloj, porque al intentar sostener ese ritmo acabó saliéndose de la pista y cada salida obliga a recoger el coche, volver a colocarlo y acelerar de nuevo desde parado.
+% ---------------------------------------------------------------------
+%  Circuito en ocho
+% ---------------------------------------------------------------------
+
+Los resultados sobre el circuito en ocho se recogen en los cuadros~\ref{tab:vs-personas-ocho-azul} y~\ref{tab:vs-personas-ocho-rojo}, y conviene tener presente que este trazado añade dificultad de forma muy distinta a cada uno de los dos contendientes. Al piloto le obliga a encadenar dos curvas de sentidos opuestos y a anticipar el cruce central, con una vuelta que casi duplica en duración a la del óvalo y que por tanto ofrece más ocasiones de equivocarse. Al algoritmo, en cambio, no le supone ninguna complicación conceptual, porque sigue trabajando sobre la cadena de celdas particionada en zonas independientes y cada tramo conflictivo se ajusta por separado, sin que importe el orden en el que se recorren ni que la trayectoria llegue a tocarse consigo misma. Lo que sí se añade en el lado del sistema es infraestructura, ya que aquí hacen falta dos cámaras y una de ellas se ejecuta en un equipo distinto que publica sus detecciones por red, de modo que estas ejecuciones incorporan además la conmutación entre cámaras y la latencia asociada.
 
 \begin{table}[htbp]
   \centering
-  \caption{Circuito en ocho, ejecuciones automáticas frente a pilotos humanos.}
-  \label{tab:vs-personas-ocho}
+  \caption{Coche azul en el circuito en ocho, algoritmo vs pilotos humanos.}
+  \label{tab:vs-personas-ocho-azul}
   \setlength{\tabcolsep}{4pt}
   \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
     \toprule
     Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
               & (s) & (s) & (s) & (s) & (s) \\
     \midrule
-    % TODO: pendiente de completar con los datos del circuito en ocho
+    ALGO 002 (60--75, 9~px)  & 202,89 & 3,588 & 3,804 & 4,058 & 0,626 \\
+    ALGO 004 (63--85, 8~px)  & 205,00 & 3,549 & 4,011 & 4,100 & 0,563 \\
+    ALGO 001 (60--75, 10~px) & 210,22 & 3,576 & 3,885 & 4,204 & 0,733 \\
+    ALGO 003 (60--85, 9~px)  & 243,92 & 3,697 & 4,200 & 4,878 & 2,094 \\
+    Manual (piloto 2)        & 276,72 & 3,972 & 4,893 & 5,534 & 1,876 \\
+    Manual (piloto 3)        & 427,23 & 4,615 & 6,589 & 8,545 & 4,997 \\
     \bottomrule
   \end{tabular*}
 \end{table}
 
-La conclusión de estas pruebas es que la ventaja del algoritmo no está en la velocidad punta sino en la capacidad de sostenerla. Un piloto humano iguala e incluso supera al sistema en una vuelta suelta, porque puede arriesgar deliberadamente donde el algoritmo se limita a lo que ha aprendido, pero no consigue repetir ese riesgo cincuenta veces sin equivocarse y en una carrera lo que cuenta es el acumulado. Esa regularidad es además consecuencia directa de la política de castigo por zonas descrita en la sección~\ref{sec:castigo-zonas}, que sacrifica velocidad puntual en los tramos conflictivos a cambio de no perder vueltas enteras.
+En el coche azul la distancia entre el sistema y los pilotos se dispara respecto a lo que ocurría en el óvalo. La mejor ejecución automática, ALGO 002, completa las 50 vueltas en 202,89~s, mientras que el mejor de los dos pilotos necesita 276,72~s, casi 74~segundos más, un 36\,\% por encima, y el segundo se va hasta los 427,23~s, más del doble. La lectura que valía en el óvalo, en la que el humano al menos firmaba la vuelta rápida, aquí ya no se sostiene, porque ningún piloto consigue siquiera la mejor vuelta absoluta y los 3,972~s del piloto 2 quedan lejos de los 3,549~s de ALGO 004. Tampoco hay ninguna configuración del algoritmo, ni siquiera la peor de las cuatro, que quede por detrás de un piloto, algo que en el óvalo sí llegó a pasar con ALGO 012. La combinación de un coche tan sensible al PWM como el descrito en la sección~\ref{sec:prueba-comparativa-coches} con un trazado que exige anticipar dos curvas encadenadas deja al piloto sin margen, y no hay una sola vuelta en la que consiga arriesgar y salir bien parado.
+
+Entre las propias ejecuciones automáticas del coche azul se reproduce además el patrón de la sección~\ref{sec:prueba-algo-parametros}. ALGO 003, con el techo de PWM en 85 y el umbral en 9~px, es con diferencia la peor de las cuatro, con 243,92~s y una desviación típica de 2,094~s, un orden de magnitud por encima de las otras tres, porque el umbral que bastaba con el techo en 75 se queda corto en cuanto el coche llega a las curvas con más inercia. ALGO 004 mantiene ese mismo techo de 85, baja el umbral a 8~px y recupera el control, con 205,00~s, apenas dos segundos por detrás de ALGO 002, una desviación típica de 0,563~s y, de hecho, la mejor vuelta de todo el cuadro. El techo de velocidad se puede subir, por tanto, pero solo si el umbral se afina al mismo tiempo, ya que subirlo dejando el umbral como estaba no produce vueltas más rápidas sino derrapes más grandes.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Coche rojo en el circuito en ocho, algoritmo vs pilotos humanos.}
+  \label{tab:vs-personas-ocho-rojo}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+    \toprule
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
+              & (s) & (s) & (s) & (s) & (s) \\
+    \midrule
+    ALGO 001 (60--75, 10~px)     & 138,23 & 2,603 & 2,713 & 2,765 & 0,152 \\
+    Manual (piloto 1, intento 2) & 141,24 & 2,456 & 2,656 & 2,825 & 0,548 \\
+    ALGO 003 (65--90, 10~px)     & 141,81 & 2,618 & 2,756 & 2,836 & 0,225 \\
+    ALGO 002 (60--90, 10~px)     & 152,13 & 2,632 & 2,862 & 3,043 & 0,571 \\
+    Manual (piloto 1, intento 4) & 154,87 & 2,387 & 2,567 & 3,097 & 1,307 \\
+    Manual (piloto 1, intento 1) & 159,73 & 2,522 & 2,838 & 3,195 & 1,232 \\
+    Manual (piloto 1, intento 3) & 162,10 & 2,424 & 2,689 & 3,242 & 1,659 \\
+    Manual (piloto 2)            & 182,11 & 2,523 & 2,944 & 3,642 & 1,981 \\
+    \bottomrule
+  \end{tabular*}
+\end{table}
+
+En el coche rojo el resultado es mucho más ajustado y merece mirarse con detalle, porque el piloto 1 repitió la prueba cuatro veces y esos cuatro intentos permiten ver cómo evoluciona un humano con la práctica. ALGO 001 gana la contrarreloj con 138,23~s y el mejor intento manual queda a 3,01~s, un margen bastante más estrecho que los casi 7~segundos del óvalo. Sus vueltas rápidas mejoran intento tras intento, 2,522, 2,456, 2,424 y 2,387~s, hasta situarse 0,216~s por debajo de la mejor vuelta del algoritmo, pero el tiempo acumulado no acompaña a esa progresión, ya que las cuatro contrarrelojes son de 159,73, 141,24, 162,10 y 154,87~s y no dibujan ninguna tendencia. Lo que la práctica le da al piloto es velocidad punta, no regularidad, y eso se ve en la desviación típica, que no baja de los 0,548~s frente a los 0,152~s de ALGO 001. Si hubiese sido capaz de repetir su mejor vuelta las cincuenta veces habría cerrado la contrarreloj en 119,35~s, casi 19~segundos por debajo del algoritmo, de manera que el margen de mejora existe; lo que no existe es la forma de sostenerlo.
+
+Ese mismo piloto es además el único de toda la prueba que llega a batir al algoritmo en una métrica intermedia, porque las medianas de su segundo y su cuarto intento, 2,656 y 2,567~s, quedan por debajo de los 2,713~s de ALGO 001, es decir, que su vuelta típica es más rápida que la del sistema. La media, en cambio, ya se le da la vuelta, con 2,825 y 3,097~s frente a los 2,765~s del algoritmo, y justo ahí está la diferencia entre las dos formas de conducir, porque la mediana ignora las vueltas malas y la media no. Cada salida de pista obliga a recoger el coche, volver a colocarlo y arrancar de nuevo desde parado, y basta con un puñado de vueltas así para borrar todo lo que se había ganado en las demás. El piloto 2, que no había rodado antes en este trazado, ilustra el otro extremo del mismo fenómeno, con 182,11~s y una desviación típica de 1,981~s pese a firmar una mejor vuelta de 2,523~s, perfectamente competitiva.
+
+Entre las configuraciones automáticas del coche rojo aparece también un detalle que conviene señalar. ALGO 002 y ALGO 003 comparten el techo de PWM en 90 y el umbral en 10~px y solo se diferencian en el suelo del rango, 60 frente a 65, y esos cinco puntos cuestan más de 10~segundos, 152,13 frente a 141,81~s, y más del doble de desviación típica, 0,571 frente a 0,225~s. El suelo es el valor al que puede llegar el castigo, así que todo apunta a que con 60 el coche se queda en las zonas conflictivas bastante más lento de lo que necesitaría para no derrapar y tarda además más en recuperar el ritmo al salir de ellas. Ajustar el rango no es por tanto solo cuestión de cuánto se deja correr al coche, sino también de cuánto se le permite frenar.
+
+La comparación entre los dos coches vuelve a aparecer aquí y con más fuerza que en el óvalo. ALGO 001 se ejecutó con exactamente la misma configuración, con el rango de 60 a 75 y el umbral en 10~px, sobre los dos vehículos, y el resultado es de 210,22~s en el azul frente a 138,23~s en el rojo, casi 72~segundos y un 52\,\% más, cuando en el óvalo la misma comparación se quedaba en un 19\,\%. Un trazado más largo y con más curvas multiplica el efecto de la diferencia de adherencia descrita en la sección~\ref{sec:prueba-comparativa-coches}, y lo hace por igual para las dos partes, porque a los pilotos el coche azul también les cuesta mucho más que el rojo.
+
+La conclusión de estas pruebas es que la ventaja del algoritmo no está en la velocidad punta sino en la capacidad de sostenerla. Un piloto humano iguala e incluso supera al sistema en una vuelta suelta, porque puede arriesgar deliberadamente donde el algoritmo se limita a lo que ha aprendido, pero no consigue repetir ese riesgo cincuenta veces sin equivocarse y en una carrera lo que cuenta es el acumulado. El circuito en ocho añade a esa conclusión un matiz relevante, y es que cuanto más exigente resulta el trazado mayor es la ventaja del sistema, porque la dificultad se le acumula al piloto vuelta tras vuelta mientras que al algoritmo solo le supone más zonas que ajustar. Esa regularidad es además consecuencia directa de la política de castigo por zonas descrita en la sección~\ref{sec:castigo-zonas}, que sacrifica velocidad puntual en los tramos conflictivos a cambio de no perder vueltas enteras.
