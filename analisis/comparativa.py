@@ -3,12 +3,13 @@
 Comparativa de TIEMPOS POR VUELTA entre varias carreras, en una sola página.
 
 El dashboard de analisis.py genera un HTML por carrera. Este script coge N de
-esos HTML ya generados y los pone juntos para responder a dos preguntas que
+esos HTML ya generados y los pone juntos para responder a tres preguntas que
 con una pestaña por carrera no se pueden contestar:
 
+  - ¿quién dio mejor las 50 VUELTAS?  -> la contrarreloj de la tabla, que es la
+                                         suma de las 50 (ver más abajo)
   - ¿quién hizo la MEJOR VUELTA?      -> el ★ de la gráfica de líneas
-  - ¿quién CONTROLÓ MEJOR el coche?   -> las cajas (dispersión) y la σ y las
-                                         vueltas anómalas de la tabla
+  - ¿quién CONTROLÓ MEJOR el coche?   -> las cajas (dispersión) y la σ
 
 De dónde salen los datos: NO se lee el bag (en GRAFICAS_CARLOS/GUARDAR solo
 están el HTML y el mp4, los bags se quedaron fuera). Se lee la tabla de la
@@ -16,7 +17,8 @@ sección 5 del propio dashboard, que va en HTML plano dentro del fichero:
 
     <table class="tiempos">...<tr class=""><td>7</td><td>1.819</td></tr>...
 
-Tres reglas de lectura, que la página explica también al abrirla:
+Cinco reglas de lectura (la página explica las cuatro de los tiempos al
+abrirla; la quinta se ve sola en los paneles):
 
   1. Se tira la PRIMERA vuelta 1. Todas las carreras traen dos vueltas
      numeradas 1: el controlador publica el time_per_lap de la vuelta de
@@ -24,14 +26,20 @@ Tres reglas de lectura, que la página explica también al abrirla:
      "self.vueltas = 0" al terminar la calibración). Esa primera es la vuelta
      lenta de calibración (PWM 65, o conducida despacio a mano en manual) y no
      compara nada.
-  2. Se excluyen las vueltas ANÓMALAS. No se recalcula el criterio: se
-     reutiliza el class="anomala" que el dashboard ya escribió en la fila
-     (> 2x la media de esa carrera, FACTOR_VUELTA_ANOMALA en analisis.py), de
-     modo que aquí está marcado exactamente lo mismo que allí. Una salida de
-     pista de 9,9 s con una mediana de 1,59 s aplasta el eje y esconde las
-     décimas, que es justo lo que se viene a mirar; van contadas aparte en la
-     tabla, que para eso es su columna.
-  3. Un PANEL POR COCHE. El coche pesa más que el piloto (en el óvalo de las
+  2. Las vueltas LENTAS cuentan. Antes se excluían las que el dashboard marca
+     como anómalas (> 2x la media de su carrera, FACTOR_VUELTA_ANOMALA en
+     analisis.py) porque una de 9,9 s con una mediana de 1,59 s aplasta el eje.
+     Pero esto es una CONTRARRELOJ: si el coche se salió y hubo que volver a
+     ponerlo en la pista, ese tiempo se perdió y tiene que pesar. Excluirlas
+     medía "cómo iba el coche cuando iba bien", que es otra pregunta.
+  3. Se descartan las vueltas MAL MEDIDAS: por debajo de la mitad de la mediana
+     no hay vuelta que valga, es la meta disparando dos veces y partiendo una
+     en dos trozos, así que se van los dos trozos (FRAC_VUELTA_MAL_MEDIDA). Es
+     el único descarte que queda, y va avisado debajo de la tabla.
+  4. Se comparan las VUELTAS_CONTRARRELOJ primeras vueltas de cada carrera: la
+     que dé más se corta ahí (lo de después suele ser el coche rodando mientras
+     se paraba la grabación) y la que no llegue sale sin tiempo de contrarreloj.
+  5. Un PANEL POR COCHE. El coche pesa más que el piloto (en el óvalo de las
      pruebas el rojo va ~0,3 s por vuelta más rápido que el azul), así que
      mezclar coches en un mismo eje compararía coches, no pilotos. El coche se
      detecta por el nombre del fichero.
@@ -86,20 +94,43 @@ PALETA = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100",
 MAX_CARRERAS_POR_COCHE = len(PALETA)
 
 # La fila de la tabla de tiempos del dashboard: la clase (que trae "anomala" o
-# no), el número de vuelta y el tiempo. Lo que va después del tiempo en esa
-# celda son las notas del dashboard ("★ mejor", "⚠ >2× media") y se ignora.
+# no, aquí ya no se mira), el número de vuelta y el tiempo. Lo que va después
+# del tiempo en esa celda son las notas del dashboard ("★ mejor", "⚠ >2× media")
+# y se ignora.
 FILA_TIEMPO = re.compile(
     r'<tr class="([^"]*)"><td>(\d+)</td><td>(\d+\.\d+)')
+
+# Cuántas vueltas dura la contrarreloj. Todas las carreras se comparan sobre las
+# MISMAS 50 primeras vueltas: la que dé más se corta ahí (lo que viene después
+# suele ser el coche rodando mientras se paraba la grabación) y la que no llegue
+# se enseña igual, pero sin tiempo de contrarreloj, porque sumar 20 vueltas
+# contra 50 no compara nada.
+VUELTAS_CONTRARRELOJ = 50
+
+# Por debajo de esta fracción de la mediana de su carrera, un tiempo no es una
+# vuelta rápida: es la línea de meta disparando dos veces y partiendo una vuelta
+# en dos trozos (en el óvalo hay un 0,186 s seguido de un 1,181 s que juntos son
+# la vuelta normal de 1,367 s de ese coche). No hay forma de saber cuál de los
+# dos trozos es cuál, así que se van los dos y se avisa.
+FRAC_VUELTA_MAL_MEDIDA = 0.5
 
 
 # ---------------------------------------------------------------------------
 # Lectura de los HTML del dashboard
 # ---------------------------------------------------------------------------
 def leer_tiempos(ruta):
-    """Vueltas VÁLIDAS de un _analisis.html: [(numero, tiempo), ...] ya sin la
-    vuelta de calibración ni las anómalas, más el recuento de lo descartado.
+    """Las vueltas de la CONTRARRELOJ de un _analisis.html: [(numero, tiempo),
+    ...], sin la vuelta de calibración, sin las mal medidas y cortadas a
+    VUELTAS_CONTRARRELOJ.
 
-    Devuelve (vueltas, n_anomalas) o None si el fichero no es un dashboard."""
+    OJO con lo que NO se quita: las vueltas lentas (las que el dashboard marca
+    como anómalas, > 2x la media de su carrera) cuentan enteras. Antes se
+    tiraban, y eso medía "cómo iba el coche cuando iba bien"; aquí se compara
+    una contrarreloj, y si el coche se sale y hay que volver a ponerlo en la
+    pista ese tiempo se perdió y tiene que pesar en el resultado igual que en
+    una carrera de verdad.
+
+    Devuelve (vueltas, n_mal_medidas) o None si el fichero no es un dashboard."""
     texto = ruta.read_text(encoding="utf-8", errors="replace")
     tabla = re.search(r'<table class="tiempos">.*?</tbody>', texto, re.S)
     if not tabla:
@@ -125,12 +156,32 @@ def leer_tiempos(ruta):
         print(f"AVISO: {ruta.name} no tiene ninguna vuelta 1; se usan todas "
               "las filas tal cual.")
 
-    # Regla 2: fuera las anómalas, tal y como las marcó el dashboard
-    vueltas = [(num, t) for cls, num, t in filas if "anomala" not in cls]
-    n_anomalas = len(filas) - len(vueltas)
+    # Regla 2: fuera las vueltas MAL MEDIDAS. Una fila muy por debajo de la
+    # mediana es media vuelta (la meta disparó dos veces), así que se va con la
+    # SIGUIENTE, que es el otro trozo de esa misma vuelta. La mediana se saca de
+    # todas las filas: es robusta y las pocas raras no la mueven.
+    tiempos = sorted(t for _, _, t in filas)
+    mediana = tiempos[len(tiempos) // 2]
+    vueltas = []
+    n_mal_medidas = 0
+    saltar_siguiente = False
+    for _, num, t in filas:
+        if saltar_siguiente:
+            saltar_siguiente = False
+            continue
+        if t < FRAC_VUELTA_MAL_MEDIDA * mediana:
+            n_mal_medidas += 1
+            saltar_siguiente = True   # el otro trozo de la vuelta partida
+            continue
+        vueltas.append((num, t))
+
+    # Regla 3: la contrarreloj son las N primeras vueltas de lo que quede
+    cortadas = max(0, len(vueltas) - VUELTAS_CONTRARRELOJ)
+    vueltas = vueltas[:VUELTAS_CONTRARRELOJ]
     print(f"  {ruta.parent.name}: {len(vueltas)} vueltas "
-          f"(- {descartadas} de calibración, - {n_anomalas} anómalas)")
-    return vueltas, n_anomalas
+          f"(- {descartadas} de calibración, - {n_mal_medidas} mal medidas, "
+          f"- {cortadas} sobrantes)")
+    return vueltas, n_mal_medidas
 
 
 def etiqueta_y_coche(ruta):
@@ -182,8 +233,8 @@ def etiqueta_y_coche(ruta):
 
 
 def recopilar(rutas):
-    """Lista de carreras {etiqueta, coche, vueltas, n_anomalas} en el orden en
-    que se pidieron. Cada ruta puede ser un HTML o una carpeta que los
+    """Lista de carreras {etiqueta, coche, vueltas, n_mal_medidas} en el orden
+    en que se pidieron. Cada ruta puede ser un HTML o una carpeta que los
     contenga."""
     carreras = []
     for entrada in rutas:
@@ -205,13 +256,13 @@ def recopilar(rutas):
             leido = leer_tiempos(fichero)
             if leido is None:
                 continue
-            vueltas, n_anomalas = leido
+            vueltas, n_mal_medidas = leido
             etiqueta, coche = etiqueta_y_coche(fichero)
             carreras.append({
                 "etiqueta": etiqueta_manual or etiqueta,
                 "coche": coche,
                 "vueltas": vueltas,
-                "n_anomalas": n_anomalas,
+                "n_mal_medidas": n_mal_medidas,
             })
     return carreras
 
@@ -312,9 +363,10 @@ def grafica_lineas(grupos):
 # ---------------------------------------------------------------------------
 def grafica_cajas(grupos):
     """Una caja por carrera (horizontal, que las etiquetas son largas), un
-    panel por coche. La caja son los cuartiles de sus vueltas válidas: cuanto
-    más estrecha, más regular fue la conducción. Los atípicos van sueltos en
-    rojo, igual que en la figura 5c del dashboard."""
+    panel por coche. La caja son los cuartiles de sus vueltas de la
+    contrarreloj: cuanto más estrecha, más regular fue la conducción. Los
+    atípicos van sueltos en rojo, igual que en la figura 5c del dashboard, y
+    ahí es donde asoman las salidas de pista (que ya no se excluyen)."""
     coches = list(grupos)
     fig = make_subplots(
         rows=len(coches), cols=1, shared_xaxes=False, vertical_spacing=0.10,
@@ -358,39 +410,65 @@ def carreras_totales(grupos):
 # Tabla resumen
 # ---------------------------------------------------------------------------
 def tabla_resumen(grupos):
-    """Una tabla por coche, ordenada por mediana (la más rápida arriba).
+    """Una tabla por coche, ordenada por el tiempo de la CONTRARRELOJ (la más
+    rápida arriba).
 
-    La MEDIANA ordena en vez de la media por el mismo motivo que en la sección
-    5 del dashboard: es la que dice cómo iba el coche de verdad. La σ y la
-    columna de anómalas son la otra mitad de la respuesta: quién controló
-    mejor no es quién bajó más una vuelta suelta, sino quién repitió el tiempo
-    vuelta tras vuelta sin irse fuera.
+    La contrarreloj —la suma de las VUELTAS_CONTRARRELOJ vueltas, salidas de
+    pista incluidas— es la respuesta a "¿cuál dio mejor las 50 vueltas?", que es
+    lo que se viene a mirar: premia igual ir rápido que no irse fuera. Las
+    carreras que no llegan a esas vueltas no tienen con qué compararse, así que
+    van al final ordenadas por mediana y con un aviso debajo.
+
+    La mediana y la σ siguen contando la otra mitad: quién controló mejor no es
+    quién bajó más una vuelta suelta, sino quién repitió el tiempo vuelta tras
+    vuelta. Todos los números salen de las MISMAS vueltas que la contrarreloj,
+    para que la fila sea coherente consigo misma.
 
     La tabla es además la lectura alternativa al color que exige la revisión
     de accesibilidad: tres de los colores de la paleta no llegan a 3:1 de
     contraste sobre el fondo claro."""
     partes = []
     for coche, grupo in grupos.items():
+        # Primero las que compiten (por tiempo total) y luego las que no llegan
+        # a las vueltas de la contrarreloj (por mediana)
+        completas = [c for c in grupo
+                     if len(c["vueltas"]) == VUELTAS_CONTRARRELOJ]
+        cortas = [c for c in grupo if len(c["vueltas"]) < VUELTAS_CONTRARRELOJ]
+        ordenadas = (
+            sorted(completas, key=lambda c: sum(t for _, t in c["vueltas"]))
+            + sorted(cortas, key=lambda c: statistics.median(
+                t for _, t in c["vueltas"])))
         filas = []
-        for carrera in sorted(grupo, key=lambda c: statistics.median(
-                t for _, t in c["vueltas"])):
+        for carrera in ordenadas:
             t = [x for _, x in carrera["vueltas"]]
             sigma = statistics.stdev(t) if len(t) > 1 else 0.0
+            total = (f"{sum(t):.2f}" if len(t) == VUELTAS_CONTRARRELOJ else "—")
             filas.append(
                 f"<tr><td style='text-align:left'>"
                 f"<span style='color:{carrera['color']}'>■</span> "
                 f"{html.escape(carrera['etiqueta'])}</td>"
-                f"<td>{len(t)}</td><td>{min(t):.3f}</td>"
+                f"<td>{len(t)}</td><td>{total}</td><td>{min(t):.3f}</td>"
                 f"<td>{statistics.median(t):.3f}</td>"
-                f"<td>{statistics.mean(t):.3f}</td><td>{sigma:.3f}</td>"
-                f"<td>{carrera['n_anomalas']}</td></tr>")
+                f"<td>{statistics.mean(t):.3f}</td><td>{sigma:.3f}</td></tr>")
+        # Avisos: por qué una carrera no tiene tiempo de contrarreloj y qué se
+        # descartó por venir mal medido
+        notas = [f"<strong>{html.escape(c['etiqueta'])}</strong>: "
+                 f"{len(c['vueltas'])} vueltas, no llega a "
+                 f"{VUELTAS_CONTRARRELOJ}: fuera de la contrarreloj."
+                 for c in cortas]
+        notas += [f"<strong>{html.escape(c['etiqueta'])}</strong>: "
+                  f"{c['n_mal_medidas']} vuelta(s) mal medida(s) descartada(s) "
+                  "(la meta disparó dos veces y partió la vuelta en dos)."
+                  for c in ordenadas if c["n_mal_medidas"]]
+        pie = ("<p>" + "<br>".join(notas) + "</p>") if notas else ""
         partes.append(
             f"<h3>coche {html.escape(coche)}</h3>"
             '<table class="tiempos"><thead><tr>'
             "<th style='text-align:left'>carrera</th><th>vueltas</th>"
+            f"<th>contrarreloj {VUELTAS_CONTRARRELOJ} (s)</th>"
             "<th>mejor (s)</th><th>mediana (s)</th><th>media (s)</th>"
-            "<th>σ (s)</th><th>anómalas</th></tr></thead><tbody>"
-            + "".join(filas) + "</tbody></table>")
+            "<th>σ (s)</th></tr></thead><tbody>"
+            + "".join(filas) + "</tbody></table>" + pie)
     return "".join(partes)
 
 
@@ -426,6 +504,8 @@ def ensamblar_html(grupos, fig_lineas, fig_cajas):
        padding-bottom: 6px; }}
   h3 {{ font-size: 14px; color: {COL_TINTA_2}; margin-bottom: 6px; }}
   p  {{ color: {COL_TINTA_2}; font-size: 13px; line-height: 1.5; }}
+  ul {{ color: {COL_TINTA_2}; font-size: 13px; line-height: 1.5;
+        max-width: 900px; }}
   table.tiempos {{ border-collapse: collapse; font-size: 13px;
                    margin-bottom: 22px; }}
   table.tiempos th, table.tiempos td {{
@@ -435,6 +515,24 @@ def ensamblar_html(grupos, fig_lineas, fig_cajas):
 </head>
 <body>
 <h1>Comparativa de tiempos por vuelta · {cuantas}</h1>
+
+<p>Esto es una <strong>contrarreloj a {VUELTAS_CONTRARRELOJ} vueltas</strong>:
+gana quien menos tarda en darlas, no quien firma la vuelta rápida. Cómo se leen
+los tiempos de cada carrera:</p>
+<ul>
+<li>Se tira la <strong>vuelta de calibración</strong> (todas las carreras traen
+dos vueltas numeradas 1: la primera es la lenta de calibración).</li>
+<li>Las <strong>vueltas lentas cuentan</strong>. Si el coche se salió y hubo que
+volver a ponerlo en la pista, ese tiempo se perdió y suma en el total, en la
+media y en la σ, igual que en una carrera de verdad.</li>
+<li>Se descartan las <strong>vueltas mal medidas</strong> (un tiempo por debajo
+de la mitad de la mediana no es una vuelta: es la meta disparando dos veces), y
+con ellas el otro trozo de la vuelta que partieron. Se avisa debajo de la
+tabla.</li>
+<li>Se comparan las <strong>{VUELTAS_CONTRARRELOJ} primeras</strong> vueltas de
+cada carrera. La que dé más se corta ahí; la que no llegue sale en la tabla pero
+sin tiempo de contrarreloj.</li>
+</ul>
 
 <h2>1 · Tiempo por vuelta</h2>
 {div_lineas}

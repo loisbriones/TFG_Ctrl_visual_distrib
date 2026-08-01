@@ -134,6 +134,17 @@ RE_DERRAPE_ZONA_MUERTA = re.compile(
     r"\[DERRAPE\] Frame (\d+) v=(\d+): dist=([\d.]+) > umbral pero IGNORADO "
     r"por zona muerta: la celda (\d+)"
 )
+# Segundo motivo de rechazo, más reciente: la trasera se localizó en una celda
+# incompatible con la de la delantera (el coche estaría en dos sitios a la vez),
+# lo que pasa cuando circula por un tramo que no tiene celdas. Es un regex
+# aparte y no una ampliación del anterior a propósito: así los logs grabados
+# antes de esta comprobación se siguen analizando exactamente igual.
+RE_DERRAPE_INCOHERENTE = re.compile(
+    r"\[DERRAPE\] Frame (\d+) v=(\d+): dist=([\d.]+) > umbral pero IGNORADO "
+    r"por localización incoherente: la trasera cae en la celda (\d+) y la "
+    r"delantera en la (\d+), que están a ([\d.]+) px, pero las pegatinas "
+    r"están a ([\d.]+) px"
+)
 # Cierres "especiales": el coche salió de la ruta / llegó al final de la
 # cadena / el controlador avisó de la pérdida de visión. Solo se cuentan.
 RE_DERRAPE_CIERRE_VISION = re.compile(
@@ -188,8 +199,12 @@ RE_VUELTA_PROTEGE = re.compile(
     r"\[VUELTA (\d+)\] zona \[(\d+)-(\d+)\]\((\w+)\) PROTEGIDA: último "
     r"derrape en vuelta (\d+)"
 )
+# Dos formas, y las dos tienen que casar: la política de mejora pasó a
+# decidirse zona a zona (antes solo subía el perfil si la vuelta era limpia en
+# TODO el circuito, y por eso la línea empezaba por "limpia:"). Los logs
+# grabados antes de ese cambio llevan la forma antigua y se siguen analizando.
 RE_VUELTA_SUBE = re.compile(
-    r"\[VUELTA (\d+)\] limpia: (\d+) de (\d+) zonas suben"
+    r"\[VUELTA (\d+)\] (?:limpia: \d+ de \d+ zonas suben|suben \d+ de \d+ zonas)"
 )
 RE_VUELTA_NO_SUBE = re.compile(r"\[VUELTA (\d+)\] El perfil NO sube: (.+)$")
 
@@ -209,7 +224,11 @@ RE_TRAY_CADENA = re.compile(
 # detectar cambios de formato reales en el algoritmo)
 RE_IGNORABLES = [
     re.compile(r"\[INIT\] "),  # los pares clave=valor se extraen aparte
+    # "Filtrado" es el nombre que tenía la línea de cierre/rotación antes de
+    # que el filtrado desapareciera: se mantiene para los logs ya grabados
     re.compile(r"\[TRAY\] Filtrado"),
+    re.compile(r"\[TRAY\] Cierre"),
+    re.compile(r"\[TRAY\] Trayectoria de calibración"),
     re.compile(r"\[TRAY\] AVISO"),
     re.compile(r"\[TRAY\] Celda GIGANTE"),
     re.compile(r"\[TRAY\] --- Cadena de celdas"),
@@ -236,6 +255,8 @@ class Carrera:
                        ini, fin, n_celdas]
       aperturas        lista de dicts de eventos ABIERTO
       zona_muerta      lista de dicts (aperturas rechazadas por zona muerta)
+      incoherentes     lista de dicts (aperturas rechazadas porque las dos
+                       pegatinas se localizaron en celdas incompatibles)
       cierres_vision   lista de (frame, vuelta) de derrapes cerrados por
                        salir del campo de visión / fin de cadena
       decisiones       lista de dicts [ZONA] decisión (nueva/fusión+retroceso)
@@ -262,6 +283,7 @@ class Carrera:
         self.derrapes = None
         self.aperturas = []
         self.zona_muerta = []
+        self.incoherentes = []
         self.cierres_vision = []
         self.decisiones = []
         self.carveos = []
@@ -437,6 +459,20 @@ def parsear_log(ruta: Path) -> Carrera:
                     "vuelta": int(m.group(2)),
                     "dist": float(m.group(3)),
                     "celda": int(m.group(4)),
+                }
+            )
+            continue
+        m = RE_DERRAPE_INCOHERENTE.search(cuerpo)
+        if m:
+            c.incoherentes.append(
+                {
+                    "frame": int(m.group(1)),
+                    "vuelta": int(m.group(2)),
+                    "dist": float(m.group(3)),
+                    "celda": int(m.group(4)),
+                    "celda_front": int(m.group(5)),
+                    "sep_celdas": float(m.group(6)),
+                    "sep_pegatinas": float(m.group(7)),
                 }
             )
             continue
@@ -787,6 +823,14 @@ def detectar_anomalias(c: Carrera, zonas_fin_vuelta, vueltas):
         avisos.append(
             f"INFO: {len(c.zona_muerta)} aperturas de derrape ignoradas por "
             f"zona muerta (junto a un extremo o a una celda gigante)."
+        )
+    if c.incoherentes:
+        celdas = sorted({e["celda"] for e in c.incoherentes})
+        avisos.append(
+            f"INFO: {len(c.incoherentes)} aperturas de derrape ignoradas porque "
+            f"las dos pegatinas se localizaron en celdas incompatibles "
+            f"(trasera en {celdas}). El coche circulaba por un tramo sin "
+            f"celdas: mirar los huecos que lista [TRAY] AVISO."
         )
     if c.cierres_vision:
         avisos.append(
@@ -1401,7 +1445,8 @@ def main():
     print(f"  vueltas con datos: {len(vueltas)} "
           f"({vueltas[0]}..{vueltas[-1]})")
     print(f"  derrapes cerrados: {len(c.derrapes)}  "
-          f"(ignorados por zona muerta: {len(c.zona_muerta)})")
+          f"(ignorados por zona muerta: {len(c.zona_muerta)}, "
+          f"por localización incoherente: {len(c.incoherentes)})")
     print(f"  derrames a la precedente: {len(c.derrames)}  "
           f"reducciones externas: {len(c.externas)}")
     print(f"  zonas al final: {len(zonas_fin_vuelta[vueltas[-1]])}")

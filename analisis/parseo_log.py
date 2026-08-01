@@ -73,6 +73,17 @@ RE_DERRAPE_ZONA_MUERTA = re.compile(
     r"\[DERRAPE\] Frame (\d+) v=(\d+): dist=([\d.]+) > umbral pero IGNORADO "
     r"por zona muerta: la celda (\d+)"
 )
+# Segundo motivo de rechazo, más reciente: la trasera se localizó en una celda
+# incompatible con la de la delantera (el coche estaría en dos sitios a la vez),
+# lo que pasa cuando circula por un tramo que no tiene celdas. Es un regex
+# aparte y no una ampliación del anterior a propósito: así los logs grabados
+# antes de esta comprobación se siguen analizando exactamente igual.
+RE_DERRAPE_INCOHERENTE = re.compile(
+    r"\[DERRAPE\] Frame (\d+) v=(\d+): dist=([\d.]+) > umbral pero IGNORADO "
+    r"por localización incoherente: la trasera cae en la celda (\d+) y la "
+    r"delantera en la (\d+), que están a ([\d.]+) px, pero las pegatinas "
+    r"están a ([\d.]+) px"
+)
 # Cierres "especiales": el coche salió de la ruta / llegó al final de la
 # cadena / el controlador avisó de la pérdida de visión. Solo se cuentan.
 RE_DERRAPE_CIERRE_VISION = re.compile(
@@ -127,8 +138,12 @@ RE_VUELTA_PROTEGE = re.compile(
     r"\[VUELTA (\d+)\] zona \[(\d+)-(\d+)\]\((\w+)\) PROTEGIDA: último "
     r"derrape en vuelta (\d+)"
 )
+# Dos formas, y las dos tienen que casar: la política de mejora pasó a
+# decidirse zona a zona (antes solo subía el perfil si la vuelta era limpia en
+# TODO el circuito, y por eso la línea empezaba por "limpia:"). Los logs
+# grabados antes de ese cambio llevan la forma antigua y se siguen analizando.
 RE_VUELTA_SUBE = re.compile(
-    r"\[VUELTA (\d+)\] limpia: (\d+) de (\d+) zonas suben"
+    r"\[VUELTA (\d+)\] (?:limpia: \d+ de \d+ zonas suben|suben \d+ de \d+ zonas)"
 )
 RE_VUELTA_NO_SUBE = re.compile(r"\[VUELTA (\d+)\] El perfil NO sube: (.+)$")
 
@@ -148,7 +163,11 @@ RE_TRAY_CADENA = re.compile(
 # detectar cambios de formato reales en el algoritmo)
 RE_IGNORABLES = [
     re.compile(r"\[INIT\] "),  # los pares clave=valor se extraen aparte
+    # "Filtrado" es el nombre que tenía la línea de cierre/rotación antes de
+    # que el filtrado desapareciera: se mantiene para los logs ya grabados
     re.compile(r"\[TRAY\] Filtrado"),
+    re.compile(r"\[TRAY\] Cierre"),
+    re.compile(r"\[TRAY\] Trayectoria de calibración"),
     re.compile(r"\[TRAY\] AVISO"),
     re.compile(r"\[TRAY\] Celda GIGANTE"),
     re.compile(r"\[TRAY\] --- Cadena de celdas"),
@@ -178,6 +197,8 @@ class Carrera:
                        ini, fin, n_celdas]
       aperturas        lista de dicts de eventos ABIERTO
       zona_muerta      lista de dicts (aperturas rechazadas por zona muerta)
+      incoherentes     lista de dicts (aperturas rechazadas porque las dos
+                       pegatinas se localizaron en celdas incompatibles)
       cierres_vision   lista de (frame, vuelta) de derrapes cerrados por
                        salir del campo de visión / fin de cadena
       decisiones       lista de dicts [ZONA] decisión (nueva/fusión+retroceso)
@@ -205,6 +226,7 @@ class Carrera:
         self.derrapes = None
         self.aperturas = []
         self.zona_muerta = []
+        self.incoherentes = []
         self.cierres_vision = []
         self.decisiones = []
         self.carveos = []
@@ -380,6 +402,20 @@ def parsear_log(ruta: Path) -> Carrera:
                     "vuelta": int(m.group(2)),
                     "dist": float(m.group(3)),
                     "celda": int(m.group(4)),
+                }
+            )
+            continue
+        m = RE_DERRAPE_INCOHERENTE.search(cuerpo)
+        if m:
+            c.incoherentes.append(
+                {
+                    "frame": int(m.group(1)),
+                    "vuelta": int(m.group(2)),
+                    "dist": float(m.group(3)),
+                    "celda": int(m.group(4)),
+                    "celda_front": int(m.group(5)),
+                    "sep_celdas": float(m.group(6)),
+                    "sep_pegatinas": float(m.group(7)),
                 }
             )
             continue
@@ -586,6 +622,126 @@ def zonas_a_celdas(zonas, n_celdas):
     return arr
 
 
+def celdas_de_zona(zona, n_celdas):
+    """Celdas de una zona en orden de recorrido.
+
+    Si `fin` < `ini` la zona ENVUELVE la meta (solo pasa en cadena cerrada, ver
+    unir_por_la_meta) y se recorre del `ini` al final de la cadena y luego del 0
+    al `fin`. Es el mismo criterio que `_intervalo_a_celdas()` del algoritmo."""
+    if zona["fin"] >= zona["ini"]:
+        return list(range(zona["ini"], zona["fin"] + 1))
+    return list(range(zona["ini"], n_celdas)) + list(range(0, zona["fin"] + 1))
+
+
+def unir_por_la_meta(zonas, n_celdas, cerrada):
+    """Funde en UNA las dos zonas de los extremos de la partición cuando en la
+    pista son la misma, separadas solo por la línea de meta.
+
+    En cadena cerrada la celda n-1 es vecina de la 0, pero la partición del
+    algoritmo es una lista plana de intervalos [ini, fin] sin envoltura: cuando
+    un castigo cae en medio de la zona libre, `_carvear_particion()` deja los
+    dos trozos que sobresalen como zonas distintas aunque sean el mismo tramo de
+    pista. En el log del óvalo se ve tal cual: [0-46] libre pwm=91, [47-68]
+    derrape pwm=89 y [69-88] libre pwm=91, tres zonas para lo que en la pista
+    son dos. Aquí se deshace ese corte para DIBUJARLO como es (el algoritmo se
+    queda como está: los dos trozos tienen el mismo valor y suben juntos, así
+    que el resultado es el mismo).
+
+    Se unen solo si la primera empieza en la celda 0, la última acaba en la
+    n-1 y las dos comparten `tipo` y `pwm`: con el mismo valor ya se pintan como
+    un bloque continuo del mismo color, así que unirlas es contar lo que se ve.
+    Si el PWM difiere son dos zonas de verdad y no se tocan (pasa en el mismo
+    log: [0-80] derrape pwm=85 junto a [85-88] derrape pwm=90).
+
+    La zona unida va con `fin` < `ini` (la marca de que envuelve) y con
+    `cruza_meta=True`, que es lo que la gráfica 4 usa para decirlo en la
+    leyenda. No modifica los dicts de entrada."""
+    if not cerrada or len(zonas) < 2:
+        return list(zonas)
+    primera, ultima = zonas[0], zonas[-1]
+    if (primera["ini"] != 0 or ultima["fin"] != n_celdas - 1
+            or primera["tipo"] != ultima["tipo"]
+            or primera["pwm"] != ultima["pwm"]):
+        return list(zonas)
+    unida = dict(ultima, fin=primera["fin"], cruza_meta=True)
+    # El historial de vueltas con derrape solo lo traen los vuelcos [ZONA]
+    if "vueltas" in primera and "vueltas" in ultima:
+        unida["vueltas"] = sorted(set(ultima["vueltas"]) | set(primera["vueltas"]))
+    # La unida se queda al final: la lista sigue ordenada por `ini`
+    return list(zonas[1:-1]) + [unida]
+
+
+def seguir_zonas(vueltas, zonas_ini_vuelta, n_celdas, cerrada):
+    """Sigue la PISTA de cada zona a lo largo de las vueltas: le pone un `id`
+    que no cambia mientras la zona viva y el `delta` de PWM respecto a la
+    vuelta anterior. Devuelve {v: [zona]} con COPIAS enriquecidas.
+
+    Hace falta porque el log NO numera las zonas: cada volcado [PERFIL] es una
+    partición nueva y completa de la cadena de celdas, y la única identidad que
+    trae una zona es su par (ini, fin)... que cambia justo cuando la zona crece,
+    la carvean o absorbe a la vecina. Sin este seguimiento la gráfica 4 no puede
+    dar a cada tramo un color estable y no se ve nacer ni morir a los tramos.
+
+    Antes de emparejar nada se deshace el corte de la meta (unir_por_la_meta),
+    para que la identidad se siga sobre la zona ENTERA: si no, el trozo de
+    después de la meta nace como zona nueva en cuanto un castigo parte la libre.
+
+    La identidad se deriva EMPAREJANDO las dos particiones por SOLAPE de celdas,
+    de forma voraz: se listan todos los pares (zona vieja, zona nueva) que
+    comparten alguna celda, se ordenan de más a menos celdas compartidas y se
+    casan uno a uno (cada zona solo puede casarse una vez); la nueva hereda el
+    id de la vieja con la que más comparte. Las nuevas que se quedan sin pareja
+    NACEN (id nuevo, nunca reutilizado) y las viejas sin pareja MUEREN. Esa
+    única regla cubre sin casos especiales las tres cosas que hace el algoritmo:
+      - castigo/crecimiento (una vieja <-> una nueva): mismo id, delta != 0
+      - fusión (dos viejas -> una nueva): gana la que aportaba más celdas, la
+        otra muere (y en la gráfica 4 libera su color)
+      - carveo/división (una vieja -> dos nuevas): la de mayor solape hereda,
+        la otra nace
+    Se trabaja con COPIAS (dict(z, ...)) y no tocando los dicts originales
+    porque el mismo volcado [PERFIL] lo comparten varias vueltas cuando entre
+    ellas no hubo volcado nuevo: escribir dentro mezclaría datos entre vueltas.
+
+    delta: pwm de esta vuelta menos el de la anterior para ESE MISMO id, o None
+    si la zona nace aquí (no hay con qué compararla).
+    """
+    seguidas = {}
+    previas = []       # zonas ya enriquecidas de la vuelta anterior
+    siguiente_id = 0
+    for v in vueltas:
+        actuales = unir_por_la_meta(
+            [dict(z) for z in zonas_ini_vuelta.get(v, [])], n_celdas, cerrada)
+        # El solape se cuenta con CONJUNTOS de celdas y no restando ini/fin: así
+        # una zona que envuelve la meta se compara como cualquier otra
+        celdas_previas = [set(celdas_de_zona(z, n_celdas)) for z in previas]
+        celdas_actuales = [set(celdas_de_zona(z, n_celdas)) for z in actuales]
+        # Pares con solape > 0, del que más comparte al que menos. El desempate
+        # va por (ini de la vieja, ini de la nueva) para que el resultado no
+        # dependa del orden en que python recorra la lista.
+        pares = []
+        for i, vieja in enumerate(previas):
+            for j, nueva in enumerate(actuales):
+                solape = len(celdas_previas[i] & celdas_actuales[j])
+                if solape > 0:
+                    pares.append((-solape, vieja["ini"], nueva["ini"], i, j))
+        casadas_viejas, casadas_nuevas = set(), set()
+        for _, _, _, i, j in sorted(pares):
+            if i in casadas_viejas or j in casadas_nuevas:
+                continue
+            casadas_viejas.add(i)
+            casadas_nuevas.add(j)
+            actuales[j]["id"] = previas[i]["id"]
+            actuales[j]["delta"] = actuales[j]["pwm"] - previas[i]["pwm"]
+        for j, nueva in enumerate(actuales):
+            if j not in casadas_nuevas:
+                nueva["id"] = siguiente_id
+                nueva["delta"] = None
+                siguiente_id += 1
+        seguidas[v] = actuales
+        previas = actuales
+    return seguidas
+
+
 def derivar_por_vuelta(c: Carrera):
     """Reconstruye el estado del algoritmo vuelta a vuelta.
 
@@ -594,7 +750,8 @@ def derivar_por_vuelta(c: Carrera):
       perfil_vuelta    {v: array de PWM por celda} = perfil CON EL QUE SE
                        CORRIÓ la vuelta v (último volcado [PERFIL] anterior a
                        su primer frame)
-      zonas_ini_vuelta {v: [zona]} = partición al EMPEZAR la vuelta v
+      zonas_ini_vuelta {v: [zona]} = partición al EMPEZAR la vuelta v, con el
+                       `id` y el `delta` que les pone seguir_zonas()
       zonas_fin_vuelta {v: [zona]} = partición al TERMINAR la vuelta v
                        (último volcado anterior al primer frame de v+1)
     """
@@ -619,7 +776,12 @@ def derivar_por_vuelta(c: Carrera):
         )
         candidatos = [s for s in c.snapshots_perfil if s["linea"] < frontera_fin]
         zonas_fin_vuelta[v] = candidatos[-1]["zonas"] if candidatos else []
-    return vueltas, perfil_vuelta, zonas_ini_vuelta, zonas_fin_vuelta
+    # Solo la partición de INICIO se sigue entre vueltas: es la que dibuja la
+    # gráfica 4 (el perfil con el que se corrió la vuelta). La de fin la usa
+    # detectar_anomalias, a la que el id no le aporta nada.
+    return (vueltas, perfil_vuelta,
+            seguir_zonas(vueltas, zonas_ini_vuelta, c.n_celdas, c.cerrada),
+            zonas_fin_vuelta)
 
 
 def tabla_vueltas(c: Carrera, vueltas, perfil_vuelta) -> pd.DataFrame:
@@ -743,6 +905,14 @@ def detectar_anomalias(c: Carrera, zonas_fin_vuelta, vueltas):
         avisos.append(
             f"INFO: {len(c.zona_muerta)} aperturas de derrape ignoradas por "
             f"zona muerta (junto a un extremo o a una celda gigante)."
+        )
+    if c.incoherentes:
+        celdas = sorted({e["celda"] for e in c.incoherentes})
+        avisos.append(
+            f"INFO: {len(c.incoherentes)} aperturas de derrape ignoradas porque "
+            f"las dos pegatinas se localizaron en celdas incompatibles "
+            f"(trasera en {celdas}). El coche circulaba por un tramo sin "
+            f"celdas: mirar los huecos que lista [TRAY] AVISO."
         )
     if c.cierres_vision:
         avisos.append(

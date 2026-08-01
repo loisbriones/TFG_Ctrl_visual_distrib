@@ -42,7 +42,7 @@ el contenedor y traduce las rutas.
 | 1 | Derrape 3D sobre la trayectoria (fig. 5.12 de Mario) | acumulativo (vueltas 1..v) |
 | 2 | Trayectorias delantera y trasera (fig. 5.17) | una vuelta cada vez |
 | 3b | `dist_derrape` del bag vs tiempo de vuelta, con la cámara de cada muestra y el PWM aplicado; debajo, el resumen por vuelta (3c) | una vuelta cada vez, **también con ← →** |
-| 4 | El circuito con el PWM de cada celda como número | una vuelta cada vez |
+| 4 | El circuito con las zonas de PWM: **un color y una forma por zona**, que la zona conserva mientras viva; el PWM y su subida o bajada, en la leyenda | una vuelta cada vez |
 | 5 | Tabla de tiempos por vuelta + tendencia | — |
 | 6 | Zonas (6a), heatmap de PWM (6b), resumen 2×2 (6c) | — |
 | 7 | Visor de imágenes + vídeo mosaico descargable | por imagen del bag |
@@ -96,9 +96,10 @@ publica imagen de debug de algunos fotogramas). Detalle completo en
 ## Descargas
 
 - **PDF vectorial** (para `\includegraphics` en la memoria): botón bajo cada
-  gráfica. Sale el estado de la vuelta que marque el slider si se añade
-  `&vuelta=N` al enlace; para llevarse 3 vueltas concretas hay que descargar
-  las tres a mano, una por una.
+  gráfica. Sale **la vuelta que marque el slider** en ese momento, con su
+  número en el título; para llevarse 3 vueltas concretas hay que mover el
+  slider y descargar tres veces. Lo que el PDF no respeta son los *checkboxes*
+  de capas de la sección 2: su estado no llega al servidor y salen las cuatro.
 - El panel **6c** se puede bajar completo o **cada subplot por separado**.
 - **CSV** de los datos de cada gráfica (o todos juntos en la sección 8).
 - **Vídeo mp4** mosaico con las cámaras en el orden que se marque en la
@@ -107,9 +108,10 @@ publica imagen de debug de algunos fotogramas). Detalle completo en
 ## Comparar varias carreras
 
 `comparativa.py` coge **HTML de análisis ya generados** y saca una sola página
-con las vueltas de todas superpuestas, para ver quién hizo la mejor vuelta y
-quién llevó el coche más controlado. No necesita ROS ni el contenedor: lee la
-tabla de tiempos del propio HTML.
+con las vueltas de todas superpuestas: una **contrarreloj a 50 vueltas** (gana
+quien menos tarda en darlas, con las salidas de pista contando), más la mejor
+vuelta y lo controlado que fue el coche. No necesita ROS ni el contenedor: lee
+la tabla de tiempos del propio HTML.
 
 ```bash
 # todas las carreras guardadas de una carpeta (busca los *_analisis.html dentro)
@@ -124,16 +126,21 @@ ANALISIS/env/bin/python analisis/comparativa.py \
 
 Saca tres cosas: las **líneas** de tiempo por vuelta (con un ★ en la vuelta más
 rápida), las **cajas** de cuartiles (caja estrecha = coche controlado) y la
-**tabla** ordenada por mediana con σ y vueltas anómalas.
+**tabla** ordenada por el tiempo de la contrarreloj, con mediana y σ.
 
-Tres reglas de lectura, que la propia página explica:
+Reglas de lectura, que la propia página explica:
 
 - Se descarta la **vuelta de calibración**: el controlador la cronometra antes
   de poner el contador a cero, así que toda carrera trae dos vueltas 1 y la
   primera es la lenta de reconocimiento.
-- Se excluyen las **vueltas anómalas** — las que el dashboard ya marcó como
-  &gt;2× la media de su carrera; solo se cuentan en la tabla. Con una vuelta de
-  9 s dentro, las décimas entre pilotos dejan de verse.
+- Las **vueltas lentas cuentan** (las que el dashboard marca como &gt;2× la
+  media): si el coche se salió y hubo que volver a ponerlo, ese tiempo se perdió
+  y suma, igual que en una carrera de verdad.
+- Se descartan las **vueltas mal medidas** (por debajo de la mitad de la
+  mediana: la meta disparó dos veces y partió una vuelta en dos), avisando
+  debajo de la tabla.
+- Se comparan las **50 primeras vueltas**: la carrera que dé más se corta ahí y
+  la que no llegue sale sin tiempo de contrarreloj.
 - **Un panel por coche** (detectado por el nombre): el coche pesa más que el
   piloto, así que mezclarlos en un eje compararía coches, no pilotos.
 

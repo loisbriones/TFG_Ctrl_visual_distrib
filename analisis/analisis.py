@@ -294,7 +294,7 @@ sentido de la marcha.</p>
 <div class="descargas">{checks_html}</div>
 {cuerpo}
 {script}
-<div class="descargas">{boton_pdf("2", "Descargar gráfica (PDF)")}
+<div class="descargas">{boton_pdf("2", "Descargar gráfica (PDF)", ID_GRAFICA_2)}
 {boton_csv("posiciones", "Descargar posiciones (CSV)")}</div>
 </section>
 """
@@ -346,6 +346,48 @@ def script_sincronizar_vueltas():
   enlazar(g2, g3);
   enlazar(g3, g2);
 }})();
+</script>
+"""
+
+
+# ---------------------------------------------------------------------------
+# El PDF sale de la vuelta que marque el slider
+# ---------------------------------------------------------------------------
+# El estado del slider vive SOLO en el navegador: al moverlo, plotly.js retoca
+# el <div>, pero el go.Figure que el servidor guarda en FIGURAS sigue como se
+# construyó (vuelta 0). Por eso el botón de PDF, que es un <a href> estático,
+# bajaba siempre la primera vuelta.
+#
+# Aquí se cierra el hueco por el lado del cliente: justo antes de que el enlace
+# navegue, se le añade &vuelta=<etiqueta del paso activo>, que es lo que el
+# endpoint /pdf ya sabía atender (ver _activar_vuelta). La etiqueta se copia
+# literalmente del propio slider, así que casa siempre con la comparación que
+# hace el servidor.
+#
+# Va en su propia parte al final del documento, como el de sincronización:
+# necesita que todos los <div> de figura existan ya.
+#
+# Lo que NO arregla: los checkboxes de capas de la gráfica 2. Su estado tampoco
+# viaja al servidor (son un Plotly.restyle en cliente), así que el PDF sale
+# siempre con las cuatro capas. Para llevarse una capa suelta al papel hay que
+# apagar las otras en la propia figura y usar la cámara de plotly (PNG).
+# ---------------------------------------------------------------------------
+def script_pdf_vuelta():
+    return """
+<script>
+(function() {
+  document.querySelectorAll('a.boton[data-grafica]').forEach(function(a) {
+    const base = a.getAttribute("href");
+    a.addEventListener("click", function() {
+      const gd = document.getElementById(a.dataset.grafica);
+      const s = gd && gd.layout && (gd.layout.sliders || [])[0];
+      if (!s || !s.steps || !s.steps.length) return;   // figura sin slider
+      const paso = s.steps[s.active || 0];
+      a.setAttribute("href", base + "&vuelta=" +
+                     encodeURIComponent(paso.label));
+    });
+  });
+})();
 </script>
 """
 
@@ -489,7 +531,7 @@ todavía va por detrás del inicio de la cadena de la cámara que entra, así qu
   }});
 }})();
 </script>
-<div class="descargas">{boton_pdf("3b", "Descargar gráfica (PDF)")}
+<div class="descargas">{boton_pdf("3b", "Descargar gráfica (PDF)", ID_GRAFICA_3B)}
 {boton_csv("derrape_bag", "Descargar muestras (CSV)")}</div>
 {resumen}
 <div class="descargas">{boton_pdf("3c", "Descargar resumen (PDF)")}
@@ -615,14 +657,27 @@ def seccion_5_tiempos(vueltas, df_tel=None, umbral=None):
 # ---------------------------------------------------------------------------
 # Ensamblado del HTML
 # ---------------------------------------------------------------------------
-def boton_pdf(clave, etiqueta="Descargar PDF"):
+def boton_pdf(clave, etiqueta="Descargar PDF", div_id=None):
     """Enlace al endpoint /pdf del servidor para una figura ya registrada en
     FIGURAS. El PDF se genera con kaleido (vectorial, apto para
     \\includegraphics). Si el HTML se abre con doble clic (sin servidor) el
     enlace no lleva a ningún sitio: por eso lleva la clase 'solo-servidor',
-    que el aviso de la cabecera explica."""
+    que el aviso de la cabecera explica.
+
+    div_id: id del <div> de la figura. Con él, script_pdf_vuelta() le añade al
+    enlace la vuelta que marque el slider justo antes de pinchar; sin él (o si
+    la figura no tiene slider) el enlace se manda tal cual."""
+    dato = f' data-grafica="{div_id}"' if div_id else ""
     return (f'<a class="boton solo-servidor" href="/pdf?fig='
-            f'{urllib.parse.quote(clave)}" download>{html.escape(etiqueta)}</a>')
+            f'{urllib.parse.quote(clave)}"{dato} download>'
+            f"{html.escape(etiqueta)}</a>")
+
+
+def id_div_figura(clave):
+    """id del <div> de una figura a partir de su clave en FIGURAS. Plotly, si
+    no se le da uno, pone un UUID distinto en cada generación: hace falta uno
+    estable para que el JS pueda encontrar la figura desde su botón."""
+    return "g-fig-" + clave.replace(":", "-")
 
 
 def boton_csv(clave, etiqueta="Descargar CSV"):
@@ -648,10 +703,14 @@ def seccion(titulo, parrafo, figs, primera=False, claves=None, csv=None):
     for i, (fig, clave) in enumerate(zip(figs, claves)):
         cuerpos.append(fig.to_html(
             full_html=False, include_plotlyjs=primera and i == 0,
+            # El id estable lo necesita el botón de PDF para leer la vuelta
+            # activa del slider (ver script_pdf_vuelta)
+            div_id=id_div_figura(clave) if clave else None,
             config={"displaylogo": False, "responsive": True},
         ))
         if clave:
-            cuerpos.append(f'<div class="descargas">{boton_pdf(clave)}</div>')
+            cuerpos.append(f'<div class="descargas">'
+                           f"{boton_pdf(clave, div_id=id_div_figura(clave))}</div>")
     descarga_csv = (f'<div class="descargas">{boton_csv(csv, "Descargar datos (CSV)")}'
                     f"</div>" if csv else "")
     return (
@@ -878,14 +937,19 @@ doble clic, pero los botones de <strong>descarga (PDF / CSV)</strong> y el
 # ---------------------------------------------------------------------------
 # Exportación a PDF (kaleido) y a CSV
 # ---------------------------------------------------------------------------
-def figura_a_pdf(fig):
+def figura_a_pdf(fig, vuelta=None):
     """PDF vectorial de una figura, listo para \\includegraphics.
 
     Se quita el slider antes de exportar: kaleido dibuja el estado ACTIVO de
-    la figura, y el slider solo estorbaría en el papel. Para elegir qué
-    vuelta sale en el PDF se pasa &vuelta=N al endpoint, que activa las
-    trazas de esa vuelta antes de llamar aquí (ver _activar_vuelta)."""
+    la figura, y el slider solo estorbaría en el papel. Qué vuelta sale la
+    elige el botón de la página, que le pasa &vuelta=N al endpoint (ver
+    script_pdf_vuelta y _activar_vuelta).
+
+    `vuelta` solo se usa para escribirla en el título: sin el slider, el papel
+    no diría de qué vuelta es la figura."""
     copia = go.Figure(fig)
+    if vuelta is not None and copia.layout.title.text:
+        copia.layout.title.text += f" · vuelta {vuelta}"
     # Fuera el slider y los menús: kaleido dibuja el estado ACTIVO de la
     # figura y esos controles solo estorbarían en el papel. Se asignan
     # directamente sobre layout porque update_layout(sliders=[]) no vacía la
@@ -914,6 +978,10 @@ def _activar_vuelta(fig, vuelta):
     if not copia.layout.sliders:
         return copia
     pasos = copia.layout.sliders[0].steps
+    if not any(p.label == str(vuelta) for p in pasos):
+        print(f"AVISO: la figura no tiene la vuelta {vuelta} "
+              f"(tiene: {', '.join(p.label for p in pasos)}); "
+              "el PDF sale con la vuelta que estuviera activa")
     for paso in pasos:
         if paso.label != str(vuelta):
             continue
@@ -1033,7 +1101,8 @@ def servir(pagina_bytes):
             if vuelta:
                 fig = _activar_vuelta(fig, vuelta)
                 nombre += f"_v{vuelta}"
-            self._enviar(figura_a_pdf(fig), "application/pdf", f"{nombre}.pdf")
+            self._enviar(figura_a_pdf(fig, vuelta), "application/pdf",
+                         f"{nombre}.pdf")
 
         def _csv(self, consulta):
             clave = consulta.get("tabla", [""])[0]
@@ -1227,6 +1296,32 @@ def main():
     primera = True
 
     hay_vueltas_pos = len(df_pos) and df_pos["vuelta"].notna().any()
+
+    # Encuadre COMÚN de las gráficas 2 y 4: la caja que envuelve todo lo que
+    # dibujan las dos (las pegatinas del bag y las celdas de los logs), así que
+    # el circuito sale a la misma escala y en la misma posición en ambas —y con
+    # la misma rejilla, que cada figura saca del marco— y se pueden comparar (o
+    # imprimir) una al lado de la otra. Se calcula aquí una vez porque cada
+    # figura sola solo conoce la mitad de los datos.
+    camaras_marco = sorted(
+        (set(df_pos["camara"].dropna().unique()) if len(df_pos) else set())
+        | set(logs))
+    celdas_globales = []
+    for i, cam in enumerate(camaras_marco):
+        if cam not in logs:
+            continue
+        celdas = logs[cam]["c"].celdas
+        celdas = celdas[~celdas["gigante"]]
+        dx, dy = figuras.offset_camara(cam, i)
+        celdas_globales.append(np.column_stack([
+            celdas["x"].to_numpy(dtype=float) + dx,
+            celdas["y"].to_numpy(dtype=float) + dy,
+        ]))
+    marco = figuras.marco_comun(
+        df_pos if len(df_pos) else
+        pd.DataFrame(columns=["camara", "fx", "fy", "bx", "by"]),
+        camaras_marco, celdas_globales)
+
     if hay_vueltas_pos:
         # Los datos del bag que alimentan las figuras 1 y 2 (mismo DataFrame)
         TABLAS["posiciones"] = df_pos
@@ -1240,9 +1335,8 @@ def main():
             "vuelta, así que dos vueltas se comparan tal cual. El rombo ámbar "
             "es el inicio de meta y la flecha de su lado, el sentido de la "
             "marcha. La vista se rota "
-            "arrastrando con el ratón. Para sacar una vuelta concreta a PDF: "
-            "mover el slider y añadir <code>&amp;vuelta=N</code> al enlace, o "
-            "descargar y repetir.",
+            "arrastrando con el ratón. El botón de PDF baja la vuelta que "
+            "marque el slider en ese momento, con su número en el título.",
             FIGURAS["1"], primera=primera, claves=["1"], csv="posiciones",
         ))
         primera = False
@@ -1253,7 +1347,7 @@ def main():
         cerradas = {cam: d["c"].cerrada for cam, d in logs.items()}
         FIGURAS["2"] = grafica_2_trayectorias(
             df_pos, celdas_por_camara=celdas_por_camara, cerradas=cerradas,
-            umbral=umbral_derrape, max_dist_ruta=max_dist_ruta)
+            umbral=umbral_derrape, max_dist_ruta=max_dist_ruta, marco=marco)
         partes.append(seccion_2_trayectorias(FIGURAS["2"], bool(logs)))
     else:
         partes.append("<section><h2>1 · Valor de derrape en cada punto del "
@@ -1297,19 +1391,30 @@ def main():
         # df_pos aporta el primer punto de cada vuelta para marcar el inicio
         # de meta sobre el circuito (None si el bag no traía posiciones)
         FIGURAS["4"] = grafica_4_circuito(
-            logs, df_pos if hay_vueltas_pos else None)
+            logs, df_pos if hay_vueltas_pos else None, marco=marco)
         partes.append(seccion(
-            "4 · El circuito con el PWM de cada celda",
+            "4 · El circuito con las zonas de PWM",
             "Todas las cámaras en el mismo plano (desplazadas según "
             "OFFSETS_CAMARAS en figuras.py, a ajustar por montaje): la "
-            "trayectoria en gris tenue y cada celda pintada del color de su "
-            "valor de PWM, con la leyenda diciendo qué valor es cada color. "
-            "Como todas las celdas de una zona comparten PWM, <strong>un "
-            "bloque de un solo color es una zona</strong> y un cambio de color "
-            "es una frontera: moviendo el slider se ve cómo nacen, crecen y "
-            "desaparecen las zonas vuelta a vuelta. La línea ámbar discontinua "
-            "es un hueco tapado (celda gigante); la estrella ámbar es el "
-            "inicio de meta y la flecha de su lado, el sentido de la marcha.",
+            "trayectoria en gris tenue y cada celda con el <strong>color y la "
+            "forma de su zona</strong>, que la leyenda va nombrando con su "
+            "tramo de celdas y su PWM. Color y forma son la "
+            "<strong>identidad</strong> de la zona: se los queda desde que nace "
+            "hasta que muere o la absorbe otra —aunque por el camino la "
+            "castiguen—, y solo entonces vuelven a la reserva y pueden tocarle "
+            "a una zona nueva. Así, moviendo el slider, se ve cómo "
+            "<strong>nacen, crecen, se fusionan y desaparecen</strong> los "
+            "tramos. Si el PWM se movió en esa vuelta, la leyenda lo dice al "
+            "lado del valor (<code>(-1)</code>, <code>(+1)</code>, "
+            "<code>(nueva)</code>). Una zona que <strong>cruza la línea de "
+            "meta</strong> sale aquí como UNA sola (<code>69-46 (cruza "
+            "meta)</code>) aunque el log la liste en dos tramos de celdas: la "
+            "numeración de celdas empieza en la meta y es ahí donde el "
+            "algoritmo corta la partición, pero en la pista es el mismo tramo. "
+            "La línea ámbar discontinua es un hueco "
+            "tapado (celda gigante); la estrella ámbar es el inicio de meta y "
+            "la flecha de su lado, el sentido de la marcha. El encuadre y la "
+            "rejilla son los mismos que los de la gráfica 2.",
             FIGURAS["4"], primera=primera, claves=["4"],
             csv=f"celdas:{next(iter(logs))}" if logs else None,
         ))
@@ -1383,6 +1488,8 @@ def main():
     # Ata la vuelta de la gráfica 2 con la de la 3b. Va al final del documento
     # a propósito: necesita que los dos <div> ya existan (ver la función)
     partes.append(script_sincronizar_vueltas())
+    # Ídem: hace falta que existan todos los <div> de figura y sus botones
+    partes.append(script_pdf_vuelta())
 
     # --- Escribir y servir ---------------------------------------------------
     pagina = ensamblar_html(bag_dir.name, resumen_html, partes)

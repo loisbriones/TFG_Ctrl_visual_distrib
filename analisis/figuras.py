@@ -17,12 +17,14 @@ vuelta se autoescalara, el circuito se estiraría o achataría según por dónde
 pasó el coche y dos vueltas dejarían de ser comparables a ojo.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from parseo_log import Carrera
+from parseo_log import Carrera, celdas_de_zona
 
 # ---------------------------------------------------------------------------
 # Colores (paleta validada del skill dataviz, modo claro). Los roles de estado
@@ -751,44 +753,116 @@ def grafica_6c_subplot(tabla: pd.DataFrame, panel: str):
 # ===========================================================================
 # Todas las cámaras en el MISMO plano (plano global, ver OFFSETS_CAMARAS):
 # la trayectoria de fondo en gris tenue y encima cada celda pintada del COLOR
-# DE SU VALOR DE PWM, con la leyenda al lado diciendo qué valor es cada color.
+# DE SU ZONA, con la leyenda al lado diciendo qué zona es cada color y con qué
+# PWM corrió.
 #
-# Colorear por valor es colorear por ZONA: dentro del algoritmo todas las
-# celdas de una zona comparten PWM, así que un bloque de un solo color ES una
-# zona y un cambio de color ES una frontera entre zonas. Como el slider es
-# INSTANTÁNEO (cada paso pinta el perfil con el que se corrió esa vuelta), las
-# zonas se ven nacer, crecer y desaparecer al pasar de vuelta, en vez de
-# quedar marcadas para siempre como con el anillo rojo de antes.
+# El color es la IDENTIDAD de la zona, no su valor: una zona conserva su color
+# desde que nace hasta que muere o la absorbe otra, aunque por el camino la
+# castiguen y le bajen el PWM. Ese es el objetivo de la figura: con el slider
+# instantáneo (cada paso pinta el perfil con el que se corrió esa vuelta) se ve
+# NACER, CRECER, FUSIONARSE y MORIR a los tramos. Colorear por valor —como se
+# hacía antes— no dejaba verlo: un castigo cambiaba el color de la zona, y dos
+# zonas distintas con el mismo PWM salían del mismo color y parecían una sola.
+# La identidad (`id`) la deriva seguir_zonas() en parseo_log.py, porque el log
+# no numera las zonas.
+#
+# La FORMA del marcador acompaña al color y dice lo mismo que él: qué zona es.
+# El VALOR de PWM (y si subió o bajó en esta vuelta) va en el texto de la
+# leyenda, que es donde se mira cuando hace falta; el dibujo se queda solo con
+# lo que interesa de un vistazo: qué tramos hay y dónde empiezan y acaban.
 #
 # datos_camaras: {camara: {"c": Carrera, "vueltas": [v...],
 #                          "perfil_vuelta": {v: array PWM por celda},
-#                          "zonas_ini_vuelta": {v: [zona]}}}
+#                          "zonas_ini_vuelta": {v: [zona con id y delta]}}}
 # ===========================================================================
-# Paleta categórica del PWM: colores MUY distintos entre sí, para que dos
-# zonas con valores parecidos (80 y 78) no se confundan. El color sale del
-# propio valor (pwm % nº de colores), así que un mismo PWM lleva SIEMPRE el
-# mismo color: en todas las vueltas y también entre grabaciones distintas.
-# Valores separados por 12 unidades comparten color, pero eso solo confunde si
-# coincidieran en la misma vuelta, y para eso una zona tendría que haber caído
-# 12 unidades por debajo de otra (seis reincidencias de derrape); aun así la
-# leyenda lleva el número al lado y lo desambigua.
-PALETA_PWM = [
+# Reserva de colores de zona: MUY distintos entre sí, porque dos zonas vecinas
+# de colores parecidos se leerían como una sola. No se indexa por PWM ni por
+# número de zona: los colores se REPARTEN (el primero libre al nacer una zona,
+# devuelto a la reserva cuando muere), así que hacen falta tantos como zonas
+# vivas a la vez pueda haber, no tantas como zonas salgan en toda la carrera.
+PALETA_ZONAS = [
     "#2a78d6",  # azul
-    "#b58324",  # ámbar
-    "#1baf7a",  # aqua
     "#d03b3b",  # rojo
+    "#1baf7a",  # aqua
+    "#b58324",  # ámbar
     "#7b5ea7",  # violeta
-    "#ec835a",  # naranja
     "#0ca30c",  # verde
-    "#c2185b",  # magenta oscuro
+    "#ec835a",  # naranja
     "#00838f",  # teal oscuro
+    "#c2185b",  # magenta oscuro
     "#8d6e63",  # marrón
     "#5c6bc0",  # índigo
     "#9e9d24",  # oliva
+    "#e91e63",  # rosa fuerte
+    "#009688",  # verde azulado
+    "#795548",  # marrón oscuro
+    "#3f51b5",  # azul oscuro
+    "#ff7043",  # coral
+    "#607d8b",  # gris azulado
+]
+
+# Formas del marcador, que acompañan al color: la forma también es IDENTIDAD de
+# la zona, no un segundo dato encima. Con las dos cosas a la vez se reconoce un
+# tramo de un vistazo (y se distingue igual de bien en un PDF en blanco y negro
+# o para quien no separe dos colores). Van rellenas y son de silueta muy
+# distinta entre sí, que a tamaño 11 px es lo único que se lee.
+SIMBOLOS_ZONA = [
+    "circle",
+    "square",
+    "diamond",
+    "triangle-up",
+    "star",
+    "hexagon",
+    "triangle-down",
+    "pentagon",
 ]
 
 
-def grafica_4_circuito(datos_camaras, df_pos=None):
+class _ReservaEstilos:
+    """Reparte estilos (color + forma) entre las zonas vivas y recoge el de las
+    que mueren para volver a darlo más adelante.
+
+    Cada zona ocupa un HUECO mientras vive, y del número de hueco salen su color
+    (PALETA_ZONAS) y su forma (SIMBOLOS_ZONA): así conserva las dos cosas desde
+    que nace hasta que muere o la absorbe otra, y las zonas que conviven en una
+    vuelta ocupan huecos distintos y no se confunden.
+
+    La clave de una zona es (cámara, id): los ids son por cámara y no se
+    reutilizan nunca, así que una zona que muere y otra que nace después jamás
+    comparten clave aunque acaben compartiendo hueco."""
+
+    def __init__(self):
+        self.de_zona = {}     # (cam, id) -> número de hueco
+        self.aviso_dado = False
+
+    def liberar_muertas(self, vivas):
+        for clave in [k for k in self.de_zona if k not in vivas]:
+            del self.de_zona[clave]
+
+    def estilo(self, clave):
+        """(color, forma) de la zona; se le asigna el primer hueco libre la
+        primera vez que aparece."""
+        if clave not in self.de_zona:
+            usados = set(self.de_zona.values())
+            libres = [i for i in range(len(PALETA_ZONAS)) if i not in usados]
+            if libres:
+                self.de_zona[clave] = libres[0]
+            else:
+                # Caso raro (más zonas vivas a la vez que huecos): se reparte
+                # por módulo y dos zonas repetirán estilo. No se soporta con más
+                # maquinaria; basta con avisar y ampliar PALETA_ZONAS si pasa.
+                if not self.aviso_dado:
+                    print(f"AVISO: más de {len(PALETA_ZONAS)} zonas vivas a la "
+                          "vez en la gráfica 4: hay colores repetidos "
+                          "(ampliar PALETA_ZONAS en figuras.py)")
+                    self.aviso_dado = True
+                self.de_zona[clave] = len(self.de_zona) % len(PALETA_ZONAS)
+        hueco = self.de_zona[clave]
+        return (PALETA_ZONAS[hueco % len(PALETA_ZONAS)],
+                SIMBOLOS_ZONA[hueco % len(SIMBOLOS_ZONA)])
+
+
+def grafica_4_circuito(datos_camaras, df_pos=None, marco=None):
     camaras = sorted(datos_camaras)
     indice = {c: i for i, c in enumerate(camaras)}
     # Eje de vueltas del slider: la unión de las vueltas de todas las
@@ -847,65 +921,126 @@ def grafica_4_circuito(datos_camaras, df_pos=None):
         trazado_y += [y for y in ty if y is not None]
 
     # Centro y tamaño del circuito, para apartar la flecha de sentido hacia
-    # fuera del trazado. Aquí los ejes se autoescalan, así que no hay que
-    # reajustar rangos: plotly ya deja sitio a la flecha.
-    centro_trazado = ((min(trazado_x) + max(trazado_x)) / 2,
-                      (min(trazado_y) + max(trazado_y)) / 2) \
-        if trazado_x else (0.0, 0.0)
-    separacion_flecha = (max(max(trazado_x) - min(trazado_x),
-                             max(trazado_y) - min(trazado_y))
-                         * SEPARACION_FLECHA_SENTIDO) if trazado_x else 0.0
+    # fuera del trazado. Si viene `marco` (el encuadre común con la gráfica 2)
+    # se usa ese, para que la flecha caiga dentro del cuadro; si no, la caja
+    # del propio trazado, que es lo que los ejes van a autoescalar.
+    if marco is not None:
+        mx0, mx1, my0, my1 = marco
+        centro_trazado = ((mx0 + mx1) / 2, (my0 + my1) / 2)
+        separacion_flecha = max(mx1 - mx0, my1 - my0) * SEPARACION_FLECHA_SENTIDO
+    else:
+        centro_trazado = ((min(trazado_x) + max(trazado_x)) / 2,
+                          (min(trazado_y) + max(trazado_y)) / 2) \
+            if trazado_x else (0.0, 0.0)
+        separacion_flecha = (max(max(trazado_x) - min(trazado_x),
+                                 max(trazado_y) - min(trazado_y))
+                             * SEPARACION_FLECHA_SENTIDO) if trazado_x else 0.0
 
-    # --- Un bloque de trazas por vuelta: UNA TRAZA POR VALOR DE PWM --------
-    # Agrupar por valor (y no por cámara) es lo que hace que la leyenda diga
-    # "PWM 80 / PWM 78" con los valores de la vuelta que se está mirando: la
-    # leyenda solo lista las trazas visibles, así que se actualiza sola con el
-    # slider. Cada traza junta las celdas de TODAS las cámaras con ese valor.
-    # El número de trazas cambia de una vuelta a otra (cada vuelta tiene sus
-    # valores), así que se apuntan los índices para armar luego el slider.
+    # Posición de cada celda normal en el plano global, por cámara: se calcula
+    # una vez y la reutilizan todas las vueltas ({celda: (x, y)})
+    puntos_celda = {}
+    for i, cam in enumerate(camaras):
+        dx, dy = offset_camara(cam, i)
+        normales = datos_camaras[cam]["c"].celdas
+        normales = normales[~normales["gigante"]]
+        puntos_celda[cam] = {int(cd["celda"]): (cd["x"] + dx, cd["y"] + dy)
+                             for _, cd in normales.iterrows()}
+
+    # --- Un bloque de trazas por vuelta: UNA TRAZA POR ZONA ----------------
+    # Una traza por zona (y no por valor) es lo que da el estilo estable: la
+    # traza de la zona 3 lleva el color y la forma de la zona 3 en todas las
+    # vueltas en las que exista. La leyenda solo lista las trazas visibles, así
+    # que se actualiza sola con el slider y siempre dice las zonas de la vuelta
+    # que se está mirando, con su PWM. El número de trazas cambia de una vuelta
+    # a otra (cada vuelta tiene sus zonas), así que se apuntan los índices para
+    # armar luego el slider.
+    reserva = _ReservaEstilos()
+    varias_camaras = len(camaras) > 1
     indices_por_vuelta = {}
     for v in vueltas_global:
-        grupos = {}  # pwm (int o None) -> {"x": [], "y": [], "hover": []}
-        for i, cam in enumerate(camaras):
+        # Zonas vigentes en esta vuelta. Si una cámara no tiene datos de la
+        # vuelta v se usa la última vuelta anterior que sí tenga (su perfil
+        # sigue vigente).
+        zonas_vuelta = {}   # cam -> [zona]
+        for cam in camaras:
             d = datos_camaras[cam]
-            dx, dy = offset_camara(cam, i)
-            normales = d["c"].celdas[~d["c"].celdas["gigante"]].sort_values("celda")
-            # Si esta cámara no tiene datos de la vuelta v se usa la última
-            # vuelta anterior que sí tenga (el perfil sigue vigente)
             v_datos = max((u for u in d["vueltas"] if u <= v), default=None)
-            if v_datos is None:
-                continue
-            perfil = d["perfil_vuelta"][v_datos]
-            zonas = d["zonas_ini_vuelta"].get(v_datos, [])
-            for _, cd in normales.iterrows():
-                idx = int(cd["celda"])
-                bruto = perfil[idx] if idx < len(perfil) else np.nan
-                pwm = None if np.isnan(bruto) else int(bruto)
-                zona_txt = ""
-                for z in zonas:
-                    if z["ini"] <= idx <= z["fin"]:
-                        zona_txt = (f"<br>zona [{z['ini']}-{z['fin']}] "
-                                    f"({z['tipo']})")
-                        break
-                g = grupos.setdefault(pwm, {"x": [], "y": [], "hover": []})
-                g["x"].append(cd["x"] + dx)
-                g["y"].append(cd["y"] + dy)
-                g["hover"].append(
-                    f"{cam} · celda {idx}"
-                    f"<br>PWM {'?' if pwm is None else pwm}{zona_txt}")
+            if v_datos is not None:
+                zonas_vuelta[cam] = d["zonas_ini_vuelta"].get(v_datos, [])
+        # Primero se devuelven a la reserva los huecos de las zonas que ya no
+        # están (así una zona que nace en esta misma vuelta puede quedarse el
+        # estilo de la que acaba de morir), y luego se reparten los que faltan
+        vivas = {(cam, z["id"]) for cam, zs in zonas_vuelta.items() for z in zs}
+        reserva.liberar_muertas(vivas)
 
         indices = []
-        # Ascendente y con el "sin dato" al final, para que la leyenda se lea
-        # de la zona más lenta a la más rápida
-        for pwm in sorted(grupos, key=lambda p: (p is None, p)):
-            g = grupos[pwm]
-            color = COL_MUTED if pwm is None else PALETA_PWM[pwm % len(PALETA_PWM)]
+        # Por cámara y por celda de inicio: la leyenda se lee siguiendo el
+        # recorrido del circuito
+        ordenadas = sorted(
+            ((cam, z) for cam, zs in zonas_vuelta.items() for z in zs),
+            key=lambda par: (indice[par[0]], par[1]["ini"]))
+        con_zona = {cam: set() for cam in camaras}
+        for cam, z in ordenadas:
+            xs, ys, hover = [], [], []
+            # celdas_de_zona, y no range(ini, fin+1), porque una zona puede
+            # ENVOLVER la meta en cadena cerrada (fin < ini): ver
+            # unir_por_la_meta en parseo_log.py
+            for idx in celdas_de_zona(z, datos_camaras[cam]["c"].n_celdas):
+                punto = puntos_celda[cam].get(idx)
+                if punto is None:   # celda gigante (sin punto) o fuera de rango
+                    continue
+                con_zona[cam].add(idx)
+                xs.append(punto[0])
+                ys.append(punto[1])
+                hover.append(f"{cam} · celda {idx}")
+            if not xs:
+                continue
+            delta = z.get("delta")
+            cambio = ("nace en esta vuelta" if delta is None else
+                      "el PWM no cambió en esta vuelta" if delta == 0 else
+                      f"PWM {delta:+d} respecto a la vuelta anterior")
+            # Si el valor se movió, la leyenda lo dice en texto plano al lado
+            # del número: es el único sitio donde hace falta mirarlo, y así el
+            # dibujo se queda solo con lo que interesa de un vistazo (qué zonas
+            # hay y dónde empiezan y acaban)
+            marca = ("" if delta == 0 else
+                     " (nueva)" if delta is None else f" ({delta:+d})")
+            # En la leyenda la cámara solo se nombra si hay más de una (los
+            # ids de zona son POR CÁMARA: la Z3 de la 01 no es la de la 02)
+            prefijo = f"cam{cam.split('_')[-1]} · " if varias_camaras else ""
+            # La que envuelve la meta se nombra igual (de donde empieza a donde
+            # acaba siguiendo la marcha) pero avisando, que si no el 69-46
+            # parece un error
+            meta = " (cruza meta)" if z.get("cruza_meta") else ""
+            zona_txt = (f"Z{z['id']} · {z['ini']}-{z['fin']}{meta} "
+                        f"· PWM {z['pwm']}")
+            color, simbolo = reserva.estilo((cam, z["id"]))
             fig.add_trace(go.Scatter(
-                x=g["x"], y=g["y"], mode="markers",
-                name="PWM ?" if pwm is None else f"PWM {pwm}",
-                marker=dict(size=11, color=color,
+                x=xs, y=ys, mode="markers", name=prefijo + zona_txt + marca,
+                marker=dict(size=11, symbol=simbolo, color=color,
                             line=dict(color=COL_SUPERFICIE, width=1)),
-                customdata=g["hover"],
+                customdata=[f"{h}<br>{zona_txt} ({z['tipo']})<br>{cambio}"
+                            for h in hover],
+                hovertemplate="%{customdata}<extra></extra>",
+                visible=(v == vueltas_global[0]),
+            ))
+            indices.append(len(fig.data) - 1)
+
+        # Celdas que ninguna zona cubre (sin volcado [PERFIL] todavía, o hueco
+        # entre zonas): en gris y todas en una traza al final de la leyenda
+        sx, sy, shover = [], [], []
+        for cam in camaras:
+            for idx, (x, y) in puntos_celda[cam].items():
+                if idx not in con_zona[cam]:
+                    sx.append(x)
+                    sy.append(y)
+                    shover.append(f"{cam} · celda {idx}<br>sin zona (sin PWM)")
+        if sx:
+            fig.add_trace(go.Scatter(
+                x=sx, y=sy, mode="markers", name="sin zona",
+                marker=dict(size=11, color=COL_MUTED,
+                            line=dict(color=COL_SUPERFICIE, width=1)),
+                customdata=shover,
                 hovertemplate="%{customdata}<extra></extra>",
                 visible=(v == vueltas_global[0]),
             ))
@@ -959,23 +1094,54 @@ def grafica_4_circuito(datos_camaras, df_pos=None):
             visibles[i] = True
         for idx in indices_por_vuelta[v]:
             visibles[idx] = True
-        pasos.append(dict(label=str(v), method="update",
+        # int(v): la etiqueta es la que viaja al servidor para sacar el PDF de
+        # esta vuelta (ver script_pdf_vuelta en analisis.py), y con un float de
+        # numpy saldría "3.0" y no casaría con la vuelta 3
+        pasos.append(dict(label=str(int(v)), method="update",
                           args=[{"visible": visibles}]))
     fig.update_layout(
         sliders=[dict(active=0, currentvalue=dict(prefix="Vuelta "),
                       pad=dict(t=30), steps=pasos)],
     )
-    # Coordenadas de imagen: origen arriba a la izquierda (Y invertida) y
-    # misma escala en ambos ejes para que el circuito no salga deformado
-    fig.update_yaxes(autorange="reversed", scaleanchor="x", scaleratio=1,
-                     title_text="y (px del plano global)")
-    fig.update_xaxes(title_text="x (px del plano global)")
-    return _layout_base(
+    # Coordenadas de imagen: origen arriba a la izquierda (Y invertida) y misma
+    # escala en ambos ejes para que el circuito no salga deformado. El `dtick`
+    # común a los dos ejes es lo que hace la cuadrícula de celdas cuadradas
+    # (ver paso_rejilla) y, con `marco`, el encuadre y la rejilla salen
+    # idénticos a los de la gráfica 2.
+    if marco is not None:
+        mx0, mx1, my0, my1 = marco
+        paso_grid = paso_rejilla(mx0, mx1, my0, my1)
+        fig.update_yaxes(range=[my1, my0], scaleanchor="x", scaleratio=1,
+                         dtick=paso_grid, tick0=0,
+                         title_text="y (px)")
+        fig.update_xaxes(range=[mx0, mx1], dtick=paso_grid, tick0=0,
+                         title_text="x (px)")
+    else:
+        # Sin marco los ejes se autoescalan; el paso sale de la caja del trazado
+        paso_grid = paso_rejilla(min(trazado_x), max(trazado_x),
+                                 min(trazado_y), max(trazado_y)) \
+            if trazado_x else None
+        fig.update_yaxes(autorange="reversed", scaleanchor="x", scaleratio=1,
+                         dtick=paso_grid, tick0=0,
+                         title_text="y (px)")
+        fig.update_xaxes(dtick=paso_grid, tick0=0,
+                         title_text="x (px)")
+    fig = _layout_base(
         fig,
-        "4 · El circuito con el PWM de cada celda "
-        "(un color por valor de PWM: un bloque de color es una zona)",
+        "4 · El circuito con las zonas de PWM "
+        "(cada zona con su color y su forma mientras vive)",
         720,
     )
+    # Leyenda VERTICAL a la derecha, DESPUÉS de _layout_base (que pone la
+    # horizontal común a todas las figuras): aquí hay una entrada por zona
+    # viva, con nombre largo, y en horizontal se comerían media figura. El
+    # margen derecho crece para dejarle sitio.
+    fig.update_layout(
+        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left",
+                    x=1.02, font=dict(size=11)),
+        margin=dict(l=70, r=210, t=95, b=60),
+    )
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -1052,6 +1218,56 @@ def _rangos_globales(df, camaras, extra=()):
     margen_x = (x_max - x_min) * 0.02 or 1.0
     margen_y = (y_max - y_min) * 0.02 or 1.0
     return x_min - margen_x, x_max + margen_x, y_min - margen_y, y_max + margen_y
+
+
+# Cuánto se infla el marco por cada lado, en fracción del LADO MAYOR de la caja
+# de los datos. Tiene que dar sitio a lo que se dibuja FUERA del trazado: la
+# flecha de sentido, que se aparta SEPARACION_FLECHA_SENTIDO (7 %), y su
+# etiqueta, que _puntos_con_holgura cuelga un 15 % más lejos del centro. Se
+# infla lo MISMO en píxeles en los dos ejes (por eso sale del lado mayor y no
+# del lado de cada eje): así el marco no estira ni achata el circuito.
+HOLGURA_MARCO = 0.12
+
+
+def marco_comun(df, camaras, extras=()):
+    """(x_min, x_max, y_min, y_max) del plano global, con holgura: el encuadre
+    COMÚN de las gráficas 2 y 4.
+
+    Común porque las dos enseñan el mismo circuito: con el mismo marco sale en
+    la misma posición y a la misma escala en ambas, y se pueden mirar (o
+    imprimir) una al lado de la otra. La holgura evita tener que recalcular el
+    rango al final de cada figura para que quepan la flecha y su etiqueta.
+
+    El marco NO se cuadra a propósito: cuadrarlo obligaba a encoger el área de
+    dibujo hasta el alto de la figura y las gráficas salían pequeñas. Lo que
+    hace que la cuadrícula tenga celdas cuadradas es la escala 1:1 (scaleanchor)
+    más el mismo paso de rejilla en los dos ejes; de eso se encarga
+    paso_rejilla()."""
+    x0, x1, y0, y1 = _rangos_globales(df, camaras, extra=extras)
+    holgura = max(x1 - x0, y1 - y0) * HOLGURA_MARCO
+    return x0 - holgura, x1 + holgura, y0 - holgura, y1 + holgura
+
+
+def paso_rejilla(x0, x1, y0, y1):
+    """Separación entre líneas de la rejilla (px del plano global), la MISMA
+    para el eje X y el eje Y.
+
+    Es la pieza que hace que la cuadrícula sea de celdas CUADRADAS: los ejes ya
+    van a la misma escala (scaleanchor), así que en cuanto los dos parten con el
+    mismo paso, un salto de 200 px mide lo mismo a lo ancho que a lo alto. Sin
+    esto plotly elige el paso de cada eje por su cuenta (X cada 500, Y cada 200)
+    y la rejilla sale de rectángulos.
+
+    Se calcula en vez de fijarlo porque cada circuito ocupa un número de píxeles
+    distinto: se apunta a una decena de divisiones a lo largo del lado mayor y
+    se redondea al número redondo más cercano (1, 2 o 5 por potencia de diez),
+    que son los que dan etiquetas de eje legibles (100, 200, 500...)."""
+    objetivo = max(x1 - x0, y1 - y0) / 10 or 1.0
+    potencia = 10 ** math.floor(math.log10(objetivo))
+    for redondo in (1, 2, 5, 10):
+        if objetivo <= redondo * potencia:
+            return redondo * potencia
+    return 10 * potencia
 
 
 def _pie_perpendicular(p, pts, cerrada=False):
@@ -1231,8 +1447,8 @@ def grafica_1_derrape3d(df):
         sliders=[dict(active=0, currentvalue=dict(prefix="Vuelta "),
                       pad=dict(t=10), steps=pasos)],
         scene=dict(
-            xaxis_title="x (px del plano global)",
-            yaxis_title="y (px del plano global)",
+            xaxis_title="x (px)",
+            yaxis_title="y (px)",
             zaxis_title="dist. derrape (px)",
             # Rangos FIJOS. La Y va invertida (de mayor a menor) para que el
             # circuito se vea como en la imagen de la cámara. nticks bajo en
@@ -1315,7 +1531,7 @@ TRAZAS_POR_VUELTA_2 = 5
 
 
 def grafica_2_trayectorias(df, celdas_por_camara=None, cerradas=None,
-                           umbral=None, max_dist_ruta=None):
+                           umbral=None, max_dist_ruta=None, marco=None):
     camaras = sorted(df["camara"].unique())
     vueltas = sorted(df.loc[df["vuelta"].notna(), "vuelta"].unique())
     indice = {c: i for i, c in enumerate(camaras)}
@@ -1404,11 +1620,16 @@ def grafica_2_trayectorias(df, celdas_por_camara=None, cerradas=None,
     idx_base = len(fantasmas) if hay_base else -1
     n_estaticas = len(fantasmas) + (1 if hay_base else 0)
 
-    # Para colocar la flecha de sentido fuera del trazado hacen falta el centro
-    # del circuito y su tamaño; los rangos definitivos de los ejes se calculan
-    # al final incluyendo las propias flechas, que si no quedarían recortadas
-    x0, x1, y0, y1 = _rangos_globales(
-        df, camaras, extra=list(base_por_camara.values()))
+    # El marco (encuadre cuadrado, común con la gráfica 4) sitúa el centro del
+    # circuito y su tamaño, que es lo que aparta la flecha de sentido fuera del
+    # trazado. Sin marco se cae a la caja de los datos y, como antes, los
+    # rangos definitivos se calculan al final incluyendo las propias flechas
+    # (que si no quedarían recortadas).
+    if marco is None:
+        x0, x1, y0, y1 = _rangos_globales(
+            df, camaras, extra=list(base_por_camara.values()))
+    else:
+        x0, x1, y0, y1 = marco
     centro_plano = ((x0 + x1) / 2, (y0 + y1) / 2)
     separacion = max(x1 - x0, y1 - y0) * SEPARACION_FLECHA_SENTIDO
     puntos_flecha = []
@@ -1527,8 +1748,14 @@ def grafica_2_trayectorias(df, celdas_por_camara=None, cerradas=None,
         return [n_estaticas + TRAZAS_POR_VUELTA_2 * k + j
                 for k in range(len(vueltas))]
 
-    x_min, x_max, y_min, y_max = _rangos_globales(
-        df, camaras, extra=list(base_por_camara.values()) + puntos_flecha)
+    if marco is None:
+        x_min, x_max, y_min, y_max = _rangos_globales(
+            df, camaras, extra=list(base_por_camara.values()) + puntos_flecha)
+    else:
+        x_min, x_max, y_min, y_max = marco
+    # El paso sale del propio marco, así que la 4 (que usa el mismo marco)
+    # calcula exactamente el mismo y las dos rejillas coinciden
+    paso_grid = paso_rejilla(x_min, x_max, y_min, y_max)
     fig.update_layout(
         sliders=[dict(active=0, currentvalue=dict(prefix="Vuelta "),
                       pad=dict(t=30), steps=pasos)],
@@ -1549,14 +1776,27 @@ def grafica_2_trayectorias(df, celdas_por_camara=None, cerradas=None,
         ),
     )
     # Coordenadas de imagen: Y invertida (rango de mayor a menor), escala 1:1
-    # y rangos FIJOS para que todas las vueltas se dibujen a la misma escala
+    # y rangos FIJOS para que todas las vueltas se dibujen a la misma escala.
+    #
+    # `dtick` igual en los dos ejes (ver paso_rejilla) es lo que hace que la
+    # CUADRÍCULA sea de celdas cuadradas: con la escala 1:1 ya atada por el
+    # scaleanchor, en cuanto los dos ejes se parten cada N píxeles el salto mide
+    # lo mismo a lo ancho que a lo alto. `tick0=0` además cuadra la rejilla de
+    # esta figura con la de la 4.
+    #
+    # Sin `constrain`, plotly resuelve la escala 1:1 ENSANCHANDO el rango del
+    # eje que sobre hasta llenar el ancho que le dé el navegador: el encuadre
+    # pedido nunca se recorta (solo se ve algo más de circuito a los lados) y la
+    # figura ocupa todo el ancho disponible, que es lo que interesa para
+    # mirarla. Las vueltas siguen siendo comparables porque la escala no cambia.
     fig.update_yaxes(range=[y_max, y_min], scaleanchor="x", scaleratio=1,
-                     title_text="y (px del plano global)")
-    fig.update_xaxes(range=[x_min, x_max],
-                     title_text="x (px del plano global)")
+                     dtick=paso_grid, tick0=0,
+                     title_text="y (px)")
+    fig.update_xaxes(range=[x_min, x_max], dtick=paso_grid, tick0=0,
+                     title_text="x (px)")
     return _layout_base(
         fig,
         "2 · Trayectorias de la etiqueta delantera y trasera "
-        "(una vuelta cada vez, ejes fijos)",
+        "(una vuelta cada vez, ejes fijos y rejilla cuadrada)",
         680,
     )
