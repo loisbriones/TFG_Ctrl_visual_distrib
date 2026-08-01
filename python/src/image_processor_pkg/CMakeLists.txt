@@ -15,6 +15,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Point2D.msg"
   "msg/Stiker.msg"
   "msg/SpeedCarril.msg"
+  "msg/TimePerLap.msg"
+  "msg/CarControlTelemetry.msg"
+  "msg/BoundingRect.msg"
   DEPENDENCIES builtin_interfaces
 )
 
@@ -30,6 +33,7 @@ install(PROGRAMS
   image_processor_pkg/RaceControllerNode.py
   image_processor_pkg/ArduinoController.py
   image_processor_pkg/CarControllerNode.py
+  image_processor_pkg/AlgoritmoVelocidad.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

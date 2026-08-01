@@ -2,7 +2,6 @@
 
 import rclpy
 from rclpy.node import Node
-from rclpy.time import Time
 
 from image_processor_pkg.msg import SpeedCarril
 from std_msgs.msg import Bool
@@ -16,10 +15,8 @@ from rclpy.executors import MultiThreadedExecutor
 
 from ament_index_python.packages import get_package_share_directory
 
-from threading import Lock
 import yaml
 import os
-import time
 
 
 class ArduinoBridgeNode(Node):
@@ -30,29 +27,11 @@ class ArduinoBridgeNode(Node):
         self.declare_parameter("coches", ["car1"])
         self.coches = self.get_parameter("coches").value
 
-        # TIMER
-        # Cada cierto tiempo se levanta el timer y se encarga de comprobar cuando hace que recibimos el ultimo mensaje, en caso de superar un limite entonces se encarga de parar el coche porque no estamos recibiendo informacion del controlador y signifca que esta caido por tanto no tiene sentido seguir controlando el coche
-
-        # Cada cuanto tiempo comprobamos si el nodo Controlador esta caido
-        self.declare_parameter("hearthbear_timer", 0.066)
-        self.heartbear_timer = self.get_parameter("hearthbear_timer").value
-
-        # Delta t: periodo que dejamos que pase desde que recibimos un paquete
-        self.declare_parameter("delta_t", 1)
-        self.delta_t = self.get_parameter("delta_t").value
-
-        # Timestamp de cuando recibimos el mensaje
-        self.msg_timestamp = None
-        self.last_msg_timestamp = None
-        # Lock para poder leer la variable de cuanto hace que nos llego un mensaje
-        self.check_timer_lock = Lock()
-
         # Diccionario para mantener controlada la velocidad actual de cada carril
         self.rails = {}
+
         # Lista para no perder la referencia de las suscripciones
         self.sub_pwd = {}
-        # Diccionario para guardar los subcripciones de control de heartbeat para los diferentes CarController
-        self.sub_heartbeat_check = {}
 
         # Nos suscribimos al topic "pwd" de CADA coche (ej. /car1/pwd, /car2/pwd)
         for car_name in self.coches:
@@ -65,72 +44,72 @@ class ArduinoBridgeNode(Node):
                 callback_group=MutuallyExclusiveCallbackGroup(),
             )
 
-            group = MutuallyExclusiveCallbackGroup()
-            self.sub_heartbeat_check[car_name] = {
-                "group": group,
-                "timer": self.create_timer(
-                    self.heartbear_timer, self.check_heartbeat, callback_group=group
-                ),
-            }
-
-        self.modo_calibracion = True
+        # --- CALIBRACION POR COCHE (solo autonomos) ---
+        # La calibracion dejo de ser global: cada coche autonomo cierra su
+        # vuelta cuando quiere y solo entonces su carril pasa de calibration_speed
+        # al PWM de carrera. Necesitamos por eso el carril fisico de cada coche
+        # (cars.<coche>.carril) y saber cuales son autonomos (modo_manual False):
+        # los manuales los conduce una persona, su carril NO lo toca el puente.
+        self.carril_de = {}       # coche autonomo -> nº de carril
+        self.calibrando = {}      # coche autonomo -> sigue en calibracion?
+        self.sub_modo_calibracion = {}
         self.grupo_calibracion = MutuallyExclusiveCallbackGroup()
-        self.sub_modo_calibracion = self.create_subscription(
-            Bool,
-            "/modo_calibracion",
-            self.callback_control_calibracion,
-            10,
-            callback_group=self.grupo_calibracion,
-        )
+
+        for car_name in self.coches:
+            self.declare_parameter(f"cars.{car_name}.carril", "1")
+            self.declare_parameter(f"cars.{car_name}.modo_manual", False)
+            es_manual = self.get_parameter(f"cars.{car_name}.modo_manual").value
+            if es_manual:
+                continue
+
+            carril_str = str(self.get_parameter(f"cars.{car_name}.carril").value)
+            self.carril_de[car_name] = self._parse_carril(carril_str)
+            self.calibrando[car_name] = True
+
+            # Suscripcion de calibracion POR COCHE: /<coche>/modo_calibracion
+            self.sub_modo_calibracion[car_name] = self.create_subscription(
+                Bool,
+                f"/{car_name}/modo_calibracion",
+                lambda msg, c=car_name: self.callback_control_calibracion(c, msg),
+                10,
+                callback_group=self.grupo_calibracion,
+            )
 
         # --- PARAMETROS ---
         self.declare_parameter("arduino.port", "/dev/ttyACM0")
-        self.declare_parameter("arduino.baudrate", 115200)
-        self.declare_parameter("arduino.calibration_speed", 60)
-
         port = self.get_parameter("arduino.port").value
+
+        self.declare_parameter("arduino.baudrate", 115200)
         baud = self.get_parameter("arduino.baudrate").value
+
+        self.declare_parameter("arduino.calibration_speed", 60)
         self.calibration_speed = self.get_parameter("arduino.calibration_speed").value
 
         # Nos conectamos al arduino
         self.arduino = ArduinoController(port=port, baudrate=baud)
         self.get_logger().info(f"Conectando a Arduino en {port}...")
 
-        # Arrancamos con la velocidad de calibración
-        self.arduino.set_both_rails(self.calibration_speed, self.calibration_speed)
+        # Arrancamos cada carril AUTONOMO a la velocidad de calibración (los
+        # carriles de coches manuales no se tocan: los mueve la persona).
+        for car_name, carril in self.carril_de.items():
+            self.arduino.set_rail_speed(carril, self.calibration_speed)
 
-    def callback_control_calibracion(self, msg):
-        if msg.data == False and self.modo_calibracion:
-            self.modo_calibracion = False
-        elif msg.data == True and not self.modo_calibracion:
-            self.modo_calibracion = True
-            # Arrancamos con la velocidad de calibración
-            self.arduino.set_both_rails(self.calibration_speed, self.calibration_speed)
+    @staticmethod
+    def _parse_carril(carril_str):
+        # Acepta "r2" o "2" (misma limpieza que pwm_callback) -> entero 2
+        limpio = carril_str.strip().lower().replace("'", "").replace('"', "")
+        return int(limpio.replace("r", ""))
 
-    def check_heartbeat(self):
-        if not self.modo_calibracion:
-            with self.check_timer_lock:
-                # Comprobamos que existan las marcas de tiempo
-                if (
-                    self.last_msg_timestamp is not None
-                    and self.msg_timestamp is not None
-                ):
-                    # Convertimos los mensajes RAW de ROS2 a objetos Time operables de rclpy
-                    t_actual = Time.from_msg(self.msg_timestamp)
-                    t_anterior = Time.from_msg(self.last_msg_timestamp)
-
-                    # Calculamos la diferencia y la pasamos a segundos
-                    diferencia_segundos = (t_actual - t_anterior).nanoseconds / 1e9
-
-                    if diferencia_segundos > self.delta_t:
-                        # Ha pasado mucho tiempo, parada de emergencia
-                        self.arduino.set_both_rails(1, 1)
-                    else:
-                        # Todo va bien, actualizamos la marca de tiempo
-                        self.last_msg_timestamp = self.msg_timestamp
-                else:
-                    # Primera vez que entra
-                    self.last_msg_timestamp = self.msg_timestamp
+    def callback_control_calibracion(self, car_name, msg):
+        # Aviso de calibracion de UN coche autonomo (/<car_name>/modo_calibracion).
+        if msg.data == False and self.calibrando.get(car_name, False):
+            # El coche cerro su vuelta: dejamos de forzar calibration_speed en su
+            # carril; el PWM de carrera lo tomara en cuanto llegue por pwm_callback.
+            self.calibrando[car_name] = False
+        elif msg.data == True and not self.calibrando.get(car_name, True):
+            # Reinicio de calibracion de este coche: su carril vuelve a calibration_speed
+            self.calibrando[car_name] = True
+            self.arduino.set_rail_speed(self.carril_de[car_name], self.calibration_speed)
 
     def pwm_callback(self, msg: SpeedCarril):
         """
@@ -138,11 +117,7 @@ class ArduinoBridgeNode(Node):
         """
         pwm_value = msg.pwm
 
-        with self.check_timer_lock:
-            self.msg_timestamp = msg.stamp
-
         # Limpieza agresiva: quitamos comillas (simples y dobles), espacios y pasamos a minúscula
-        # Esto soluciona el problema de recibir "'2'", "r2" o " 2"
         rail_str = str(msg.carril).strip().lower().replace("'", "").replace('"', "")
 
         # Extraemos el número del carril (ej: de "r2" o "2" sacamos el entero 2)
@@ -162,12 +137,9 @@ class ArduinoBridgeNode(Node):
 
         self.rails[rail_num] = pwm_value
 
-        # Validacion de seguridad y envío físico
+        # Validación de seguridad y envío físico
         if 0 <= pwm_value <= 255:
-            # Añadimos este log para confirmar que la señal sale hacia el cable USB
-            self.get_logger().info(
-                f"⚡ Arduino OK -> Carril {rail_num} a PWM {pwm_value}"
-            )
+            self.get_logger().info(f"Arduino OK -> Carril {rail_num} a PWM {pwm_value}")
             self.arduino.set_rail_speed(rail_num, pwm_value)
 
     def destroy_node(self):
@@ -191,10 +163,9 @@ def main(args=None):
     # 1. Cargamos la lista de coches desde el YAML
     with open(params_file, "r") as f:
         config = yaml.safe_load(f)
-        # CORRECCIÓN: Cambiado 'coches_activos' a 'coches' para que coincida con params.yaml
         coches = config["/**"]["ros__parameters"]["coches"]
 
-    executor = MultiThreadedExecutor(num_threads=(2 + (2 * len(coches))))
+    executor = MultiThreadedExecutor(num_threads=(2 + len(coches)))
     executor.add_node(node)
 
     try:
