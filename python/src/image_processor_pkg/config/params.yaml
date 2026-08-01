@@ -23,7 +23,7 @@
     #     levantan los dos docker-compose a la vez y cada uno coge su parte.
     cars:
       car1:
-        stiker_front: "amarillo"
+        stiker_front: "verde"
         stiker_back: "azul"
         carril: "2"
         modo_manual: false
@@ -61,7 +61,7 @@
       # y el suelo por debajo del cual no baja ninguna zona del perfil
       minimum_speed: 65
       # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
-      maximum_speed: 90
+      maximum_speed: 80 
       # Separacion minima (px) entre nodos de la trayectoria base. Los puntos
       # que la camara envia durante la calibracion llegan mas o menos juntos
       # segun lo rapido que fuese el coche: al quedarnos solo con los que estan
@@ -90,7 +90,7 @@
         # a partir de la cual se considera que el coche derrapa. Ajustado en
         # pista: con 15 px el derrape se confirmaba tan tarde que el coche ya
         # se habia salido
-        umbral_derrape: 12.0
+        umbral_derrape: 10.0
         # Si la pegatina DELANTERA aparece a mas de esta distancia (px) de la
         # ruta, la deteccion es falsa y se descarta el fotograma entero: el
         # controlador mantiene entonces la velocidad anterior

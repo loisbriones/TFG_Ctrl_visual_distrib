@@ -66,9 +66,11 @@ class EstrategiaPerfil:
         retrocede `retroceso_fusion` px más. Si cada reincidencia retro-
         cediera los 300 px completos, el circuito entero acabaría cubierto
         de zonas protegidas y el perfil no subiría nunca.
-      - Vuelta limpia: suben +incremento_vuelta TODAS las zonas salvo las
-        que tuvieron derrape hace <= vueltas_proteccion vueltas. Al subir
-        POR ZONAS, una curva lenta ya no limita la velocidad del resto.
+      - Al cruzar meta suben +incremento_vuelta todas las zonas salvo las
+        que tuvieron derrape hace <= vueltas_proteccion vueltas. La decisión
+        es POR ZONA y no depende de si la vuelta fue limpia en el resto del
+        circuito: una curva conflictiva se frena a sí misma mientras las
+        rectas siguen ganando velocidad vuelta tras vuelta.
 
     DERRAME ENTRE CÁMARAS: el orden de las cámaras es secuencial (el coche
     se va por delante y entra por detrás). Si el retroceso de una zona se
@@ -385,6 +387,36 @@ class EstrategiaPerfil:
         dif = np.diff(filtrados, axis=0)
         dist = np.hypot(dif[:, 0], dif[:, 1])
         saltos = [int(i) for i in np.nonzero(dist > self.umbral_celda_gigante)[0]]
+
+        # Volcado de los huecos de la calibración. Un hueco es un tramo en el
+        # que la cámara dejó de ver el coche: la cadena lo tapa interpolando
+        # una recta (o, si pasa de umbral_celda_gigante, con una celda
+        # gigante). Si el tramo tapado era en realidad una curva, la cadena
+        # deja de describir la pista ahí y el coche pasa a varios píxeles de
+        # una trayectoria que no existe, con derrapes falsos vuelta tras
+        # vuelta. Desde la lista de puntos NO se puede saber si el hueco cae
+        # sobre una recta (inofensivo) o sobre una curva, así que no se juzga:
+        # se listan todos y se decide leyendo el log
+        huecos = [
+            (int(i), float(dist[i]))
+            for i in np.nonzero(dist > 3.0 * self.paso_celda)[0]
+        ]
+        self.saveLogFile(
+            f"[TRAY] Trayectoria de calibración: {len(filtrados)} puntos, "
+            f"separación entre puntos mín={float(dist.min()):.1f} "
+            f"mediana={float(np.median(dist)):.1f} máx={float(dist.max()):.1f} px"
+        )
+        if huecos:
+            detalle = ", ".join(
+                f"{L:.0f} px tras el punto {i}" for i, L in huecos
+            )
+            self.saveLogFile(
+                f"[TRAY] AVISO: {len(huecos)} hueco(s) de más de "
+                f"{3.0 * self.paso_celda:.0f} px en la calibración ({detalle}). "
+                f"Si el coche derrapa siempre en el mismo sitio, repetir la "
+                f"calibración"
+            )
+
         cierre = math.hypot(
             float(filtrados[-1][0] - filtrados[0][0]),
             float(filtrados[-1][1] - filtrados[0][1]),
@@ -558,8 +590,12 @@ class EstrategiaPerfil:
     def localizar(self, punto):
         """
         Convierte un punto (x, y) de la imagen en coordenadas de cadena:
-        devuelve (índice de celda, distancia perpendicular), o None si aún
-        no hay trayectoria cargada.
+        devuelve (índice de celda, distancia perpendicular, fila), o None si
+        aún no hay trayectoria cargada. `fila` es el índice con el que se
+        indexa `_puntos`, que NO coincide con el de celda cuando la cadena
+        tiene celdas gigantes (esas no tienen punto). Se devuelve porque
+        `actualizar_estado` necesita la POSICIÓN de la celda localizada para
+        comprobar que las dos pegatinas se han colocado de forma coherente.
 
         Paso GRUESO: celda cuyo punto está más cerca (argmin vectorizado).
         Paso FINO: se proyecta el punto sobre los DOS segmentos que unen esa
@@ -623,7 +659,7 @@ class EstrategiaPerfil:
             if dist < mejor_dist:
                 mejor_dist = dist
 
-        return idx, mejor_dist
+        return idx, mejor_dist, fila
 
     # ======================================================================
     # LÓGICA PRINCIPAL POR FOTOGRAMA
@@ -648,11 +684,31 @@ class EstrategiaPerfil:
              se CIERRA (el coche salió de la trayectoria: no hay más puntos
              que lo puedan extender).
           2. Actualiza `_margen_restante`.
-          3. Localiza la pegatina TRASERA y alimenta la máquina de estados
-             del derrape con su distancia perpendicular.
+          3. Localiza la pegatina TRASERA y, si la localización es coherente
+             con la de la delantera, alimenta la máquina de estados del
+             derrape con su distancia perpendicular.
           4. Si hay un derrape abierto y el coche llega al final de la
              cadena abierta, se cierra ahí (misma razón que en 1).
           5. Devuelve el PWM de la ZONA a la que pertenece la celda actual.
+
+        COHERENCIA ENTRE LAS DOS PEGATINAS (paso 3): las celdas localizadas
+        son la aproximación de dónde está cada pegatina, así que la distancia
+        entre las DOS CELDAS no puede ser mayor que la distancia entre las DOS
+        PEGATINAS, con una celda de holgura por el redondeo del remuestreo. Si
+        lo es, el coche estaría en dos sitios a la vez: la trasera no está
+        sobre esta cadena y su distancia no significa nada.
+        Ocurre cuando el coche circula por un tramo de pista que no tiene
+        celdas (el hueco de una celda gigante, o un tramo que la calibración
+        no llegó a grabar). Ahí la trasera no tiene dónde localizarse y el
+        argmin le da la celda que le pilla más cerca, que puede estar en
+        cualquier otra parte del trazado: en los logs de pista se ha visto la
+        delantera en la celda 0 y la trasera en la 49, a 42 px, y eso se
+        registraba como un derrape que castigaba 50 de las 58 celdas.
+        La comprobación NO sustituye a la zona muerta de `_en_borde`: esa
+        sigue protegiendo los extremos y las celdas gigantes. Es una condición
+        distinta, se aplica en todos los fotogramas, y a propósito no descarta
+        los derrapes que empiezan al entrar en la cadena, que son habituales
+        cuando dos cámaras reparten una curva.
 
         La decisión de velocidad SOLO depende de la posición actual: no
         importa si se perdieron fotogramas o llegaron fuera de orden.
@@ -667,7 +723,7 @@ class EstrategiaPerfil:
             )
             return None
 
-        idx_f, dist_f = loc_front
+        idx_f, dist_f, fila_f = loc_front
 
         if dist_f > self.max_dist_ruta:
             self._margen_restante = 0.0
@@ -699,9 +755,35 @@ class EstrategiaPerfil:
         # Detección del derrape con la etiqueta trasera
         loc_back = self.localizar(p_back)
         if loc_back is not None:
-            idx_b, dist_b = loc_back
+            idx_b, dist_b, fila_b = loc_back
             self._dist_derrape = dist_b
-            self._actualizar_derrape(idx_b, dist_b, vuelta, frame_count)
+            # Las dos celdas no pueden estar más separadas que las dos
+            # pegatinas (ver COHERENCIA en el docstring)
+            sep_celdas = float(
+                np.linalg.norm(self._puntos[fila_b] - self._puntos[fila_f])
+            )
+            sep_pegatinas = float(
+                np.linalg.norm(
+                    np.asarray(p_back, dtype=np.float32)
+                    - np.asarray(p_front, dtype=np.float32)
+                )
+            )
+            coherente = sep_celdas <= sep_pegatinas + self.paso_celda
+            if coherente:
+                self._actualizar_derrape(idx_b, dist_b, vuelta, frame_count)
+            elif dist_b > self.umbral_derrape and not self._estado_derrapando:
+                # Solo se avisa cuando la medida descartada habría abierto un
+                # derrape: si no, serían miles de líneas sin interés
+                self.saveLogFile(
+                    f"[DERRAPE] Frame {frame_count} v={vuelta}: dist={dist_b:.1f} "
+                    f"> umbral pero IGNORADO por localización incoherente: la "
+                    f"trasera cae en la celda {idx_b} y la delantera en la "
+                    f"{idx_f}, que están a {sep_celdas:.1f} px, pero las "
+                    f"pegatinas están a {sep_pegatinas:.1f} px"
+                )
+            # El formato de esta parte de la línea [FRAME] es un contrato con
+            # RE_FRAME del análisis: no se le añade nada. Que un fotograma se
+            # haya descartado por incoherencia se ve en la línea [DERRAPE]
             texto_back = (
                 f"back=({p_back[0]:.1f}, {p_back[1]:.1f})->c={idx_b} "
                 f"d={dist_b:.1f} (umbral {self.umbral_derrape:.0f})"
@@ -1179,16 +1261,33 @@ class EstrategiaPerfil:
         Aviso del controlador al completarse una vuelta. Es el mecanismo por
         el que el perfil SUBE (la bajada ocurre al derrapar).
 
-        `vuelta_limpia` la calcula CarControllerNode con visión global (True
-        si NINGUNA cámara registró derrapes). Cada instancia hace además su
-        comprobación local comparando su contador con el de la vuelta
-        anterior, por si el controlador se equivocara.
+        La mejora se decide ZONA A ZONA, nunca sobre el circuito completo:
+        cada zona sube +incremento_vuelta (tope v_max) salvo que esté
+        PROTEGIDA, es decir, que su último derrape o castigo fuese hace
+        `vueltas_proteccion` vueltas o menos. Un derrape en una curva no
+        impide que las rectas sigan ganando velocidad, que es justo lo que
+        hace que el aprendizaje sea por tramos y no del trazado entero.
 
-        Si la vuelta fue limpia, TODAS las zonas suben +incremento_vuelta
-        (tope v_max)... excepto las PROTEGIDAS: zonas cuyo último derrape
-        (o castigo) fue hace `vueltas_proteccion` vueltas o menos. Subir POR
-        ZONAS es el punto clave: las zonas sin problemas ganan velocidad
-        aunque haya una curva conflictiva contenida en otra zona.
+        Que la protección por zona baste, sin ninguna condición global, se
+        apoya en tres cosas que ya garantizan las otras piezas:
+          - La zona que acaba de derrapar NO puede subir: _registrar_zona
+            mete la vuelta en curso en su historial, así que en esta misma
+            llamada `vuelta - ultima` vale 1 y queda protegida.
+          - Si el exceso de velocidad se gestó ANTES de la curva, el castigo
+            ya se extendió hacia atrás `retroceso_creacion` px, de modo que
+            la zona de entrada también bajó y también está protegida.
+          - Lo que una cámara necesita saber de otra viaja por el derrame
+            (aplicar_reduccion_externa), que crea la zona en la cámara
+            precedente CON su historial de vueltas, o sea protegida igual.
+
+        `vuelta_limpia` la calcula CarControllerNode con visión global (True
+        si NINGUNA cámara registró derrapes) y `hubo_derrape_local` compara el
+        contador propio con el de la vuelta anterior. Ninguna de las dos
+        decide ya nada: se registran en el log porque dan el contexto de la
+        vuelta al analizarla después. Antes actuaban como una puerta que
+        bloqueaba la subida de TODAS las zonas si había un derrape en
+        cualquier punto del circuito — herencia del perfil global del TFG de
+        Adrián, que dejaba sin efecto el aprendizaje por zonas.
         """
         hubo_derrape_local = self.derrapes_contador != self._derrapes_vuelta_anterior
         self.saveLogFile(
@@ -1198,19 +1297,12 @@ class EstrategiaPerfil:
         )
         self._derrapes_vuelta_anterior = self.derrapes_contador
 
-        if not vuelta_limpia or hubo_derrape_local:
-            motivo = (
-                "esta cámara registró derrapes"
-                if hubo_derrape_local
-                else "otra cámara registró derrapes (aviso global del controlador)"
-            )
-            self.saveLogFile(f"[VUELTA {vuelta}] El perfil NO sube: {motivo}")
-            return
-
         subidas = 0
+        protegidas = 0
         for z in self.zonas:
             ultima = z["vueltas"][-1] if z["vueltas"] else None
             if ultima is not None and vuelta - ultima <= self.vueltas_proteccion:
+                protegidas += 1
                 self.saveLogFile(
                     f"[VUELTA {vuelta}] zona [{z['ini']}-{z['fin']}]({z['tipo']}) "
                     f"PROTEGIDA: último derrape en vuelta {ultima}, le quedan "
@@ -1221,11 +1313,19 @@ class EstrategiaPerfil:
             z["pwm"] = min(self.v_max, z["pwm"] + self.incremento_vuelta)
             subidas += 1
 
+        if subidas == 0:
+            self.saveLogFile(
+                f"[VUELTA {vuelta}] El perfil NO sube: todas las zonas "
+                f"({protegidas}) están protegidas"
+            )
+            return
+
         self.saveLogFile(
-            f"[VUELTA {vuelta}] limpia: {subidas} de {len(self.zonas)} zonas "
-            f"suben +{self.incremento_vuelta:.0f} (tope v_max={self.v_max:.0f})"
+            f"[VUELTA {vuelta}] suben {subidas} de {len(self.zonas)} zonas "
+            f"+{self.incremento_vuelta:.0f} (tope v_max={self.v_max:.0f}); "
+            f"{protegidas} protegidas"
         )
-        self._log_perfil(f"tras la vuelta {vuelta} limpia")
+        self._log_perfil(f"tras la vuelta {vuelta}")
 
     # ======================================================================
     # VOLCADOS DE ESTADO (solo escriben en el log, no modifican nada)

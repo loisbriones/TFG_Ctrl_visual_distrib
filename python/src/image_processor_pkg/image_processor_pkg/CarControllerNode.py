@@ -412,6 +412,28 @@ class CarControllerNode(Node):
                     "dar valor a nada de lo que venga después."
                 )
 
+            # Un hueco grande entre dos nodos significa que la camara dejo de
+            # ver el coche en ese tramo. El algoritmo lo tapa (interpolando o
+            # con una celda gigante segun el tamano) y sigue funcionando, pero
+            # si el tramo tapado era una curva la cadena deja de describir la
+            # pista ahi y salen derrapes falsos en el mismo sitio cada vuelta.
+            # Solo se avisa de los que pasan de umbral_celda_gigante, que son
+            # los que ademas cambian la forma de la cadena; el detalle completo
+            # de todos los huecos va al log del algoritmo ([TRAY] AVISO).
+            umbral_hueco = self.params_algoritmo["umbral_celda_gigante"]
+            huecos = [
+                math.hypot(b[0] - a[0], b[1] - a[1])
+                for a, b in zip(ruta_limpia, ruta_limpia[1:])
+                if math.hypot(b[0] - a[0], b[1] - a[1]) > umbral_hueco
+            ]
+            if huecos:
+                self.get_logger().warn(
+                    f"⚠️ {camara}: la calibración trae {len(huecos)} hueco(s) de "
+                    f"más de {umbral_hueco:.0f} px (el mayor {max(huecos):.0f} px): "
+                    "la cámara perdió el coche en ese tramo. Si el coche derrapa "
+                    "siempre en el mismo punto, repite la calibración."
+                )
+
         # 3. Guardamos en disco la trayectoria de puntos por cámara
         try:
             with open(self.cache_file, "w") as f:
@@ -561,15 +583,24 @@ class CarControllerNode(Node):
             self.ultimo_pwm_enviado = self.v_actual
 
     def registrar_vuelta_algoritmos(self):
-        # Una vuelta es limpia si NINGUNA camara registro derrapes en ella:
-        # solo entonces el perfil puede subir
+        # Una vuelta es limpia si NINGUNA camara registro derrapes en ella.
+        # Es informacion de CONTEXTO, no una condicion: cada instancia sube
+        # sus zonas una a una segun su propia proteccion (ver registrar_vuelta).
+        # Antes esto era una puerta global y un derrape en cualquier punto del
+        # circuito bloqueaba la subida de todo el trazado, que es justo lo que
+        # el aprendizaje por zonas viene a evitar.
         derrapes_totales = sum(a.derrapes_contador for a in self.algoritmos.values())
         vuelta_limpia = derrapes_totales == self.derrapes_ultima_vuelta
         self.derrapes_ultima_vuelta = derrapes_totales
         for algoritmo in self.algoritmos.values():
             algoritmo.registrar_vuelta(self.vueltas, vuelta_limpia)
         if vuelta_limpia:
-            self.log_algoritmo("📈 Vuelta limpia: el perfil de PWM sube.")
+            self.log_algoritmo("📈 Vuelta limpia: sin derrapes en ninguna cámara.")
+        else:
+            self.log_algoritmo(
+                "📉 Vuelta con derrapes: suben las zonas no protegidas; "
+                "las castigadas esperan."
+            )
 
     def distancia_punto_segmento(self, P, A, B):
         AB = B - A
