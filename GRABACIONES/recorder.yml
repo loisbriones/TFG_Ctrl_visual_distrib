@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  recorder:
+    build: .
+    container_name: ros2_bag_recorder
+    network_mode: "host"
+    ipc: "host"
+    environment:
+      - ROS_DOMAIN_ID=42
+      - NOMBRE_GRABACION=${NOMBRE_GRABACION:-sesion_scalextric}
+    volumes:
+      - ./bags:/ros2_ws/bags
+      - ./src:/ros2_ws/src
+    # --all: graba todos los topics del dominio, incluidos los que aparezcan
+    # DESPUÉS de arrancar (rosbag2 sondea el grafo cada 100 ms). El QoS de
+    # cada suscripción se adapta solo al que ofrecen los publicadores, así
+    # que ya no hace falta el qos_override.yaml. Los .msg compilados siguen
+    # haciendo falta para que mcap guarde el esquema de cada tipo custom.
+    command: >
+      bash -c "
+      source /opt/ros/humble/setup.bash &&
+      cd /ros2_ws &&
+      colcon build --symlink-install --packages-select image_processor_pkg &&
+      source install/setup.bash &&
+      ros2 bag record -s mcap -o /ros2_ws/bags/\$NOMBRE_GRABACION --all
+      "

@@ -219,9 +219,23 @@ __marimo__/
 .vscode/*.json
 
 # Datos de grabación: bags y sesiones guardadas (22 GB + 3,2 GB en local).
-#   Se ignoran solo los dos directorios de datos, NO GRABACIONES/ entera: los
-#   scripts y configs que hay sueltos ahí (grabar.sh, Dockerfile, recorder.yml,
-#   qos_override.yaml) sí interesan y ya están versionados en la rama
-#   algoritmo_distribuido_estrategia.
+#   Se ignoran solo los dos directorios de datos, NO GRABACIONES/ entera: la
+#   herramienta en sí (arrancar_grabacion.sh, recorder.yml, Dockerfile y
+#   src/record_pkg) sí está versionada aquí.
 GRABACIONES/bags/
 GRABACIONES/grabaciones_guardadas/
+
+# De GRABACIONES solo se versiona la cadena que se usa de verdad:
+#   arrancar_grabacion.sh -> recorder.yml -> Dockerfile + src/record_pkg.
+#   Lo de abajo son restos de la versión anterior de la herramienta, que se
+#   conservan en local por si hay que consultarlos pero no se usan:
+#     - los .bak/.back son copias manuales de aquellos ficheros;
+#     - qos_override.yaml quedó obsoleto al pasar a `ros2 bag record --all`,
+#       porque rosbag2 adapta solo el QoS de cada suscripción al de sus
+#       publicadores (lo explica el propio recorder.yml);
+#     - config_conversion.yaml era para un `ros2 bag convert` a mano.
+#   Fuera del repo para no confundir código vivo con código muerto.
+GRABACIONES/*.bak
+GRABACIONES/*.back
+GRABACIONES/qos_override.yaml
+GRABACIONES/config_conversion.yaml
