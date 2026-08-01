@@ -217,3 +217,11 @@ __marimo__/
 
 .vscode/
 .vscode/*.json
+
+# Datos de grabación: bags y sesiones guardadas (22 GB + 3,2 GB en local).
+#   Se ignoran solo los dos directorios de datos, NO GRABACIONES/ entera: los
+#   scripts y configs que hay sueltos ahí (grabar.sh, Dockerfile, recorder.yml,
+#   qos_override.yaml) sí interesan y ya están versionados en la rama
+#   algoritmo_distribuido_estrategia.
+GRABACIONES/bags/
+GRABACIONES/grabaciones_guardadas/

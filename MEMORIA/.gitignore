@@ -3,6 +3,15 @@
 # con `latexmk` (o `pdflatex`) a partir de las fuentes .tex de esta carpeta.
 *.pdf
 
+# Excepción: las figuras de imaxes/ en PDF son fuente, no salida de compilación.
+#   Van al repo igual que los .png. Dos detalles que importan:
+#     - El orden: la negación tiene que ir DESPUÉS del *.pdf de arriba.
+#     - Si algún día se ignora imaxes/ entera, git ni entra en la carpeta y esta
+#       línea deja de tener efecto. El clásico de las negaciones en .gitignore.
+#   El /**/ casa también con cero directorios: cubre imaxes/ARQUITECTURA/x.pdf
+#   y un imaxes/x.pdf suelto.
+!imaxes/**/*.pdf
+
 # Ficheros auxiliares que genera LaTeX/latexmk al compilar
 *.aux
 *.log
