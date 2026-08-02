@@ -1,0 +1,395 @@
+/* Estilos del panel de carrera en directo (index.html).
+   Los sirve VisualizacionNode.py; el navegador los pide en /estilos.css */
+
+:root {
+  --fondo: #101215;
+  --panel: #181b20;
+  --borde: #2a2f37;
+  --texto: #e8eaed;
+  --suave: #9aa0a6;
+  /* Los tres colores de una retransmision: morado la mejor vuelta de la
+     sesion, verde el mejor personal, amarillo mas lenta que la anterior */
+  --morado: #b388ff;
+  --verde: #6ee7a0;
+  --amarillo: #ffd166;
+  --rojo: #ff6b6b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 14px;
+  background: var(--fondo);
+  color: var(--texto);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0;
+  letter-spacing: .5px;
+}
+
+.cabecera {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.reloj {
+  font-variant-numeric: tabular-nums;
+  color: var(--suave);
+  font-size: 16px;
+}
+
+.punto-vivo {
+  color: var(--rojo);
+}
+
+.desconectado {
+  color: var(--suave);
+}
+
+
+/* ---------------------------------------------------------------------------
+   Barra de salud: de un vistazo, que camara publica y a que ritmo
+   --------------------------------------------------------------------------- */
+
+.salud {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.chip {
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 20px;
+  padding: 3px 11px;
+  font-size: 12px;
+  color: var(--suave);
+  font-variant-numeric: tabular-nums;
+}
+
+.chip b {
+  color: var(--texto);
+  font-weight: 600;
+}
+
+.chip.mala {
+  border-color: var(--rojo);
+  color: var(--rojo);
+}
+
+.aviso {
+  background: #3a2f10;
+  border: 1px solid var(--amarillo);
+  color: var(--amarillo);
+  border-radius: 6px;
+  padding: 7px 12px;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Rejilla de la pagina
+   --------------------------------------------------------------------------- */
+
+/* La tabla necesita 640 px para que sus nueve columnas quepan sin que las
+   cabeceras se toquen entre si; por debajo de eso no hay reparto que valga y
+   es mejor darle el ancho entero de la pagina poniendo el mapa debajo */
+.rejilla {
+  display: grid;
+  grid-template-columns: minmax(640px, 1fr) minmax(420px, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 1250px) {
+  .rejilla {
+    grid-template-columns: 1fr;
+  }
+}
+
+.caja {
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.caja h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--suave);
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Tabla de clasificacion
+   --------------------------------------------------------------------------- */
+
+/* Ultimo recinto de seguridad: en una ventana de verdad estrecha (movil, o el
+   navegador a media pantalla) ni con el mapa debajo caben las nueve columnas.
+   Antes que dejar que las cabeceras se pisen, la tabla se planta en su ancho
+   minimo y el recuadro se desplaza a mano */
+.tabla-scroll {
+  overflow-x: auto;
+}
+
+/* table-layout: fixed -> el ancho lo mandan los porcentajes de abajo y NO el
+   contenido. Con el reparto automatico las columnas cambiaban de tamaño segun
+   lo que tocase poner en cada celda (no es lo mismo "OK" que "DERRAPA 14.9px"),
+   y con una sola fila el navegador las estiraba a su antojo. Fijas, la tabla es
+   la misma con uno o con dos coches */
+table {
+  width: 100%;
+  min-width: 620px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reparto del ancho. Suman 100, y estan calculados para que TODO quepa en el
+   caso peor: la tabla en su ancho minimo (640 px) y el texto mas largo de cada
+   columna, que casi siempre es la CABECERA y no el valor ("CARRIL" ocupa mas
+   que "2"). Por eso columnas de un solo digito llevan un 9% */
+th:nth-child(1) { width:  4%; }   /* posicion: un digito */
+th:nth-child(2) { width: 14%; }   /* coche: tira de color + nombre */
+th:nth-child(3) { width:  9%; }   /* carril: manda la cabecera "CARRIL" */
+th:nth-child(4) { width:  9%; }   /* vuelta: manda la cabecera "VUELTA" */
+th:nth-child(5) { width: 12%; }   /* ultima: "10.234" */
+th:nth-child(6) { width: 10%; }   /* delta: "+14.705" */
+th:nth-child(7) { width: 12%; }   /* mejor: "1.663 v22" */
+th:nth-child(8) { width: 13%; }   /* pwm: la barra */
+th:nth-child(9) { width: 17%; }   /* estado: "DERRAPA 14.9px", el mas largo */
+
+/* La cabecera y su valor comparten alineacion SIEMPRE: es lo unico que hace
+   que el numero se lea debajo de la palabra que le corresponde. Antes las th
+   iban a la derecha y las td heredaban la izquierda, asi que cada valor caia
+   bajo la cabecera de al lado y engañaba al leerlo */
+th, td {
+  text-align: center;
+}
+
+th:nth-child(2), td:nth-child(2) {
+  text-align: left;
+}
+
+th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--suave);
+  font-weight: 600;
+  padding: 0 6px 6px;
+  border-bottom: 1px solid var(--borde);
+}
+
+td {
+  padding: 7px 6px;
+  border-bottom: 1px solid #21252c;
+}
+
+/* El "sin coches todavia" ocupa la fila entera: ahi el centrado no dice nada */
+td[colspan] {
+  text-align: left;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+.pos {
+  color: var(--suave);
+}
+
+.tira {
+  display: inline-block;
+  width: 4px;
+  height: 15px;
+  border-radius: 2px;
+  vertical-align: -3px;
+  margin-right: 7px;
+}
+
+.coche {
+  font-weight: 600;
+}
+
+.morado {
+  color: var(--morado);
+  font-weight: 600;
+}
+
+.verde {
+  color: var(--verde);
+}
+
+.amarillo {
+  color: var(--amarillo);
+}
+
+.apagado {
+  color: var(--suave);
+}
+
+tr.perdido td {
+  color: #6b7079;
+}
+
+/* Un punto mas pequeño y sin tanto espaciado que el resto de etiquetas: es el
+   texto mas largo de la fila ("DERRAPA 14.9px") y asi entra de una linea hasta
+   con la tabla en su ancho minimo, sin partirse en dos y crecer la fila */
+.estado {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  white-space: nowrap;
+}
+
+.estado.ok {
+  color: var(--verde);
+}
+
+.estado.derrapa {
+  color: var(--rojo);
+}
+
+.estado.gris {
+  color: var(--suave);
+}
+
+
+/* ---------------------------------------------------------------------------
+   Barra de PWM: la escala son minimum_speed..maximum_speed del params.yaml, no
+   0-255, porque el recorrido real del perfil son ~15 unidades.
+   inline-block con ancho propio: como div suelto era un BLOQUE y se comia toda
+   la celda, estirandose por debajo de las columnas vecinas. Siendo inline se
+   centra sola bajo su cabecera, como el resto de valores
+   --------------------------------------------------------------------------- */
+
+.barra {
+  display: inline-block;
+  width: 100%;
+  max-width: 92px;
+  vertical-align: middle;
+  position: relative;
+  height: 14px;
+  background: #22262d;
+  border-radius: 3px;
+}
+
+.barra i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #4a7dff;
+  border-radius: 3px;
+}
+
+/* El numero va centrado ENCIMA de la barra, asi que segun el PWM le toca caer
+   sobre el azul del relleno, sobre el gris del fondo o justo en el borde entre
+   los dos. La sombra lo despega del fondo y lo hace legible en los tres casos */
+.barra span {
+  position: absolute;
+  inset: 0;
+  text-align: center;
+  font-size: 11px;
+  line-height: 14px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
+}
+
+
+/* ---------------------------------------------------------------------------
+   Mapa del circuito
+   --------------------------------------------------------------------------- */
+
+.mapa-barra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mapa-barra .pista {
+  flex: 1;
+  font-size: 11px;
+  color: var(--suave);
+}
+
+button {
+  background: #22262d;
+  color: var(--texto);
+  border: 1px solid var(--borde);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button:hover {
+  border-color: #4a7dff;
+}
+
+#mapa {
+  width: 100%;
+  height: 460px;
+  display: block;
+  background: #0c0e11;
+  border-radius: 6px;
+  cursor: grab;
+}
+
+#mapa.arrastrando {
+  cursor: grabbing;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Historico de eventos
+   --------------------------------------------------------------------------- */
+
+#eventos {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.ev {
+  display: flex;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid #1d2128;
+  font-size: 13px;
+}
+
+.ev:last-child {
+  border-bottom: none;
+}
+
+.ev time {
+  color: var(--suave);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.ev.vuelta {
+  color: var(--verde);
+}
+
+.ev.derrape {
+  color: var(--rojo);
+}
+
+.ev.calibracion {
+  color: var(--amarillo);
+}

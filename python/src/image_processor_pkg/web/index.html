@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<!--
+  Panel de la carrera en directo.
+
+  Lo sirve VisualizacionNode.py en el puerto 8990, junto a estilos.css y
+  panel.js, que son los otros dos ficheros de esta carpeta. Aqui solo esta el
+  esqueleto: los huecos (la tabla, los chips de salud, la lista de eventos) los
+  rellena panel.js con lo que va llegando por /stream.
+
+  Sin CDN, sin frameworks y sin dependencias: el panel tiene que abrirse en el
+  portatil de al lado de la pista, que en una carrera puede estar en una red
+  sin salida a internet.
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carrera en directo</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+
+<div class="cabecera">
+  <h1><span class="punto-vivo" id="vivo">●</span> Carrera en directo</h1>
+  <div class="reloj" id="reloj">00:00</div>
+</div>
+
+<div class="salud" id="salud"></div>
+<div class="aviso" id="aviso" hidden></div>
+
+<div class="rejilla">
+  <div class="caja">
+    <h2>Clasificación</h2>
+    <div class="tabla-scroll">
+      <table>
+        <thead><tr>
+          <th></th><th>Coche</th><th>Carril</th><th>Vuelta</th>
+          <th>Última</th><th>Δ</th><th>Mejor</th><th>PWM</th><th>Estado</th>
+        </tr></thead>
+        <tbody id="tabla"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="caja">
+    <h2>Circuito</h2>
+    <div class="mapa-barra">
+      <span class="pista">Arrastra cada cámara para encajarla</span>
+      <button id="btn-encajar">⤢ encuadrar</button>
+      <button id="btn-copiar">copiar offsets</button>
+      <button id="btn-reset">reiniciar</button>
+    </div>
+    <canvas id="mapa"></canvas>
+  </div>
+</div>
+
+<div class="caja" style="margin-top:12px">
+  <h2>Eventos</h2>
+  <div id="eventos"></div>
+</div>
+
+<script src="panel.js"></script>
+</body>
+</html>

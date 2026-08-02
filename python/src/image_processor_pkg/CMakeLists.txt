@@ -21,7 +21,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   DEPENDENCIES builtin_interfaces
 )
 
-install(DIRECTORY config launch
+# web/ son los tres ficheros de la pagina del panel en directo (index.html,
+# estilos.css y panel.js). Van al share, como config y launch, y el nodo los
+# encuentra con get_package_share_directory
+install(DIRECTORY config launch web
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -34,6 +37,9 @@ install(PROGRAMS
   image_processor_pkg/ArduinoController.py
   image_processor_pkg/CarControllerNode.py
   image_processor_pkg/AlgoritmoVelocidad.py
+  # Panel de la carrera en directo. Su pagina no va aqui: son los tres ficheros
+  # de web/, que se instalan arriba en el share
+  image_processor_pkg/VisualizacionNode.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
