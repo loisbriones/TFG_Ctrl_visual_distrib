@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from parseo_log import Carrera, celdas_de_zona
+from parseo_log import Carrera, celdas_de_zona, enlazar_zonas_entre_camaras
 
 # ---------------------------------------------------------------------------
 # Colores (paleta validada del skill dataviz, modo claro). Los roles de estado
@@ -780,11 +780,14 @@ def grafica_6c_subplot(tabla: pd.DataFrame, panel: str):
 # número de zona: los colores se REPARTEN (el primero libre al nacer una zona,
 # devuelto a la reserva cuando muere), así que hacen falta tantos como zonas
 # vivas a la vez pueda haber, no tantas como zonas salgan en toda la carrera.
+# El ámbar #b58324 NO está en esta lista a propósito: es COL_AVISO, el color de
+# las celdas gigantes, de las marcas de derrame y de la flecha del sentido de la
+# marcha. Cuando una zona lo cogía, en la misma figura salía del mismo color que
+# la flecha y parecía tener algo que ver con ella.
 PALETA_ZONAS = [
     "#2a78d6",  # azul
     "#d03b3b",  # rojo
     "#1baf7a",  # aqua
-    "#b58324",  # ámbar
     "#7b5ea7",  # violeta
     "#0ca30c",  # verde
     "#ec835a",  # naranja
@@ -827,12 +830,15 @@ class _ReservaEstilos:
     que nace hasta que muere o la absorbe otra, y las zonas que conviven en una
     vuelta ocupan huecos distintos y no se confunden.
 
-    La clave de una zona es (cámara, id): los ids son por cámara y no se
-    reutilizan nunca, así que una zona que muere y otra que nace después jamás
-    comparten clave aunque acaben compartiendo hueco."""
+    La clave de una zona es normalmente (cámara, id) —los ids son por cámara y
+    no se reutilizan nunca, así que una zona que muere y otra que nace después
+    jamás comparten clave aunque acaben compartiendo hueco—, pero las zonas que
+    son la MISMA zona de derrape partida entre dos cámaras comparten clave a
+    propósito, y por tanto hueco, color y forma: se leen como el único tramo de
+    pista que son (la deriva enlazar_zonas_entre_camaras en parseo_log.py)."""
 
     def __init__(self):
-        self.de_zona = {}     # (cam, id) -> número de hueco
+        self.de_zona = {}     # clave de estilo -> número de hueco
         self.aviso_dado = False
 
     def liberar_muertas(self, vivas):
@@ -868,6 +874,17 @@ def grafica_4_circuito(datos_camaras, df_pos=None, marco=None):
     # Eje de vueltas del slider: la unión de las vueltas de todas las
     # cámaras (con varias cámaras alguna puede perderse una vuelta)
     vueltas_global = sorted({v for d in datos_camaras.values() for v in d["vueltas"]})
+
+    # Zonas que son la MISMA zona de derrape partida entre dos cámaras: van a
+    # compartir hueco de estilo (color y forma), que es lo que las hace legibles
+    # como el único tramo de pista que son. Se calcula UNA vez para toda la
+    # figura: el enlace no depende de la vuelta que esté mostrando el slider.
+    grupo_de = enlazar_zonas_entre_camaras(datos_camaras)
+
+    def clave_estilo(cam, id_zona):
+        """Clave con la que se reparte el estilo: la del grupo si la zona está
+        enlazada con otra cámara, y si no la suya propia."""
+        return grupo_de.get((cam, id_zona), (cam, id_zona))
 
     fig = go.Figure()
     n_estaticas = 0  # trazas siempre visibles (fondos), van primero
@@ -969,16 +986,34 @@ def grafica_4_circuito(datos_camaras, df_pos=None, marco=None):
                 zonas_vuelta[cam] = d["zonas_ini_vuelta"].get(v_datos, [])
         # Primero se devuelven a la reserva los huecos de las zonas que ya no
         # están (así una zona que nace en esta misma vuelta puede quedarse el
-        # estilo de la que acaba de morir), y luego se reparten los que faltan
-        vivas = {(cam, z["id"]) for cam, zs in zonas_vuelta.items() for z in zs}
+        # estilo de la que acaba de morir), y luego se reparten los que faltan.
+        # Se libera por CLAVE DE ESTILO, la misma con la que luego se pide: un
+        # grupo partido entre dos cámaras sigue vivo mientras lo esté cualquiera
+        # de sus mitades, y su hueco no se puede dar a otra zona.
+        vivas = {clave_estilo(cam, z["id"])
+                 for cam, zs in zonas_vuelta.items() for z in zs}
         reserva.liberar_muertas(vivas)
 
         indices = []
         # Por cámara y por celda de inicio: la leyenda se lee siguiendo el
-        # recorrido del circuito
-        ordenadas = sorted(
+        # recorrido del circuito. Las mitades de una zona partida entre cámaras
+        # se sacan del sitio que les tocaría y se ponen juntas, en la posición
+        # de la primera de ellas: son una sola zona y se leen de una vez.
+        orden_natural = sorted(
             ((cam, z) for cam, zs in zonas_vuelta.items() for z in zs),
             key=lambda par: (indice[par[0]], par[1]["ini"]))
+        primer_puesto = {}
+        for puesto, (cam, z) in enumerate(orden_natural):
+            primer_puesto.setdefault(clave_estilo(cam, z["id"]), puesto)
+        ordenadas = sorted(
+            orden_natural,
+            key=lambda par: (primer_puesto[clave_estilo(par[0], par[1]["id"])],
+                             indice[par[0]], par[1]["ini"]))
+        # Con quién está enlazada cada zona, para decirlo en la leyenda
+        companeras = {}
+        for cam, z in orden_natural:
+            companeras.setdefault(clave_estilo(cam, z["id"]), []).append(
+                (cam, z["id"]))
         con_zona = {cam: set() for cam in camaras}
         for cam, z in ordenadas:
             xs, ys, hover = [], [], []
@@ -1014,12 +1049,30 @@ def grafica_4_circuito(datos_camaras, df_pos=None, marco=None):
             meta = " (cruza meta)" if z.get("cruza_meta") else ""
             zona_txt = (f"Z{z['id']} · {z['ini']}-{z['fin']}{meta} "
                         f"· PWM {z['pwm']}")
-            color, simbolo = reserva.estilo((cam, z["id"]))
+            clave = clave_estilo(cam, z["id"])
+            # Una zona de derrape puede estar partida entre dos cámaras (una
+            # curva que ninguna ve entera): comparten color y forma, y aquí se
+            # dice con quién, que si no dos entradas idénticas en la leyenda
+            # parecerían un fallo. Cada mitad conserva SU rango y SU PWM porque
+            # se ajustan por separado: la de la cámara que ve el derrape la
+            # castigan sus propios derrapes, y la de la precedente solo los
+            # derrames, así que pueden acabar con valores distintos.
+            otras = [f"cam{c.split('_')[-1]} Z{i}"
+                     for c, i in companeras.get(clave, [])
+                     if (c, i) != (cam, z["id"])]
+            enlace = f" ↔ {', '.join(otras)}" if otras else ""
+            color, simbolo = reserva.estilo(clave)
             fig.add_trace(go.Scatter(
-                x=xs, y=ys, mode="markers", name=prefijo + zona_txt + marca,
+                x=xs, y=ys, mode="markers",
+                name=prefijo + zona_txt + marca + enlace,
+                # Las mitades de una zona partida se encienden y se apagan
+                # juntas al pinchar en la leyenda: son una sola zona
+                legendgroup=str(clave),
                 marker=dict(size=11, symbol=simbolo, color=color,
                             line=dict(color=COL_SUPERFICIE, width=1)),
                 customdata=[f"{h}<br>{zona_txt} ({z['tipo']})<br>{cambio}"
+                            + (f"<br>misma zona que {', '.join(otras)}"
+                               if otras else "")
                             for h in hover],
                 hovertemplate="%{customdata}<extra></extra>",
                 visible=(v == vueltas_global[0]),

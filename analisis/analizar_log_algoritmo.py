@@ -262,8 +262,9 @@ class Carrera:
       decisiones       lista de dicts [ZONA] decisión (nueva/fusión+retroceso)
       carveos          lista de dicts de carveos en la partición (con pwm)
       gigante_castigos lista de {linea, vuelta, celda, antes, despues}
-      derrames         lista de {linea, vuelta, px} (reduccion_pendiente)
-      externas         lista de {linea, vuelta, px} (reducción de otra cámara)
+      derrames         lista de {linea, vuelta, px, t_abs} (reduccion_pendiente)
+      externas         lista de {linea, vuelta, px, t_abs} (reducción de otra
+                       cámara). t_abs = segundos desde medianoche
       estados_zona     lista de {linea, vuelta, zonas: [dict]} (volcados [ZONA])
       snapshots_perfil lista de {linea, vuelta, motivo, zonas: [dict]}
       vueltas_reg      lista de dicts de los bloques [VUELTA]
@@ -542,16 +543,22 @@ def parsear_log(ruta: Path) -> Carrera:
                 }
             )
             continue
+        # `t_abs` (segundos desde medianoche) y no el `t` relativo: es el reloj
+        # común que permite casar el "Derrame" de una cámara con la "Reducción
+        # externa" de la otra, que son las dos caras del mismo evento. Mismo
+        # campo que en parseo_log.py, que lleva el parser gemelo
         m = RE_ZONA_DERRAME.search(cuerpo)
         if m:
             c.derrames.append(
-                {"linea": n_linea, "vuelta": vuelta_actual, "px": float(m.group(1))}
+                {"linea": n_linea, "vuelta": vuelta_actual,
+                 "px": float(m.group(1)), "t_abs": t_abs}
             )
             continue
         m = RE_ZONA_EXTERNA.search(cuerpo)
         if m:
             c.externas.append(
-                {"linea": n_linea, "vuelta": int(m.group(2)), "px": float(m.group(1))}
+                {"linea": n_linea, "vuelta": int(m.group(2)),
+                 "px": float(m.group(1)), "t_abs": t_abs}
             )
             continue
         m = RE_ZONA_ESTADO_CAB.search(cuerpo)

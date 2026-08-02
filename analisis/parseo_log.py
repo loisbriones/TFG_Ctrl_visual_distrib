@@ -204,8 +204,10 @@ class Carrera:
       decisiones       lista de dicts [ZONA] decisión (nueva/fusión+retroceso)
       carveos          lista de dicts de carveos en la partición (con pwm)
       gigante_castigos lista de {linea, vuelta, celda, antes, despues}
-      derrames         lista de {linea, vuelta, px} (reduccion_pendiente)
-      externas         lista de {linea, vuelta, px} (reducción de otra cámara)
+      derrames         lista de {linea, vuelta, px, t_abs} (reduccion_pendiente)
+      externas         lista de {linea, vuelta, px, t_abs} (reducción de otra
+                       cámara). t_abs = segundos desde medianoche, el único
+                       reloj común entre los logs de dos cámaras
       estados_zona     lista de {linea, vuelta, zonas: [dict]} (volcados [ZONA])
       snapshots_perfil lista de {linea, vuelta, motivo, zonas: [dict]}
       vueltas_reg      lista de dicts de los bloques [VUELTA]
@@ -485,16 +487,25 @@ def parsear_log(ruta: Path) -> Carrera:
                 }
             )
             continue
+        # Las dos caras del MISMO evento: la cámara que se queda sin
+        # trayectoria al retroceder apunta un "Derrame" y la precedente, en el
+        # mismo instante, una "Reducción externa". Se guarda `t_abs` (segundos
+        # desde medianoche) y no el `t` relativo que usa el resto del parser,
+        # porque el `t` va referido al t0 de SU log y cada cámara tiene el suyo:
+        # para casar las dos caras hace falta un reloj común, y lo es porque los
+        # dos logs los escribe el mismo proceso (ver enlazar_zonas_entre_camaras)
         m = RE_ZONA_DERRAME.search(cuerpo)
         if m:
             c.derrames.append(
-                {"linea": n_linea, "vuelta": vuelta_actual, "px": float(m.group(1))}
+                {"linea": n_linea, "vuelta": vuelta_actual,
+                 "px": float(m.group(1)), "t_abs": t_abs}
             )
             continue
         m = RE_ZONA_EXTERNA.search(cuerpo)
         if m:
             c.externas.append(
-                {"linea": n_linea, "vuelta": int(m.group(2)), "px": float(m.group(1))}
+                {"linea": n_linea, "vuelta": int(m.group(2)),
+                 "px": float(m.group(1)), "t_abs": t_abs}
             )
             continue
         m = RE_ZONA_ESTADO_CAB.search(cuerpo)
@@ -740,6 +751,131 @@ def seguir_zonas(vueltas, zonas_ini_vuelta, n_celdas, cerrada):
         seguidas[v] = actuales
         previas = actuales
     return seguidas
+
+
+# ---------------------------------------------------------------------------
+# Enlace de zonas ENTRE cámaras (derrame)
+# ---------------------------------------------------------------------------
+# Segundos de margen para dar por simultáneos un "Derrame" y la "Reducción
+# externa" que provoca. En los logs de pista van a 1 ms: los escribe el MISMO
+# proceso (el controlador), uno justo detrás del otro dentro del mismo callback.
+# Medio segundo es holgadísimo y sigue siendo mil veces menor que la separación
+# entre dos derrames consecutivos (varios segundos), así que no puede cruzarlos.
+TOLERANCIA_ENLACE_S = 0.5
+# Margen en px para dar por iguales las dos cifras. El algoritmo escribe el
+# mismo float por los dos lados, así que en la práctica coinciden exactas; el
+# margen solo cubre el redondeo del texto del log (un decimal).
+TOLERANCIA_ENLACE_PX = 0.5
+
+
+def enlazar_zonas_entre_camaras(datos_camaras,
+                                tol_px=TOLERANCIA_ENLACE_PX,
+                                tol_s=TOLERANCIA_ENLACE_S):
+    """Zonas que son la MISMA zona de derrape partida entre dos cámaras.
+
+    Devuelve {(camara, id_zona): clave_de_grupo}; las zonas sin enlazar NO
+    aparecen en el mapa. La gráfica 4 usa esa clave para repartir el estilo, de
+    modo que las dos mitades salen del mismo color y la misma forma y se leen
+    como lo que son: un único tramo de pista en el que el coche derrapa.
+
+    Hace falta porque `seguir_zonas()` trabaja sobre UNA cámara: sus `id` son
+    locales y dos cámaras no comparten ni coordenadas ni numeración de celdas.
+    Nadie mira entre cámaras, así que una curva repartida entre dos encuadres
+    salía como dos zonas independientes y parecían dos problemas distintos.
+
+    El log NO nombra a la otra cámara, pero sí deja las dos caras del evento:
+    quien se queda sin trayectoria al retroceder escribe "[ZONA] Derrame: ... N
+    px" y la precedente "[ZONA] Reducción externa: ... N px ...". Se casan por
+    los px y por la marca de tiempo (ver TOLERANCIA_ENLACE_S), de forma voraz y
+    uno a uno, del par más próximo en el tiempo al más lejano: mismo criterio
+    que el emparejamiento por solape de `seguir_zonas()`.
+
+    Sabido el par de cámaras, QUÉ zona es cada extremo lo fija la construcción
+    del algoritmo, sin heurística:
+      - en la EMISORA, la que toca la celda 0 (el retroceso se salió justo por
+        el inicio de la cadena, que es lo que genera el derrame);
+      - en la RECEPTORA, la que toca la última celda (`aplicar_reduccion_externa`
+        extiende hacia atrás desde el final de su trayectoria).
+    La zona que nace en la vuelta V aparece en la partición del inicio de V+1,
+    así que se busca en la primera vuelta posterior de la que haya datos.
+
+    Los grupos se cierran con union-find para que un derrame en cascada
+    (A -> B -> C, cuando tampoco cabe en B) deje las tres zonas en el mismo
+    grupo. La clave del grupo es el menor de sus (camara, id): es estable entre
+    ejecuciones y no hace falta un contador nuevo.
+    """
+    # --- union-find sobre claves (camara, id) ---
+    padre = {}
+
+    def raiz(x):
+        padre.setdefault(x, x)
+        while padre[x] != x:
+            padre[x] = padre[padre[x]]
+            x = padre[x]
+        return x
+
+    def unir(a, b):
+        ra, rb = raiz(a), raiz(b)
+        if ra != rb:
+            # El menor manda, así la clave del grupo no depende del orden en
+            # que se hayan ido uniendo los pares
+            mayor, menor = max(ra, rb), min(ra, rb)
+            padre[mayor] = menor
+
+    def zona_en_celda(cam, vuelta_evento, celda):
+        """(cam, id) de la zona que cubre `celda` en la primera partición
+        posterior al evento, o None si no hay ninguna."""
+        d = datos_camaras[cam]
+        posteriores = [v for v in d["vueltas"] if v > vuelta_evento]
+        if not posteriores:
+            return None
+        n = d["c"].n_celdas
+        for z in d["zonas_ini_vuelta"].get(min(posteriores), []):
+            if celda in celdas_de_zona(z, n):
+                return (cam, z["id"])
+        return None
+
+    # --- candidatos (derrame de A, externa de B) ordenados por cercanía ---
+    candidatos = []
+    for cam_a, d_a in datos_camaras.items():
+        for cam_b, d_b in datos_camaras.items():
+            if cam_a == cam_b:
+                continue
+            for i, der in enumerate(d_a["c"].derrames):
+                for j, ext in enumerate(d_b["c"].externas):
+                    if abs(der["px"] - ext["px"]) > tol_px:
+                        continue
+                    dt = abs(der["t_abs"] - ext["t_abs"])
+                    # Por si la sesión cruza medianoche: t_abs se reinicia a 0
+                    dt = min(dt, 86400.0 - dt)
+                    if dt <= tol_s:
+                        candidatos.append((dt, cam_a, i, cam_b, j))
+
+    enlaces = 0
+    usados_der, usados_ext = set(), set()
+    for _, cam_a, i, cam_b, j in sorted(candidatos):
+        if (cam_a, i) in usados_der or (cam_b, j) in usados_ext:
+            continue
+        der = datos_camaras[cam_a]["c"].derrames[i]
+        ext = datos_camaras[cam_b]["c"].externas[j]
+        # Emisora: la zona pegada al INICIO. Receptora: la pegada al FINAL
+        za = zona_en_celda(cam_a, der["vuelta"], 0)
+        zb = zona_en_celda(
+            cam_b, ext["vuelta"], max(datos_camaras[cam_b]["c"].n_celdas - 1, 0))
+        usados_der.add((cam_a, i))
+        usados_ext.add((cam_b, j))
+        if za is None or zb is None:
+            # El evento cayó en la última vuelta del log y no llegó a haber una
+            # partición posterior donde mirar: no se puede enlazar
+            continue
+        unir(za, zb)
+        enlaces += 1
+
+    grupos = {clave: raiz(clave) for clave in padre}
+    if grupos:
+        print(f"  zonas enlazadas entre cámaras: {enlaces} enlace(s), "
+              f"{len(set(grupos.values()))} grupo(s)")
+    return grupos
 
 
 def derivar_por_vuelta(c: Carrera):
