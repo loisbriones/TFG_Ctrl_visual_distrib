@@ -268,8 +268,18 @@ class ImageProcessor(Node):
         self.debug_timer = self.create_timer(0.033, self._tarea_debug, callback_group=self.debug_group)
 
         # --- BUSCAR LINEA DE META ---
-        self.declare_parameter("finish_line_color", "naranja")
-        self.finish_line_color = self.get_parameter("finish_line_color").value
+        # El nombre del parametro tiene que ser la ruta COMPLETA que tiene en
+        # params.yaml (camera -> detection -> finish_line_color): ROS2 aplana el
+        # YAML anidado a "camera.detection.finish_line_color". Declararlo con el
+        # nombre plano "finish_line_color" no da ningun error, simplemente crea
+        # OTRO parametro que el YAML nunca toca: el color se quedaba siempre en
+        # el valor por defecto de aqui y cambiarlo en el fichero no hacia nada.
+        # Colaba porque los dos decian "naranja". Mismo prefijo que sus vecinos
+        # camera.detection.min_area y camera.detection.kernel_size.
+        self.declare_parameter("camera.detection.finish_line_color", "naranja")
+        self.finish_line_color = self.get_parameter(
+            "camera.detection.finish_line_color"
+        ).value
 
         ret, frame_for_find_sectors = self.cam.read()
         # La linea de meta es del circuito, no de ningun coche: vale cualquier

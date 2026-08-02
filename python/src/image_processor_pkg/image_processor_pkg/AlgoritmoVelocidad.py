@@ -64,8 +64,8 @@ class EstrategiaPerfil:
       - Derrape que cae dentro/al lado de una zona de derrape existente:
         se FUSIONAN (unión de intervalos, mínimo pwm - reducción) y solo se
         retrocede `retroceso_fusion` px más. Si cada reincidencia retro-
-        cediera los 300 px completos, el circuito entero acabaría cubierto
-        de zonas protegidas y el perfil no subiría nunca.
+        cediera el `retroceso_creacion` completo, el circuito entero acabaría
+        cubierto de zonas protegidas y el perfil no subiría nunca.
       - Al cruzar meta suben +incremento_vuelta todas las zonas salvo las
         que tuvieron derrape hace <= vueltas_proteccion vueltas. La decisión
         es POR ZONA y no depende de si la vuelta fue limpia en el resto del
