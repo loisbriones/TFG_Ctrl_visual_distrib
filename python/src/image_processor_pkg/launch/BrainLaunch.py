@@ -18,14 +18,18 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    # 2. Un controlador por cada coche AUTONOMO (modo_manual: false). Los coches
-    #    marcados como manuales los arranca ManualLaunch; para una carrera mixta
-    #    (uno manual + uno autonomo) se levantan los dos docker-compose a la vez
-    #    y cada launch coge su subconjunto del mismo params.yaml.
+    # 2. Un controlador por cada coche que NO sea manual, es decir los de los
+    #    modos incremental, automatico y politica (cars.<coche>.modo). Los tres
+    #    publican PWM y necesitan el Arduino, por eso van juntos aqui; los
+    #    manuales los arranca ManualLaunch, que no lanza el puente ni monta el
+    #    dispositivo. Para una carrera mixta (uno manual + uno de los otros) se
+    #    levantan los dos docker-compose a la vez y cada launch coge su
+    #    subconjunto del mismo params.yaml.
     hay_autonomo = False
     for car_name in coches:
         cfg = cars[car_name]
-        if cfg.get("modo_manual", False):
+        modo = cfg.get("modo", "automatico")
+        if modo == "manual":
             continue
         hay_autonomo = True
 
@@ -33,10 +37,11 @@ def generate_launch_description():
             Node(
                 package="image_processor_pkg",
                 executable="CarControllerNode.py",
-                # Nombre UNICO por coche: EstrategiaPerfil nombra sus logs con el
-                # nombre del nodo (derrapesLog_<nodo>_<camara>.txt); con el mismo
-                # nombre dos coches se pisarian los ficheros.
-                name=f"CarController_{car_name}",
+                # Nombre UNICO por coche Y POR MODO: EstrategiaPerfil nombra sus
+                # logs con el nombre del nodo (derrapesLog_<nodo>_<camara>.txt) y
+                # los abre en "w", asi que sin el modo en el nombre una sesion
+                # incremental pisaria los logs de una automatica del mismo coche.
+                name=f"CarController_{modo}_{car_name}",
                 namespace=car_name,
                 parameters=[
                     params_file,
@@ -46,7 +51,7 @@ def generate_launch_description():
                         # orden de la lista: el controlador lo mete en el mensaje
                         # SpeedCarril y el arduino_bridge lo usa para el carril.
                         "carril_asignado": str(cfg["carril"]),
-                        "modo_manual": False,
+                        "modo": modo,
                     },
                 ],
                 respawn=True,
@@ -54,8 +59,8 @@ def generate_launch_description():
             )
         )
 
-    # 3. El arduino_bridge solo se lanza si hay algun coche autonomo que mande
-    #    PWM. Si todos los coches son manuales, no aporta nada y no se arranca.
+    # 3. El arduino_bridge solo se lanza si hay algun coche que mande PWM. Si
+    #    todos los coches son manuales, no aporta nada y no se arranca.
     if hay_autonomo:
         ld.add_action(
             Node(

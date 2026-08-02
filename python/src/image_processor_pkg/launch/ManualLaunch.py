@@ -3,16 +3,17 @@ Despliegue del cerebro para coches en CARRERA MANUAL: los conduce una persona
 con el mando físico del Scalextric y el sistema solo mira y anota.
 
 De la lista 'coches' del params.yaml, este launch arranca SOLO los que tienen
-cars.<coche>.modo_manual: true. Los autónomos (modo_manual: false) los arranca
-BrainLaunch. Para una carrera mixta (uno manual + uno autónomo) se levantan los
-dos docker-compose a la vez: cada uno coge su subconjunto del mismo YAML.
+cars.<coche>.modo: "manual". Los otros tres modos (incremental, automatico y
+politica) publican PWM y necesitan el Arduino, así que los arranca BrainLaunch.
+Para una carrera mixta (uno manual + uno de los otros) se levantan los dos
+docker-compose a la vez: cada uno coge su subconjunto del mismo YAML.
 
 Es BrainLaunch.py con tres diferencias, y las tres importan:
 
   1. NO se lanza el RaceControllerNode (arduino_bridge). Esta es la garantía de
      verdad de que nada mueve el coche: el Arduino queda fuera del circuito y
-     el gatillo de la persona alimenta el carril. El flag modo_manual del
-     controlador es la segunda barrera, por si alguien levanta el puente a
+     el gatillo de la persona alimenta el carril. El parámetro modo="manual"
+     del controlador es la segunda barrera, por si alguien levanta el puente a
      mano en otra terminal.
 
      Efecto secundario a tener en cuenta: sin el puente, nadie pone los
@@ -24,7 +25,7 @@ Es BrainLaunch.py con tres diferencias, y las tres importan:
      los carriles a calibration_speed, pero solo el suyo: el carril del coche
      manual sigue conduciéndose a mano.)
 
-  2. modo_manual=True en cada controlador: no publica órdenes de PWM y su
+  2. modo="manual" en cada controlador: no publica órdenes de PWM y su
      terminal pasa a ser el salpicadero del piloto (tiempo de vuelta, si
      mejoró, mejor tiempo). El algoritmo sigue corriendo entero: su log guarda
      lo que HABRÍA hecho, que es justo lo que se quiere comparar después con
@@ -62,13 +63,15 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    # 2. Un controlador por coche MANUAL (modo_manual: true), igual que en
-    #    BrainLaunch pero en manual. carril_asignado se mantiene aunque en
-    #    manual no se use (publicar_velocidad sale antes): así el nodo es el
-    #    mismo en los dos modos y el mensaje SpeedCarril sigue llevándolo.
+    # 2. Un controlador por coche con cars.<coche>.modo: "manual", igual que en
+    #    BrainLaunch pero en manual. Los otros tres modos (incremental,
+    #    automatico y politica) publican PWM y necesitan el Arduino, así que los
+    #    arranca BrainLaunch. carril_asignado se mantiene aunque en manual no se
+    #    use (publicar_velocidad sale antes): así el nodo es el mismo en los
+    #    cuatro modos y el mensaje SpeedCarril sigue llevándolo.
     for car_name in coches:
         cfg = cars[car_name]
-        if not cfg.get("modo_manual", False):
+        if cfg.get("modo", "automatico") != "manual":
             continue
 
         ld.add_action(
@@ -82,7 +85,7 @@ def generate_launch_description():
                     {
                         "car_name": car_name,
                         "carril_asignado": str(cfg["carril"]),
-                        "modo_manual": True,
+                        "modo": "manual",
                     },
                 ],
                 respawn=True,

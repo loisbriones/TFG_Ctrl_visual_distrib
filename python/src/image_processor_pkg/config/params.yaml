@@ -16,17 +16,35 @@
     #     ("r1"/"1" o "r2"/"2"; el puente parsea ambas formas). Sustituye al
     #     antiguo reparto por orden de la lista en el launch: aqui se pone el
     #     carril REAL del montaje, no el que toque por posicion.
-    #   - modo_manual: false -> coche autonomo, lo arranca BrainLaunch (que
-    #     ademas lanza el arduino_bridge). true -> lo conduce una persona, lo
-    #     arranca ManualLaunch (sin puente). Cada launch filtra 'coches' por
-    #     este flag, asi que para un mixto (uno manual + uno autonomo) se
-    #     levantan los dos docker-compose a la vez y cada uno coge su parte.
+    #   - modo: como se decide el PWM que se aplica al coche. Son los cuatro
+    #     modos de operacion de la memoria, y en TODOS el algoritmo corre
+    #     entero: lo que deja escrito en derrapesLog_*.txt es de donde sale
+    #     despues el analisis de la sesion.
+    #       manual      -> NO se publica PWM: conduce una persona con el mando
+    #                      fisico y el Arduino queda fuera del circuito. El
+    #                      algoritmo apunta en su log lo que HABRIA hecho, para
+    #                      contrastarlo luego con lo que hizo la persona.
+    #       incremental -> se parte de minimum_speed y se sube un escalon cada
+    #                      'vueltas_incremento' vueltas, igual en todo el
+    #                      circuito. Es el modo tonto para tantear un trazado
+    #                      nuevo y ver por donde empieza a irse el coche. El
+    #                      algoritmo corre igual que en manual (no decide nada).
+    #       automatico  -> el PWM lo decide el algoritmo, celda a celda, con su
+    #                      aprendizaje por zonas. Es el modo normal.
+    #       politica    -> se le carga un perfil YA FIJADO desde un JSON y se
+    #                      limita a aplicarlo: el algoritmo detecta derrapes y
+    #                      los registra, pero no puede mover ni un PWM. Sirve
+    #                      para repetir una politica concreta y comparar.
+    #     Los tres ultimos necesitan el Arduino, asi que van por BrainLaunch;
+    #     los manuales por ManualLaunch (sin puente). Cada launch filtra
+    #     'coches' por este valor, asi que para un mixto (uno manual + uno
+    #     autonomo) se levantan los dos docker-compose a la vez.
     cars:
       car1:
         stiker_front: "verde"
         stiker_back: "azul"
         carril: "2"
-        modo_manual: false
+        modo: "automatico"
 
     #Parametros para la camara
     camera:
@@ -79,6 +97,11 @@
       # posiciones intercaladas, sin esto el orden de camaras aprendido seria
       # un ir y venir en vez del orden real de paso
       timeout_camara_activa: 0.3
+      # Vueltas que aguanta el modo INCREMENTAL antes de subir el PWM un
+      # escalon (de incremento_vuelta, el mismo que usa el algoritmo). Solo lo
+      # mira ese modo; los otros tres lo ignoran. No va en 'algoritmo' porque
+      # no es un parametro del algoritmo: el escalon lo cuenta el controlador
+      vueltas_incremento: 10
 
       # Parametros del ALGORITMO DE VELOCIDAD (EstrategiaPerfil). El algoritmo
       # no es un nodo ROS: los lee el controlador y se los pasa al crear una

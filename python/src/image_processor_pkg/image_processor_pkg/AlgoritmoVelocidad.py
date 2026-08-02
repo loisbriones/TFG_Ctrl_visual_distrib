@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import numpy as np
@@ -103,6 +104,8 @@ class EstrategiaPerfil:
         v_min,
         node_name="node",
         camara_id="cam",
+        # --- modo de operación (ver params.yaml -> cars.<coche>.modo) ---
+        modo="automatico",
         # --- detección de derrape y localización ---
         umbral_derrape=12.0,
         max_dist_ruta=80.0,
@@ -134,6 +137,16 @@ class EstrategiaPerfil:
         """
         self.v_max = float(v_max)
         self.v_min = float(v_min)
+
+        # Modo de operación. De los cuatro, solo "politica" cambia lo que hace
+        # esta clase: le congela el perfil (lo carga de un JSON y ni los
+        # derrapes ni el paso por meta pueden moverlo). En "manual",
+        # "incremental" y "automatico" el algoritmo se comporta EXACTAMENTE
+        # igual; quién publica el PWM y con qué valor es cosa del controlador.
+        self.modo = modo
+        # Se guarda porque el JSON de la política lo lleva dentro, para poder
+        # saber de qué cámara es un fichero suelto
+        self.camara_id = camara_id
 
         # Detección de derrape y localización
         self.umbral_derrape = float(umbral_derrape)
@@ -218,6 +231,20 @@ class EstrategiaPerfil:
 
         self.log_file = f"{directorio_logs}/derrapesLog_{node_name}_{camara_id}.txt"
 
+        # --- Ficheros del modo política ---
+        # Van en la raíz del paquete, junto a las cachés de trayectoria, porque
+        # es lo que el docker-compose monta desde el host: así la plantilla se
+        # puede editar desde fuera del contenedor.
+        #
+        # Son DOS ficheros distintos a propósito. La PLANTILLA se reescribe en
+        # cada arranque con la partición recién construida; la POLÍTICA es la
+        # que se lee, y se crea copiando la plantilla y editando los pwm. Si
+        # fuese el mismo fichero, arrancar en modo política machacaría la
+        # política editada con la partición inicial antes de poder leerla.
+        base_politica = f"/ros2_ws/src/image_processor_pkg/politica_{node_name}_{camara_id}"
+        self.fichero_politica = f"{base_politica}.json"
+        self.fichero_plantilla = f"{base_politica}_PLANTILLA.json"
+
         try:
             # Se abre en modo "w" para vaciar el log de la sesión anterior
             with open(self.log_file, "w") as f:
@@ -231,7 +258,11 @@ class EstrategiaPerfil:
         # herramienta de análisis los lee de aquí (umbral_derrape,
         # max_dist_ruta y paso_celda los usa para dibujar), así que el formato
         # "clave=valor" de estas líneas es un contrato: no cambiarlo
-        self.saveLogFile(f"[INIT] nodo={node_name} camara={camara_id}")
+        # `modo` no es un número, así que el extractor de parámetros del
+        # análisis (que solo recoge pares clave=valor numéricos) lo ignora sin
+        # más: la línea sigue casando con el patrón de [INIT] de siempre
+        self.saveLogFile(
+            f"[INIT] nodo={node_name} camara={camara_id} modo={self.modo}")
         self.saveLogFile(
             f"[INIT] v_min={self.v_min:.0f} v_max={self.v_max:.0f} | "
             f"umbral_derrape={self.umbral_derrape} max_dist_ruta={self.max_dist_ruta} "
@@ -353,6 +384,13 @@ class EstrategiaPerfil:
             f"longitud total {self._long_total:.1f} px, cerrada={self._cerrada}"
         )
         self._log_perfil("inicial: una zona libre a v_min (+ zonas gigantes)")
+
+        # La plantilla se vuelca SIEMPRE, en cualquier modo: es la forma de
+        # tener a mano la partición recién construida para escribir una política
+        # a partir de ella
+        self._guardar_plantilla_politica()
+        if self.modo == "politica":
+            self._cargar_politica()
 
     def _filtrar_trayectoria(self, puntos, varias_camaras):
         """
@@ -941,6 +979,187 @@ class EstrategiaPerfil:
                 return z
         return None
 
+    # ----------------------------------------------------------------------
+    # MODO POLÍTICA: perfil fijo cargado de un JSON
+    # ----------------------------------------------------------------------
+    def _guardar_plantilla_politica(self):
+        """Vuelca la partición actual como PLANTILLA de política.
+
+        Se llama al final de setTrayectoria, en cualquier modo. El fichero
+        lleva la misma estructura que usa el algoritmo (la lista `zonas` tal
+        cual), para no inventar un formato ni tener que convertir nada al
+        leerlo: se copia a `politica_<nodo>_<camara>.json`, se editan los `pwm`
+        (y los cortes `ini`/`fin` si se quiere más detalle) y ya está listo.
+
+        Es un fichero de trabajo, no un dato de la carrera: si no se puede
+        escribir se avisa y se sigue, como con el log.
+        """
+        datos = {
+            "_ayuda": (
+                "Plantilla de politica. Copiar a politica_<nodo>_<camara>.json "
+                "(sin _PLANTILLA), editar los pwm de cada zona y arrancar el "
+                "coche con cars.<coche>.modo: politica. Las zonas se aplican "
+                "por INDICE DE CELDA, asi que valen para la cadena de "
+                "n_celdas que se indica aqui."
+            ),
+            "camara": self.camara_id,
+            "n_celdas": self.n_celdas,
+            "v_min": self.v_min,
+            "v_max": self.v_max,
+            "zonas": self.zonas,
+        }
+        try:
+            with open(self.fichero_plantilla, "w") as f:
+                json.dump(datos, f, indent=2, ensure_ascii=False)
+            self.saveLogFile(
+                f"[INIT] Plantilla de politica guardada en "
+                f"{self.fichero_plantilla} ({len(self.zonas)} zonas, "
+                f"{self.n_celdas} celdas)"
+            )
+        except (IOError, OSError) as e:
+            self.saveLogFile(
+                f"[INIT] AVISO: no se pudo guardar la plantilla de politica en "
+                f"{self.fichero_plantilla}: {e}"
+            )
+
+    def _cargar_politica(self):
+        """Sustituye la partición inicial por la del JSON de la política.
+
+        Se llama solo en modo política, justo después de construir la cadena.
+        A partir de ahí el perfil ya no se mueve: `_registrar_zona` y
+        `registrar_vuelta` salen antes de tocarlo.
+
+        La política se aplica POR ÍNDICE DE CELDA. La trayectoria no es la
+        misma en dos calibraciones (lo dice la memoria, §Modos de operación), y
+        emparejarlas exigiría traslación y rotación, que no se hace: si la
+        cadena de ahora no tiene las mismas celdas que la de cuando se escribió
+        la política, se ajusta lo que se pueda y se avisa de cada arreglo.
+        Todos los avisos van en líneas [INIT], que el análisis ya ignora.
+
+        Ante cualquier problema (fichero que no está, JSON roto, sin zonas
+        utilizables) se avisa y se deja el perfil plano a v_min: es el valor de
+        arranque de siempre, así que el coche rueda despacio en vez de quedarse
+        sin perfil o tumbar el nodo.
+        """
+        try:
+            with open(self.fichero_politica) as f:
+                datos = json.load(f)
+        except FileNotFoundError:
+            self.saveLogFile(
+                f"[INIT] AVISO: modo politica pero no existe "
+                f"{self.fichero_politica}. Se sigue con el perfil plano a "
+                f"v_min={self.v_min:.0f}. Copia el _PLANTILLA.json, editalo y "
+                f"vuelve a arrancar"
+            )
+            return
+        except (ValueError, IOError, OSError) as e:
+            self.saveLogFile(
+                f"[INIT] AVISO: no se pudo leer la politica de "
+                f"{self.fichero_politica} ({e}). Se sigue con el perfil plano "
+                f"a v_min={self.v_min:.0f}"
+            )
+            return
+
+        n_esperado = datos.get("n_celdas")
+        if n_esperado is not None and int(n_esperado) != self.n_celdas:
+            self.saveLogFile(
+                f"[INIT] AVISO: la politica se escribio para una cadena de "
+                f"{int(n_esperado)} celdas y esta tiene {self.n_celdas}. La "
+                f"calibracion no da la misma trayectoria dos veces: se aplica "
+                f"por indice de celda y puede quedar desplazada. Revisa el "
+                f"perfil resultante antes de dar valor a la prueba"
+            )
+
+        # Se recorta cada zona a la cadena de verdad y se descartan las que se
+        # queden fuera del todo
+        zonas = []
+        for z in datos.get("zonas", []):
+            try:
+                ini = max(0, int(z["ini"]))
+                fin = min(self.n_celdas - 1, int(z["fin"]))
+                pwm = float(z["pwm"])
+            except (KeyError, TypeError, ValueError):
+                self.saveLogFile(f"[INIT] AVISO: zona mal formada, se ignora: {z}")
+                continue
+            if ini > fin:
+                self.saveLogFile(
+                    f"[INIT] AVISO: zona [{z['ini']}-{z['fin']}] cae fuera de la "
+                    f"cadena (0-{self.n_celdas - 1}), se ignora"
+                )
+                continue
+            zonas.append({
+                "ini": ini, "fin": fin,
+                # El suelo y el techo mandan sobre lo que ponga el fichero: son
+                # los limites del carril, no una preferencia del algoritmo
+                "pwm": max(self.v_min, min(self.v_max, pwm)),
+                # El tipo se recalcula: si la celda es gigante tiene que seguir
+                # marcada como tal, porque _en_borde y _castigar_gigante miran
+                # el tipo de la zona, no lo que diga el JSON
+                "tipo": "gigante" if self._es_gigante[ini] and ini == fin
+                        else z.get("tipo", "libre"),
+                "vueltas": [],
+            })
+
+        zonas.sort(key=lambda z: z["ini"])
+        if not zonas:
+            self.saveLogFile(
+                f"[INIT] AVISO: la politica de {self.fichero_politica} no tiene "
+                f"ninguna zona utilizable. Se sigue con el perfil plano a "
+                f"v_min={self.v_min:.0f}"
+            )
+            return
+
+        # Las zonas tienen que PARTICIONAR la cadena: _zona_de recorre la lista
+        # y devuelve None si una celda no cae en ninguna, y ahi _velocidad_en
+        # daria v_min sin decir por que. Se rellenan los huecos y se recortan
+        # los solapes, avisando de cada arreglo
+        completas = []
+        siguiente = 0
+        for z in zonas:
+            if z["ini"] > siguiente:
+                self.saveLogFile(
+                    f"[INIT] AVISO: las celdas {siguiente}-{z['ini'] - 1} no las "
+                    f"cubre ninguna zona de la politica: se rellenan a "
+                    f"v_min={self.v_min:.0f}"
+                )
+                completas.append({
+                    "ini": siguiente, "fin": z["ini"] - 1, "pwm": self.v_min,
+                    "tipo": "libre", "vueltas": [],
+                })
+            elif z["ini"] < siguiente:
+                if z["fin"] < siguiente:
+                    self.saveLogFile(
+                        f"[INIT] AVISO: la zona [{z['ini']}-{z['fin']}] queda "
+                        f"tapada por la anterior, se ignora"
+                    )
+                    continue
+                self.saveLogFile(
+                    f"[INIT] AVISO: la zona [{z['ini']}-{z['fin']}] solapa con la "
+                    f"anterior, se recorta a [{siguiente}-{z['fin']}]"
+                )
+                z["ini"] = siguiente
+            completas.append(z)
+            siguiente = z["fin"] + 1
+        if siguiente <= self.n_celdas - 1:
+            self.saveLogFile(
+                f"[INIT] AVISO: las celdas {siguiente}-{self.n_celdas - 1} no las "
+                f"cubre ninguna zona de la politica: se rellenan a "
+                f"v_min={self.v_min:.0f}"
+            )
+            completas.append({
+                "ini": siguiente, "fin": self.n_celdas - 1, "pwm": self.v_min,
+                "tipo": "libre", "vueltas": [],
+            })
+
+        self.zonas = completas
+        self.saveLogFile(
+            f"[INIT] Politica cargada de {self.fichero_politica}: "
+            f"{len(self.zonas)} zonas sobre {self.n_celdas} celdas. El perfil "
+            f"queda FIJO: los derrapes se registran pero no lo mueven"
+        )
+        # Formato ya conocido por el análisis (el motivo es texto libre)
+        self._log_perfil("politica cargada, perfil fijo")
+
     def _intervalo_a_celdas(self, ini, fin):
         """Lista de celdas del intervalo [ini, fin] en orden de recorrido.
         En cadena cerrada el intervalo puede envolver el origen (ini > fin)."""
@@ -1108,6 +1327,19 @@ class EstrategiaPerfil:
              controlador los reenvíe a la cámara precedente.
         """
         self.derrapes_contador += 1
+
+        # Modo política: el perfil es fijo, así que el derrape se CUENTA y queda
+        # en el log (la línea [DERRAPE] ... CERRADO ya está escrita), pero no
+        # castiga a nadie. Salir aquí es lo que impide que un derrape carvee la
+        # política cargada, y de paso deja sin efecto el retroceso y el derrame,
+        # que solo tienen sentido si el perfil se puede mover.
+        #
+        # No se escribe ninguna línea nueva: la de decisión ([ZONA] ... derrape
+        # en [a, b] -> ...) simplemente no aparece, que es la verdad de lo que
+        # pasó. Una línea que falta no rompe el análisis; una con formato nuevo
+        # sí obligaría a tocar los dos parsers.
+        if self.modo == "politica":
+            return
 
         celdas_int = self._intervalo_a_celdas(ini, fin)
         normales_int = [c for c in celdas_int if not self._es_gigante[c]]
@@ -1296,6 +1528,17 @@ class EstrategiaPerfil:
             f"(hubo_derrape_local={hubo_derrape_local})"
         )
         self._derrapes_vuelta_anterior = self.derrapes_contador
+
+        # Modo política: el perfil es el que se cargó del JSON y no se toca en
+        # toda la carrera, así que aquí no sube nada. Se reutiliza a propósito
+        # el formato de la línea de "no sube" que ya existe (su motivo es texto
+        # libre), para no obligar a tocar los regex del análisis.
+        if self.modo == "politica":
+            self.saveLogFile(
+                f"[VUELTA {vuelta}] El perfil NO sube: modo politica, el perfil "
+                f"es fijo y se cargó del JSON de la política"
+            )
+            return
 
         subidas = 0
         protegidas = 0

@@ -42,6 +42,10 @@
 *.glo
 *.gls
 *.glsdefs
+# El estilo de indice que genera glossaries y el DVI extendido de xelatex: los
+# dos se rehacen en cada `latexmk` igual que los de arriba
+*.ist
+*.xdv
 
 # Beamer / presentaciones (por si acaso)
 *.nav

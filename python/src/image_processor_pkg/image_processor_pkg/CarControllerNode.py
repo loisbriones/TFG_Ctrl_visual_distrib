@@ -85,27 +85,47 @@ class CarControllerNode(Node):
                 f"controller.algoritmo.{nombre}"
             ).value
 
-        # --- MODO MANUAL: el coche lo conduce una persona ---
-        # False (el valor con el que arranca BrainLaunch, que no pasa el
-        # parámetro) = carrera autónoma de siempre. True (lo pone
-        # ManualLaunch) = la carrera la conduce una persona con el mando
-        # físico del Scalextric, así que el Arduino queda FUERA del circuito y
-        # el arduino_bridge ni siquiera se lanza.
+        # --- MODO DE OPERACIÓN: quién decide el PWM ---
+        # Los cuatro modos de la memoria, y lo que cambia en ESTE nodo:
+        #   manual      -> NO se publica orden de PWM (publicar_velocidad sale
+        #                  antes): conduce una persona con el mando físico y el
+        #                  arduino_bridge ni se lanza. La terminal pasa a ser el
+        #                  salpicadero del piloto (log_algoritmo y
+        #                  mostrar_panel_piloto).
+        #   incremental -> se publica un PWM que NO decide el algoritmo: parte
+        #                  de v_min y sube un escalón cada vueltas_incremento
+        #                  vueltas (ver ejecutar_control_carrera).
+        #   automatico  -> se publica el PWM que decide el algoritmo. El de
+        #                  siempre, y el valor por defecto.
+        #   politica    -> se publica el PWM del algoritmo, pero su perfil está
+        #                  congelado porque se cargó de un JSON. Lo bloquea la
+        #                  propia EstrategiaPerfil, no este nodo.
         #
-        # Lo ÚNICO que cambia en el nodo es que no se publica la orden de PWM
-        # (ver publicar_velocidad) y que la terminal pasa a ser el salpicadero
-        # del piloto (ver log_algoritmo y mostrar_panel_piloto). TODO lo demás
-        # sigue igual a propósito: la vuelta de calibración, la trayectoria
-        # base, una EstrategiaPerfil por cámara, la detección de derrape, el
-        # aprendizaje del perfil, el derrame entre cámaras, el log y la
-        # telemetría. Que el algoritmo siga corriendo entero en paralelo es el
-        # objetivo del modo, no un descuido: su log guarda fotograma a
-        # fotograma qué PWM habría aplicado ([FRAME ... pwm=N]), y comparándolo
-        # después con lo que hizo la persona se ve dónde el algoritmo es
-        # demasiado conservador y dónde el humano se arriesga más de lo que
-        # este permitiría.
-        self.declare_parameter("modo_manual", False)
-        self.modo_manual = self.get_parameter("modo_manual").value
+        # En LOS CUATRO el algoritmo corre entero, y es a propósito: la vuelta
+        # de calibración, la trayectoria base, una EstrategiaPerfil por cámara,
+        # la detección de derrape, el log y la telemetría son iguales en todos.
+        # Su log guarda fotograma a fotograma qué PWM habría aplicado
+        # ([FRAME ... pwm=N]), así que en manual se puede contrastar con lo que
+        # hizo la persona y en incremental con el escalón que iba puesto: ahí se
+        # ve dónde el algoritmo es demasiado conservador y dónde el humano (o el
+        # escalón) se arriesga más de lo que este permitiría. El PWM realmente
+        # aplicado no está en ese log, está en el bag (/carX/pwd), y el análisis
+        # pinta las dos series por separado.
+        self.declare_parameter("modo", "automatico")
+        self.modo = self.get_parameter("modo").value
+        # Flag derivado: es el que consultan publicar_velocidad, log_algoritmo y
+        # el panel del piloto, y su significado no ha cambiado al añadir modos
+        self.modo_manual = (self.modo == "manual")
+
+        # Vueltas que aguanta el modo incremental antes de subir un escalón. El
+        # escalón es incremento_vuelta, el mismo que usa el algoritmo al subir
+        # una zona, para que los dos modos hablen en las mismas unidades
+        self.declare_parameter("controller.vueltas_incremento", 10)
+        self.vueltas_incremento = max(
+            1, int(self.get_parameter("controller.vueltas_incremento").value))
+        # El escalón sale del mismo parámetro con el que el algoritmo sube una
+        # zona al cruzar meta, que ya está leído en params_algoritmo
+        self.incremento_vuelta = float(self.params_algoritmo["incremento_vuelta"])
 
         self.en_calibracion = True
         self.v_actual = self.v_min
@@ -278,6 +298,21 @@ class CarControllerNode(Node):
                 "calibración despacio y sin parar: de ella sale la trayectoria "
                 "base."
             )
+        elif self.modo == "incremental":
+            self.get_logger().info(
+                f"📈 Controlador iniciado en MODO INCREMENTAL: se arranca en "
+                f"PWM {self.v_min:.0f} y se sube {self.incremento_vuelta:.0f} "
+                f"cada {self.vueltas_incremento} vueltas hasta {self.v_max:.0f}, "
+                f"igual en todo el circuito. El algoritmo corre igual para dejar "
+                f"en su log lo que habría hecho. MODO CALIBRACIÓN ACTIVO."
+            )
+        elif self.modo == "politica":
+            self.get_logger().info(
+                "📋 Controlador iniciado en MODO POLÍTICA: el perfil se carga de "
+                "un JSON y NO se modifica en toda la carrera. Los derrapes se "
+                "detectan y se registran, pero no castigan. MODO CALIBRACIÓN "
+                "ACTIVO."
+            )
         else:
             self.get_logger().info("🏁 Controlador iniciado. MODO CALIBRACIÓN ACTIVO.")
 
@@ -387,8 +422,12 @@ class CarControllerNode(Node):
             # sola cámara es el circuito completo con un hueco tapado; con
             # varias, la meta cae en mitad de la porción que ve esta cámara y
             # el salto es el resto del circuito, que ven las demás
+            # El modo se le pasa porque el de política le congela el perfil (lo
+            # carga de un JSON y no deja que nada lo mueva); en los otros tres
+            # el algoritmo se comporta igual, sea quien sea el que publique.
             self.algoritmos[camara] = EstrategiaPerfil(
                 self.v_max, self.v_min, self.get_name(), camara,
+                modo=self.modo,
                 **self.params_algoritmo,
             )
             self.algoritmos[camara].setTrayectoria(
@@ -484,6 +523,17 @@ class CarControllerNode(Node):
         # Si el algoritmo nos dice que ignoremos el frame por ruido, nueva_vel será None
         if nueva_vel is not None:
             self.v_actual = nueva_vel
+
+        # En modo incremental el PWM NO lo decide el algoritmo: es el mismo en
+        # todo el circuito y sube un escalón cada vueltas_incremento vueltas. Se
+        # calcula aquí, después de actualizar_estado, para que el algoritmo haya
+        # corrido igual y su log siga guardando lo que él habría aplicado. Es
+        # función pura del contador de vueltas, así que da igual que se pierdan
+        # mensajes: no hay estado que se pueda descuadrar.
+        if self.modo == "incremental":
+            escalones = self.vueltas // self.vueltas_incremento
+            self.v_actual = min(
+                self.v_max, self.v_min + self.incremento_vuelta * escalones)
 
         # --- Seguimiento de la cámara activa (orden secuencial) ---
         # Regla pegajosa: nos quedamos con la cámara que estamos escuchando

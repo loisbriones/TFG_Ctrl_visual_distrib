@@ -239,3 +239,19 @@ GRABACIONES/*.bak
 GRABACIONES/*.back
 GRABACIONES/qos_override.yaml
 GRABACIONES/config_conversion.yaml
+
+# Ficheros que el sistema ESCRIBE en caliente dentro del paquete. El
+# docker-compose monta src/image_processor_pkg desde el host (para poder leer
+# los logs y editar las politicas sin entrar al contenedor), asi que todo esto
+# aparece en el arbol de trabajo en cuanto se lanza una carrera. No es codigo
+# ni configuracion: es salida de una ejecucion concreta, atada a la calibracion
+# de ese dia y a esa colocacion de las camaras.
+#   - logs_carrera/          los derrapesLog_*.txt del algoritmo (los que se le
+#                            pasan al analisis; se abren en "w" en cada arranque)
+#   - cache_trayectoria_*    la trayectoria aprendida en la calibracion
+#   - politica_*_PLANTILLA   se reescribe en cada arranque, en cualquier modo
+#   - politica_*.json        la politica editada a mano para el modo politica.
+#                            Si alguna merece guardarse, `git add -f`.
+python/src/image_processor_pkg/logs_carrera/
+python/src/image_processor_pkg/cache_trayectoria_*.json
+python/src/image_processor_pkg/politica_*.json

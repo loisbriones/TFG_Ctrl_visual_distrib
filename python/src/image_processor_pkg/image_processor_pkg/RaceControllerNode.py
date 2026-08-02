@@ -44,22 +44,24 @@ class ArduinoBridgeNode(Node):
                 callback_group=MutuallyExclusiveCallbackGroup(),
             )
 
-        # --- CALIBRACION POR COCHE (solo autonomos) ---
-        # La calibracion dejo de ser global: cada coche autonomo cierra su
-        # vuelta cuando quiere y solo entonces su carril pasa de calibration_speed
-        # al PWM de carrera. Necesitamos por eso el carril fisico de cada coche
-        # (cars.<coche>.carril) y saber cuales son autonomos (modo_manual False):
-        # los manuales los conduce una persona, su carril NO lo toca el puente.
-        self.carril_de = {}       # coche autonomo -> nº de carril
-        self.calibrando = {}      # coche autonomo -> sigue en calibracion?
+        # --- CALIBRACION POR COCHE (solo los que NO son manuales) ---
+        # La calibracion dejo de ser global: cada coche cierra su vuelta cuando
+        # quiere y solo entonces su carril pasa de calibration_speed al PWM de
+        # carrera. Necesitamos por eso el carril fisico de cada coche
+        # (cars.<coche>.carril) y su modo: los tres modos que publican PWM
+        # (incremental, automatico y politica) se comportan igual aqui, y a los
+        # manuales los conduce una persona, asi que su carril NO lo toca el
+        # puente.
+        self.carril_de = {}       # coche NO manual -> nº de carril
+        self.calibrando = {}      # coche NO manual -> sigue en calibracion?
         self.sub_modo_calibracion = {}
         self.grupo_calibracion = MutuallyExclusiveCallbackGroup()
 
         for car_name in self.coches:
             self.declare_parameter(f"cars.{car_name}.carril", "1")
-            self.declare_parameter(f"cars.{car_name}.modo_manual", False)
-            es_manual = self.get_parameter(f"cars.{car_name}.modo_manual").value
-            if es_manual:
+            self.declare_parameter(f"cars.{car_name}.modo", "automatico")
+            modo = self.get_parameter(f"cars.{car_name}.modo").value
+            if modo == "manual":
                 continue
 
             carril_str = str(self.get_parameter(f"cars.{car_name}.carril").value)
@@ -89,8 +91,9 @@ class ArduinoBridgeNode(Node):
         self.arduino = ArduinoController(port=port, baudrate=baud)
         self.get_logger().info(f"Conectando a Arduino en {port}...")
 
-        # Arrancamos cada carril AUTONOMO a la velocidad de calibración (los
-        # carriles de coches manuales no se tocan: los mueve la persona).
+        # Arrancamos a la velocidad de calibración el carril de cada coche que
+        # publique PWM (los carriles de coches manuales no se tocan: los mueve
+        # la persona).
         for car_name, carril in self.carril_de.items():
             self.arduino.set_rail_speed(carril, self.calibration_speed)
 
@@ -101,7 +104,7 @@ class ArduinoBridgeNode(Node):
         return int(limpio.replace("r", ""))
 
     def callback_control_calibracion(self, car_name, msg):
-        # Aviso de calibracion de UN coche autonomo (/<car_name>/modo_calibracion).
+        # Aviso de calibracion de UN coche no manual (/<car_name>/modo_calibracion).
         if msg.data == False and self.calibrando.get(car_name, False):
             # El coche cerro su vuelta: dejamos de forzar calibration_speed en su
             # carril; el PWM de carrera lo tomara en cuanto llegue por pwm_callback.

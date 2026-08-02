@@ -5,7 +5,9 @@
 #   1. Sin el bloque `devices`: aquí el Arduino no se usa (queda fuera del
 #      circuito), así que el contenedor arranca aunque no esté ni conectado.
 #   2. Lanza ManualLaunch.py, que arranca los mismos controladores pero SIN
-#      el arduino_bridge y con modo_manual=True.
+#      el arduino_bridge y con modo="manual". Los otros tres modos
+#      (incremental, automatico y politica) sí publican PWM y necesitan el
+#      Arduino, así que van por docker-compose-brain.yml.
 #
 # Uso:  docker compose -f docker-compose-manual.yml up
 services:

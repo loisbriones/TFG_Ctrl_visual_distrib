@@ -69,7 +69,7 @@ Point2D end
     # Lista de coches del sistema. Genera un detector por coche en la camara,
     # un controlador por coche y las suscripciones del puente Arduino. Cada
     # nombre de esta lista tiene que tener su bloque en 'cars' de abajo.
-    coches: ["car1", "car2"]
+    coches: ["car1"]
 
     # Configuracion POR COCHE. La clave (car1, car2, ...) es el identificador
     # del coche y coincide con 'coches' y con el namespace ROS (/car1/...).
@@ -81,22 +81,35 @@ Point2D end
     #     ("r1"/"1" o "r2"/"2"; el puente parsea ambas formas). Sustituye al
     #     antiguo reparto por orden de la lista en el launch: aqui se pone el
     #     carril REAL del montaje, no el que toque por posicion.
-    #   - modo_manual: false -> coche autonomo, lo arranca BrainLaunch (que
-    #     ademas lanza el arduino_bridge). true -> lo conduce una persona, lo
-    #     arranca ManualLaunch (sin puente). Cada launch filtra 'coches' por
-    #     este flag, asi que para un mixto (uno manual + uno autonomo) se
-    #     levantan los dos docker-compose a la vez y cada uno coge su parte.
+    #   - modo: como se decide el PWM que se aplica al coche. Son los cuatro
+    #     modos de operacion de la memoria, y en TODOS el algoritmo corre
+    #     entero: lo que deja escrito en derrapesLog_*.txt es de donde sale
+    #     despues el analisis de la sesion.
+    #       manual      -> NO se publica PWM: conduce una persona con el mando
+    #                      fisico y el Arduino queda fuera del circuito. El
+    #                      algoritmo apunta en su log lo que HABRIA hecho, para
+    #                      contrastarlo luego con lo que hizo la persona.
+    #       incremental -> se parte de minimum_speed y se sube un escalon cada
+    #                      'vueltas_incremento' vueltas, igual en todo el
+    #                      circuito. Es el modo tonto para tantear un trazado
+    #                      nuevo y ver por donde empieza a irse el coche. El
+    #                      algoritmo corre igual que en manual (no decide nada).
+    #       automatico  -> el PWM lo decide el algoritmo, celda a celda, con su
+    #                      aprendizaje por zonas. Es el modo normal.
+    #       politica    -> se le carga un perfil YA FIJADO desde un JSON y se
+    #                      limita a aplicarlo: el algoritmo detecta derrapes y
+    #                      los registra, pero no puede mover ni un PWM. Sirve
+    #                      para repetir una politica concreta y comparar.
+    #     Los tres ultimos necesitan el Arduino, asi que van por BrainLaunch;
+    #     los manuales por ManualLaunch (sin puente). Cada launch filtra
+    #     'coches' por este valor, asi que para un mixto (uno manual + uno
+    #     autonomo) se levantan los dos docker-compose a la vez.
     cars:
       car1:
-        stiker_front: "azul"
-        stiker_back: "verde"
-        carril: "2"
-        modo_manual: false
-      car2:
         stiker_front: "verde"
         stiker_back: "azul"
-        carril: "1"
-        modo_manual: true
+        carril: "2"
+        modo: "automatico"
 
     #Parametros para la camara
     camera:
@@ -110,11 +123,10 @@ Point2D end
       # }
       mode: 2
       device: '0'
-      # Tamano del kernel que vamos a usar para generar la mascara
-      mascara_kernel_size: 25
-      # Parametro que controla si estamos en modo debug o no, en caso de
-      # estar en debug se envia la imagen de lo que ve la camara
-      debug: True
+      # Tamano del kernel que vamos a usar para generar la mascara 
+      mascara_kernel_size: 25 
+      # Parametro que controla si estamos en modo debug o no, en caso de estar en bug se envia la imagen de lo que ve la camara
+      debug: True 
 
       # Parametros para el modulo de deteccion
       # (los colores de las pegatinas NO van aqui: son por coche, en 'cars')
@@ -123,27 +135,103 @@ Point2D end
         finish_line_color: "naranja"
         # Tamano del kernel que usamos para la operacion de deteccion
         kernel_size: 5
-        # Area minima que tiene que tener el stiker detectado para ser valido
-        min_area: 40
-
+        # Area minima que tiene que tener el stiker detectado para considerarlo valido
+        min_area: 40 
+      
     # Parametros para el controlador
     controller:
-      # Velocidad minima a la que podemos ir
+      # Velocidad minima a la que podemos ir. Es con la que arranca la carrera
+      # y el suelo por debajo del cual no baja ninguna zona del perfil
       minimum_speed: 65
-      # Velocidad maxima que podemos alcanzar aplicando el algoritmo
-      maximum_speed: 90
+      # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
+      maximum_speed: 80 
+      # Separacion minima (px) entre nodos de la trayectoria base. Los puntos
+      # que la camara envia durante la calibracion llegan mas o menos juntos
+      # segun lo rapido que fuese el coche: al quedarnos solo con los que estan
+      # a mas de esta distancia del ultimo aceptado, la ruta queda adelgazada
       distancia_nodos_trayectoria: 15.0
-      umbral_control_trayectoria_correcta: 60.0
-      umbral_derrape_peligro: 10.0
-      umbral_derrape_seguro: 9.0
-      latencia_min_nodos: 1
-      latencia_max_nodos: 10
+      # Tolerancia (px) del cruce de meta. El instante del cruce se interpola
+      # sobre la RECTA que contiene el segmento de meta, pero la meta es un
+      # SEGMENTO: como el circuito es cerrado esa recta vuelve a cortar la
+      # pista en otro punto, donde el signo cambia igual. Los cambios de signo
+      # que caigan a mas de esta distancia del segmento pintado se descartan
+      umbral_meta: 30.0
+      # Segundos sin fotogramas validos para dar por perdida a la camara activa
+      # y conmutar a otra que si este entregando (~10 fotogramas a 30 Hz). La
+      # regla es pegajosa a proposito: con dos camaras solapadas publicando
+      # posiciones intercaladas, sin esto el orden de camaras aprendido seria
+      # un ir y venir en vez del orden real de paso
+      timeout_camara_activa: 0.3
+      # Vueltas que aguanta el modo INCREMENTAL antes de subir el PWM un
+      # escalon (de incremento_vuelta, el mismo que usa el algoritmo). Solo lo
+      # mira ese modo; los otros tres lo ignoran. No va en 'algoritmo' porque
+      # no es un parametro del algoritmo: el escalon lo cuenta el controlador
+      vueltas_incremento: 10
+
+      # Parametros del ALGORITMO DE VELOCIDAD (EstrategiaPerfil). El algoritmo
+      # no es un nodo ROS: los lee el controlador y se los pasa al crear una
+      # instancia por camara. Estan en px, en celdas o en unidades de PWM
+      # segun el caso, y se indica en cada uno
+      algoritmo:
+        # -- Deteccion de derrape y localizacion --
+        # Distancia perpendicular (px) de la pegatina TRASERA a la trayectoria
+        # a partir de la cual se considera que el coche derrapa. Ajustado en
+        # pista: con 15 px el derrape se confirmaba tan tarde que el coche ya
+        # se habia salido
+        umbral_derrape: 10.0
+        # Si la pegatina DELANTERA aparece a mas de esta distancia (px) de la
+        # ruta, la deteccion es falsa y se descarta el fotograma entero: el
+        # controlador mantiene entonces la velocidad anterior
+        max_dist_ruta: 80.0
+        # Zona muerta, en CELDAS, junto a los extremos de la cadena abierta y
+        # junto a las celdas gigantes. Al entrar o salir del encuadre la pose
+        # del coche no es fiable y daria derrapes falsos
+        margen_extremo_celdas: 2
+
+        # -- Construccion de la cadena de celdas --
+        # Separacion entre celdas (px medidos sobre la trayectoria). Las celdas
+        # se generan interpolando, asi que este valor manda sobre lo juntos o
+        # separados que llegasen los puntos de calibracion
+        paso_celda: 15.0
+        # Salto entre puntos consecutivos (px) a partir del cual se considera
+        # un hueco tapado y se crea una celda gigante en vez de interpolar. En
+        # los logs de pista los huecos por salida de encuadre miden 189-489 px
+        # y los cortes falsos 60-133 px: 150 separa bien ambos mundos
+        umbral_celda_gigante: 150.0
+        # Distancia maxima (px) entre el ultimo y el primer punto para dar por
+        # hecho que el final de la trayectoria conecta con su inicio. Es lo que
+        # decide si la cadena es CERRADA (la camara ve el circuito completo) o
+        # ABIERTA (ve solo una porcion)
+        umbral_cierre: 60.0
+
+        # -- Perfil de zonas y ciclo de aprendizaje --
+        # Cuanto sube el PWM de cada zona no protegida al completarse una
+        # vuelta limpia (unidades de PWM)
+        incremento_vuelta: 1.0
+        # Cuanto baja el PWM de una zona cuando se registra un derrape en ella
+        # (unidades de PWM)
+        reduccion_derrape: 2.0
+        # Retroceso (px) al CREAR una zona de derrape: el exceso de velocidad
+        # se gesta antes de manifestarse, asi que hay que frenar bastante antes
+        # del punto donde se perdio la adherencia
+        retroceso_creacion: 150.0
+        # Retroceso (px) al FUSIONAR un derrape con una zona ya existente, que
+        # ya aplico el suyo al crearse. Si cada reincidencia retrocediera la
+        # distancia completa, el circuito entero acabaria protegido y el perfil
+        # no volveria a subir en ningun tramo
+        retroceso_fusion: 60.0
+        # Holgura (en celdas) para considerar que un derrape "toca" una zona
+        # existente y hay que fusionar en vez de crear una nueva
+        margen_fusion_celdas: 1
+        # Vueltas que una zona permanece protegida (sin poder subir) despues de
+        # registrar un derrape
+        vueltas_proteccion: 2
 
     # Parametros para el Arduino
     arduino:
       port: "/dev/ttyACM0"
       baudrate: 115200
-      calibration_speed: 60
+      calibration_speed: 60 
 \end{lstlisting}
 
 \section{Ficheros de lanzamiento}
@@ -170,14 +258,18 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    # 2. Un controlador por cada coche AUTONOMO (modo_manual: false). Los coches
-    #    marcados como manuales los arranca ManualLaunch; para una carrera mixta
-    #    (uno manual + uno autonomo) se levantan los dos docker-compose a la vez
-    #    y cada launch coge su subconjunto del mismo params.yaml.
+    # 2. Un controlador por cada coche que NO sea manual, es decir los de los
+    #    modos incremental, automatico y politica (cars.<coche>.modo). Los tres
+    #    publican PWM y necesitan el Arduino, por eso van juntos aqui; los
+    #    manuales los arranca ManualLaunch, que no lanza el puente ni monta el
+    #    dispositivo. Para una carrera mixta (uno manual + uno de los otros) se
+    #    levantan los dos docker-compose a la vez y cada launch coge su
+    #    subconjunto del mismo params.yaml.
     hay_autonomo = False
     for car_name in coches:
         cfg = cars[car_name]
-        if cfg.get("modo_manual", False):
+        modo = cfg.get("modo", "automatico")
+        if modo == "manual":
             continue
         hay_autonomo = True
 
@@ -185,10 +277,11 @@ def generate_launch_description():
             Node(
                 package="image_processor_pkg",
                 executable="CarControllerNode.py",
-                # Nombre UNICO por coche: EstrategiaPerfil nombra sus logs con el
-                # nombre del nodo (derrapesLog_<nodo>_<camara>.txt); con el mismo
-                # nombre dos coches se pisarian los ficheros.
-                name=f"CarController_{car_name}",
+                # Nombre UNICO por coche Y POR MODO: EstrategiaPerfil nombra sus
+                # logs con el nombre del nodo (derrapesLog_<nodo>_<camara>.txt) y
+                # los abre en "w", asi que sin el modo en el nombre una sesion
+                # incremental pisaria los logs de una automatica del mismo coche.
+                name=f"CarController_{modo}_{car_name}",
                 namespace=car_name,
                 parameters=[
                     params_file,
@@ -198,7 +291,7 @@ def generate_launch_description():
                         # orden de la lista: el controlador lo mete en el mensaje
                         # SpeedCarril y el arduino_bridge lo usa para el carril.
                         "carril_asignado": str(cfg["carril"]),
-                        "modo_manual": False,
+                        "modo": modo,
                     },
                 ],
                 respawn=True,
@@ -206,8 +299,8 @@ def generate_launch_description():
             )
         )
 
-    # 3. El arduino_bridge solo se lanza si hay algun coche autonomo que mande
-    #    PWM. Si todos los coches son manuales, no aporta nada y no se arranca.
+    # 3. El arduino_bridge solo se lanza si hay algun coche que mande PWM. Si
+    #    todos los coches son manuales, no aporta nada y no se arranca.
     if hay_autonomo:
         ld.add_action(
             Node(
@@ -242,13 +335,15 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    # 2. Un controlador por coche MANUAL (modo_manual: true), igual que en
-    #    BrainLaunch pero en manual. carril_asignado se mantiene aunque en
-    #    manual no se use (publicar_velocidad sale antes): asi el nodo es el
-    #    mismo en los dos modos y el mensaje SpeedCarril sigue llevandolo.
+    # 2. Un controlador por coche con cars.<coche>.modo: "manual", igual que en
+    #    BrainLaunch pero en manual. Los otros tres modos (incremental,
+    #    automatico y politica) publican PWM y necesitan el Arduino, asi que los
+    #    arranca BrainLaunch. carril_asignado se mantiene aunque en manual no se
+    #    use (publicar_velocidad sale antes): asi el nodo es el mismo en los
+    #    cuatro modos y el mensaje SpeedCarril sigue llevandolo.
     for car_name in coches:
         cfg = cars[car_name]
-        if not cfg.get("modo_manual", False):
+        if cfg.get("modo", "automatico") != "manual":
             continue
 
         ld.add_action(
@@ -262,7 +357,7 @@ def generate_launch_description():
                     {
                         "car_name": car_name,
                         "carril_asignado": str(cfg["carril"]),
-                        "modo_manual": True,
+                        "modo": "manual",
                     },
                 ],
                 respawn=True,
@@ -318,7 +413,9 @@ services:
 #   1. Sin el bloque `devices`: aqui el Arduino no se usa (queda fuera del
 #      circuito), asi que el contenedor arranca aunque no este ni conectado.
 #   2. Lanza ManualLaunch.py, que arranca los mismos controladores pero SIN
-#      el arduino_bridge y con modo_manual=True.
+#      el arduino_bridge y con modo="manual". Los otros tres modos
+#      (incremental, automatico y politica) si publican PWM y necesitan el
+#      Arduino, asi que van por docker-compose-brain.yml.
 #
 # Uso:  docker compose -f docker-compose-manual.yml up
 services:
@@ -331,8 +428,16 @@ services:
     environment:
       - ROS_DOMAIN_ID=42
       - ROS_LOCALHOST_ONLY=0
+      # Sin esto el contenedor va en UTC (ros:humble viene asi) y las marcas
+      # de hora de los logs del algoritmo (derrapesLog_*.txt) salen
+      # desfasadas respecto al reloj del PC y respecto al analisis, que corre
+      # fuera del contenedor. Los stamps de los mensajes NO se ven afectados:
+      # son epochs y las restas entre ellos dan igual el huso
       - TZ=Europe/Madrid
     volumes:
+      # La zona horaria del host, ya compilada: glibc la lee aunque la imagen
+      # no tuviese tzdata. Va junto a TZ porque cada mecanismo cubre un hueco
+      # del otro (ver comentario de arriba)
       - /etc/localtime:/etc/localtime:ro
       # Monta el paquete desde el host: sin esto los derrapesLog_*.txt que
       # escribe el algoritmo (en src/image_processor_pkg/logs_carrera) se
@@ -340,8 +445,6 @@ services:
       # al analisis para ver que habria hecho el algoritmo
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
     command: >
-      bash -c "source /opt/ros/humble/setup.bash &&
-               colcon build --symlink-install &&
-               source install/setup.bash &&
-               ros2 launch image_processor_pkg ManualLaunch.py"
+      bash -c "source /opt/ros/humble/setup.bash && colcon build --symlink-install &&
+               source install/setup.bash && ros2 launch image_processor_pkg ManualLaunch.py"
 \end{lstlisting}
