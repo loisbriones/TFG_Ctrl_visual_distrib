@@ -126,6 +126,19 @@ Los tiempos de las dos ejecuciones, recogidos en la tabla~\ref{tab:comparativa-c
 
 El problema no afecta solo al algoritmo, porque en las pruebas de conducción manual de la sección~\ref{sec:prueba-algo-vs-personas} a las personas también les cuesta más controlar el coche azul, ya que es mucho más sensible a los valores altos de PWM. La consecuencia práctica de todo esto es que no existe una configuración única válida para los dos coches y que los parámetros del algoritmo, en particular el umbral de derrape, deben ajustarse a las características del vehículo, que es lo que se comprueba en la prueba~\ref{sec:prueba-algo-parametros}.
 
+%REVISAR
+\section{Prueba PWM incremental}
+\label{sec:prueba_pwm_incremental}
+
+Como se comento en la prueba anterior durante la realización de pruebas unitarias se detectaron errores, en este caso está prueba se realizo porque también se detectaron problemas en el comportamiento del circuito. En días distintos los valores o las configuraciones aplicadas un día para un coche ya no era suficientes la día siguiente. Para demostrar este problema lo que hicimos fue utilizar una misma pista y dejar un pwm incremental durante 10 vueltas. Para este caso igual que el anterior para que no influyeran las latencias de red lo que hicimos fue lanzar todos los nodos en un mismo ordenador de forma que la red no influyera en nada sobre el control del coche. Y como queriamos aplicar un pwm constante se aplico otro modo de funcionamiento al controlador explicado en la seccion~\ref{subsec:modos-operacion}. 
+
+Se realizaron las pruebas en días distintos para demostrar como teniendo el mismo circuito en días distintos por culpa de tener que mover el circuito se detecto que no siempre se puede controlar igual. Como se puede ver en la primera gráfica hacer referencia (), si nos fijamos para un valor de 88 el coche azul ya empieza a perder el control algo que podíamos observar durante en las pruebas presentadas. Pero en cambio otro día por culpa de como se montó la pista el coche azul era capaz de aguantar hasta los 110 de PWM sin presentar derrapes graves. Y lo mismo para el coche rojo en días distintos presenta comportamientos distintos pudiendo soportar más potencia. 
+
+En las gráficas además se puede ver como para el mismo circuito incluso incrementando el valor del PWM no estamos consiguiendo una mejora en el tiempo. Por tanto el problema del circuito no solo influye en que hay que aplicar un PWM mayor ni si quiera aplicando un PWM mayor somos capaces de conseguir los mismo tiempos y además por culpa de esto el coche que nos acaba saliendo, por tanto el buen montaje también influye en el tiempo que podemos conseguir.
+
+Seguramente se deba a el montaje de las pistas a que hay que hacer bien el contacto entre los carriles o que al final son piezas mezcladas de varios tipos distintos de Scalextric lo que puede provocar que el comportamiento del coche no sea el esperado lo que hace más complicado determinar el comportamiento del coche en días distintos. Por eso que para el cargar una politica optima por ejemplo hay que tener cuidado porque puede ocurrir que un día funcione pero si montamos el Scalextric de otra forma no funcionaría. Nosotros es algo que podemos evitar con el algoritmo porque podemos relanzarlo o cambiar parametros en caliente. Aunque no sería la mejor solución este es uno de los problemas que detectamos al algoritmo no es capaz de adaptarse del todo al problema que puede tener la pista. Si el algoritmo fuera lo suficientemente bueno sería capaz de incrementar más su valor tope, pero es algo que durante el diseño no contemplamos porque no esperamos ese comportamiento al no estar reportado. 
+% TERMINA REVISION
+
 \section{Prueba de ajuste de los parámetros del algoritmo}
 \label{sec:prueba-algo-parametros}
 
@@ -336,3 +349,21 @@ Entre las configuraciones automáticas del coche rojo aparece también un detall
 La comparación entre los dos coches vuelve a aparecer aquí y con más fuerza que en el óvalo. ALGO 001 se ejecutó con exactamente la misma configuración, con el rango de 60 a 75 y el umbral en 10~px, sobre los dos vehículos, y el resultado es de 210,22~s en el azul frente a 138,23~s en el rojo, casi 72~segundos y un 52\,\% más, cuando en el óvalo la misma comparación se quedaba en un 19\,\%. Un trazado más largo y con más curvas multiplica el efecto de la diferencia de adherencia descrita en la sección~\ref{sec:prueba-comparativa-coches}, y lo hace por igual para las dos partes, porque a los pilotos el coche azul también les cuesta mucho más que el rojo.
 
 La conclusión de estas pruebas es que la ventaja del algoritmo no está en la velocidad punta sino en la capacidad de sostenerla. Un piloto humano iguala e incluso supera al sistema en una vuelta suelta, porque puede arriesgar deliberadamente donde el algoritmo se limita a lo que ha aprendido, pero no consigue repetir ese riesgo cincuenta veces sin equivocarse y en una carrera lo que cuenta es el acumulado. El circuito en ocho añade a esa conclusión un matiz relevante, y es que cuanto más exigente resulta el trazado mayor es la ventaja del sistema, porque la dificultad se le acumula al piloto vuelta tras vuelta mientras que al algoritmo solo le supone más zonas que ajustar. Esa regularidad es además consecuencia directa de la política de castigo por zonas descrita en la sección~\ref{subsec:algoritmo-aprendizaje}, que sacrifica velocidad puntual en los tramos conflictivos a cambio de no perder vueltas enteras.
+
+\section{Pruebas de red}
+\label{sec:pruebas-red}
+
+Hasta ahora la mayoría de pruebas que hicimos se hicieron todas dentro de un mismo ordenador para evitar problemas esto se hizo así para evitar pequeñas latencias qeu podía incluir la red. Durante esta sección vamos a realizar varias pruebas, para demostrar que el retardo normal no influye aunque durante las pruebas realizadas se hicieron casi todas por wifi y nunca hubo problemas. Se van a realizar en 3 escenarios distintos uno donde todo este dentro del mismo ordenador, otro donde tenemos el nodo camara conectadod por cable al router y el ordenador conectado por cable al router. Y después el mismo caso pero donde todo está conectado por wifi. Para el caso entendemos que el nodo que va a tener los controladores tiene que ser un nodo que tenga bastante potencia para tener todos los controladores corriendo para todos los coches y para también eliminar retardo de llegada entre el controlador y aplicar la tensión asumimos que el nodo controlador va a estar conectado aunque en caso de necesidad se podría tener en otro nodo corriendo. 
+
+Además también para ver hasta qeu punto la latencia afecta al control vamos a utilizar una herramienta que añade o tira paquetes para ver que pasaría si estuvieramos en un escenario complicado.
+
+
+\section{Pruebas en Circuitos Grandes}
+\label{sec:pruebas-circuitos-grande}
+
+Aparte de los resultados obtenidos en la realización de las pruebas de red, también hicimos dos circuitos un poco grandes para demostrar que la arquitectura es completamente funcional en circunstancias distribuidas con multiples camaras como también estaba pensado. Vamos a tener dos circuitos donde vamos a ver como se comporta el coche si somos capaces de controlador y ver lo qeu pasa. Para está prueab vamos va tener 2 rasberry pi 5 para controlar cada una como nodo camara y después en el ordenador vamos a tener un controlador y el nodo puente que permite controlar el arduino. 
+
+\section{Prueba nodo visualización y multiples coches}
+\label{sec:prueba-nodo-visualizacion-multiples-coches}
+
+Esta es una pequeña prueba para ver como se comporta la arquitectura con varios coches y como funciona además el nodo de visualización que tenemos creado para controlarlo 

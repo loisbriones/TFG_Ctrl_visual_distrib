@@ -135,9 +135,38 @@ Esta sección detalla cómo se implementa el algoritmo cuyo diseño se describi�
 \subsection{Instancias por cámara y coordinación entre cámaras}
 \label{subsec:algoritmo-instancias}
 
-El caso más sencillo es el de una única cámara que ve el circuito completo. De la vuelta de calibración sale una sola trayectoria base (sección~\ref{sec:trayectoria-base}) que recorre todo el trazado y sobre ella se crea una única instancia del algoritmo, con una unica zona que engloba todos los puntos de la trayectoria y todos con el mismo perfil de PWM.
+\begin{figure}[tbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{imaxes/IMPLEMENTACION/trayectoria_base_ejemplo_varias_instancias.png}
+    \caption{Trayectoria base para el circuito ovalo pequeño}
+    \label{fig:ejemplo-trayectoria-base-ovalo-para-una-camara}
+\end{figure}
 
-En cuanto se añaden más cámaras esa situación desaparece, porque ninguna ve el circuito completo, sino solo la porción que cae dentro de su campo de visión. La decisión de diseño que se tomó fue no reconstruir una trayectoria global a partir de esas vistas parciales, sino particionar la trayectoria base y trabajar con trozos. Lo que cada cámara graba durante la calibración es su porción del circuito, y cada porción da lugar a su propia instancia del algoritmo. Hay por tanto tantas instancias como cámaras, cada una responsable de su parte, y en ningún momento se construye la trayectoria base completa del circuito. En la implementación esto se traduce en que el controlador guarda los puntos de calibración en un diccionario indexado por identificador de cámara y, al cerrarse la vuelta, crea una instancia del algoritmo por cada entrada.
+El caso más sencillo es el de una única cámara que ve el circuito completo. De la vuelta de calibración sale una sola trayectoria base (sección~\ref{sec:trayectoria-base}) que recorre todo el trazado y sobre ella se crea una única instancia del algoritmo, con una unica zona que engloba todos los puntos de la trayectoria y todos con el mismo perfil de PWM, podemos ver un ejemplo de la trayectoria base que se genera para el circuito de ovalo en la figura~\ref{fig:ejemplo-trayectoria-base-ovalo-para-una-camara}.
+
+\begin{figure}[htbp]
+    \centering
+    % Primera subfigura (Rotada 180 grados y recortada 0.5cm)
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[trim=0.5cm 0.5cm 0.5cm 0.5cm, clip, angle=180, width=\textwidth]{imaxes/IMPLEMENTACION/curva_partida_base_cam01.png}
+        \caption{Trayectoria de la cámara 01}
+        \label{fig:trayectoria-base-partida-camara-01}
+    \end{subfigure}
+    \hfill
+    % Segunda subfigura (Recortada 0.5cm)
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[trim=0.5cm 0.5cm 0.5cm 0.5cm, clip, width=\textwidth]{imaxes/IMPLEMENTACION/curva_partida_base_cam02.png}
+        \caption{Trayectoria de la cámara 02}
+        \label{fig:trayectoria-base-partida-camara-02}
+    \end{subfigure}
+    
+    \caption{Trayectoria base de partida para ambas cámaras.}
+    \label{fig:trayectoria-base-partida}
+\end{figure}
+
+En cuanto se añaden más cámaras esa situación desaparece, porque ninguna ve el circuito completo, sino solo la porción que cae dentro de su campo de visión. La decisión de diseño que se tomó fue no reconstruir una trayectoria global a partir de esas vistas parciales, sino particionar la trayectoria base y trabajar con trozos. Lo que cada cámara graba durante la calibración es su porción del circuito, y cada porción da lugar a su propia instancia del algoritmo. Hay por tanto tantas instancias como cámaras, cada una responsable de su parte, y en ningún momento se construye la trayectoria base completa del circuito. En la implementación esto se traduce en que el controlador guarda los puntos de calibración en un diccionario indexado por identificador de cámara y, al cerrarse la vuelta, crea una instancia del algoritmo por cada entrada, podemos ver un ejemplo de que pasaría si tenemos varias camaras como quedaría la trayectoria base de queda camara en la figura~\ref{fig:trayectoria-base-partida}, en la figura~\ref{fig:trayectoria-base-partida-camara-01} podemos ver una parte del circuito que ve la camara 01 y después en la otra parte lo que ve la camara 02 en la otra figura~\ref{fig:trayectoria-base-partida-camara-02}, entre ambas permiten ver como se particiona la trayectoria base para una ejecución multicamara.
 
 El motivo de hacerlo así es que unir las porciones en una única trayectoria obligaría a llevarlas a un sistema de referencia común, con la calibración de las cámaras y las transformaciones que eso implica, y ese trabajo no aporta nada al control. Particionar la trayectoria evita ese esfuerzo y mantiene el algoritmo igual de sencillo que en el caso de una sola cámara, cada trayectoria vive en las coordenadas de su propia cámara.
 
@@ -147,7 +176,33 @@ La primera es la transición del coche entre cámaras. Cuando dos campos de visi
 
 La segunda es el derrape repartido entre dos cámaras. Al recibir la notificación de pérdida de visión, la instancia saliente cierra el derrape que tuviera abierto y la entrante recibe la orden de abrir uno nuevo, en caso de que el derrape siguiera activo. La zona de derrape se extiende así entre cámaras y el derrape se detecta aunque el corte entre ellas caiga en mitad de una curva.
 
-La tercera es la propagación de reducciones. Ocurre cuando un derrape se produce cerca del inicio de la porción visible de una cámara, algo habitual si una curva queda repartida entre dos. El retroceso del castigo se sale por el inicio antes de agotarse y los píxeles restantes corresponden a un tramo de otra cámara. La instancia anota ese sobrante como reducción pendiente; el controlador la recoge tras procesar cada posición y, según el orden aprendido, ordena a la cámara precedente que la aplique al final de su trayectoria, creando o ampliando allí la zona de derrape. Esa reducción externa no incrementa el contador de derrapes de quien la recibe, porque ese derrape ya lo contabilizó la cámara que lo observó, pero la zona queda protegida igual. Si tampoco cupiera en la trayectoria de la cámara anterior, el sobrante volvería a quedar pendiente y se seguiría propagando hacia atrás hasta agotarse.
+La tercera es la propagación de reducciones. Ocurre cuando un derrape se produce cerca del inicio de la porción visible de una cámara, algo habitual si una curva queda repartida entre dos. El retroceso del castigo se sale por el inicio antes de agotarse y los píxeles restantes corresponden a un tramo de otra cámara. La instancia anota ese sobrante como reducción pendiente; el controlador la recoge tras procesar cada posición y, según el orden aprendido, ordena a la cámara precedente que la aplique al final de su trayectoria, creando o ampliando allí la zona de derrape. Esa reducción externa no incrementa el contador de derrapes de quien la recibe, porque ese derrape ya lo contabilizó la cámara que lo observó, pero la zona queda protegida igual. Si tampoco cupiera en la trayectoria de la cámara anterior, el sobrante volvería a quedar pendiente y se seguiría propagando hacia atrás hasta agotarse. 
+
+\begin{figure}[htbp]
+    \centering
+    % Primera subfigura (Rotada 180 grados y recortada 0.5cm)
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[trim=0.2cm 0.2cm 0.2cm 0.2cm, clip, angle=180, width=\textwidth]{imaxes/IMPLEMENTACION/curva_partida_pwm_cam01.png}
+        \caption{Trayectoria PWM de la cámara 01}
+        \label{fig:trayectoria-pwm-partida-camara-01}
+    \end{subfigure}
+    \hfill
+    % Segunda subfigura (Recortada 0.5cm)
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[trim=0.2cm 0.2cm 0.2cm 0.2cm, clip, width=\textwidth]{imaxes/IMPLEMENTACION/curva_partida_pwm_cam02.png}
+        \caption{Trayectoria PWM de la cámara 02}
+        \label{fig:trayectoria-pwm-partida-camara-02}
+    \end{subfigure}
+    
+    \caption{Trayectoria PWM de partida para ambas cámaras.}
+    \label{fig:trayectoria-pwm-partida}
+\end{figure}
+
+% Revisar explicación
+Podemos ver el caso de como se crea una zona de derrape entre dos camaras cuando el derrape ocurre entre las dos, lo podemos ver en la figura~\ref{fig:trayectoria-pwm-partida}. Podemos ver por un lado como quedaría el pwm sobre la camara 01, en la figura~\ref{fig:trayectoria-pwm-partida-camara-01} y después podemos ver lo mismo para la camara 02 en la figura~\ref{fig:trayectoria-pwm-partida-camara-02}.
+
  
 \subsection{Localización del coche sobre la trayectoria}
 \label{subsec:algoritmo-localizacion}
