@@ -1,7 +1,7 @@
-\chapter{Listados de referencia}
+\chapter{Códigos de referencia}
 \label{chap:listados}
 
-\lettrine{E}{n} este anexo se recogen íntegras las definiciones de los mensajes propios del sistema (sección~\ref{subsec:mensajes-propios}) y los ficheros que definen su configuración y despliegue (sección~\ref{sec:configuracion_despliegue}), junto con la política que se emplea en la prueba de la sección~\ref{sec:prueba-politica-optima}. Los tres listados que se emplean como ejemplo en el cuerpo de la memoria —el mensaje \texttt{CarLocation} y el fichero de lanzamiento y el \emph{compose} del nodo de captura— están en los listados~\ref{lst:msg-carlocation}, \ref{lst:camera-launch} y~\ref{lst:compose-camera}.
+\lettrine{E}{n} este anexo se recogen íntegras las definiciones de los mensajes propios del sistema (sección~\ref{subsec:mensajes-propios}) y los ficheros que definen su configuración y despliegue (sección~\ref{sec:configuracion_despliegue}), junto con la política que se emplea en la prueba de la sección~\ref{sec:prueba-politica-optima}. El único que aparece en el cuerpo de la memoria es el mensaje \texttt{CarLocation} (código~\ref{lst:msg-carlocation}), que sirve de ejemplo del formato de los demás.
 
 \section{Definición de los mensajes}
 \label{sec:anexo-mensajes}
@@ -280,6 +280,39 @@ La política que se emplea en la prueba de la sección~\ref{sec:prueba-politica-
 \section{Ficheros de lanzamiento}
 \label{sec:anexo-launch}
 
+\begin{lstlisting}[language=Python, caption={Lanzamiento del nodo de captura (\texttt{launch/CameraLaunch.py}). Se omiten las importaciones y los comentarios del fichero.}, label={lst:camera-launch}]
+def generate_launch_description():
+    params_file = PathJoinSubstitution([
+        FindPackageShare('image_processor_pkg'), 'config', 'params.yaml'
+    ])
+    node_id = DeclareLaunchArgument(
+        'node_id',
+        default_value='camera_00',
+        description='Nombre con el que se identifica al nodo en la red ROS2'
+    )
+    camera_name = DeclareLaunchArgument(
+        'camera_name',
+        default_value='0',
+        description='ID numerico (0) o ruta entera de la camara (/dev/video0)'
+    )
+    return LaunchDescription([
+        camera_name,
+        node_id,
+        Node(
+            package='image_processor_pkg',
+            executable='CameraNode.py',
+            namespace=LaunchConfiguration('node_id'),
+            parameters=[
+                params_file,
+                {'camara_id': LaunchConfiguration('node_id')},
+                {'camera.device': LaunchConfiguration('camera_name')}
+            ],
+            respawn=True,
+            respawn_delay=2.0
+        )
+    ])
+\end{lstlisting}
+
 \begin{lstlisting}[language=Python, caption={Lanzamiento de los controladores y del nodo de actuación (\texttt{launch/BrainLaunch.py}).}, label={lst:brain-launch}]
 from launch import LaunchDescription
 from launch_ros.actions import Node
@@ -415,6 +448,30 @@ def generate_launch_description():
 
 \section{Ficheros de despliegue en contenedores}
 \label{sec:anexo-compose}
+
+\begin{lstlisting}[caption={Despliegue del nodo de captura, en cada máquina con cámara (\texttt{docker-compose-camera.yml}).}, label={lst:compose-camera}]
+services:
+  emisor:
+    build: .
+    network_mode: "host"
+    privileged: true
+    ipc: "host"
+    environment:
+      - ROS_DOMAIN_ID=42
+      - ROS_LOCALHOST_ONLY=0
+      - NODE_ID=${NODE_ID}
+      - CAMERA_DEV=${CAMERA_DEV}
+      - TZ=Europe/Madrid
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               colcon build --symlink-install &&
+               source install/setup.bash &&
+               ros2 launch image_processor_pkg CameraLaunch.py
+                    camera_name:=${CAMERA_DEV} node_id:=${NODE_ID}"
+\end{lstlisting}
 
 \begin{lstlisting}[caption={Despliegue de los controladores y del nodo de actuación en la máquina conectada al Arduino (\texttt{docker-compose-brain.yml}).}, label={lst:compose-brain}]
 services:

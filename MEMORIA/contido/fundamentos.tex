@@ -44,116 +44,71 @@ En escenarios reales, todo sistema de \textit{tracking} debe enfrentarse a facto
 \subsection{Región de interés (ROI) y extrapolación}
 \label{sec:roi}
 
-La región de interés (\gls{roi}) es un subconjunto de la imagen, generalmente rectangular,
-que delimita el área donde se espera encontrar la información relevante. Procesar únicamente
-la \gls{roi} en lugar del fotograma completo permite reducir el coste computacional y disminuir el ruido al excluir regiones irrelevantes donde podrían producirse falsas detecciones.
+La región de interés (\gls{roi}) es un subconjunto de la imagen, generalmente rectangular, que delimita el área donde se espera encontrar la información relevante. Procesar únicamente la \gls{roi} en lugar del fotograma completo permite reducir el coste computacional y disminuir el ruido al excluir regiones irrelevantes donde podrían producirse falsas detecciones. 
 
-Para situar la \gls{roi} en cada fotograma se recurre a la extrapolación lineal: conocidas
-las dos últimas posiciones del coche, $(x_{n-1}, y_{n-1})$ y $(x_n, y_n)$, la posición
-siguiente se estima:
+Para situar la \gls{roi} en cada fotograma se recurre a la extrapolación lineal: conocidas las dos últimas posiciones del coche, $(x_{n-1}, y_{n-1})$ y $(x_n, y_n)$, la posición siguiente se estima:
 \[
     x_{n+1} \approx x_n + (x_n - x_{n-1}), \qquad
     y_{n+1} \approx y_n + (y_n - y_{n-1}),
-\]
-y la ventana de búsqueda se centra en el punto predicho. Cuando la detección falla (por
-ejemplo, por una oclusión o porque el coche abandona el campo de visión de la cámara), la
-ventana se amplía progresivamente en los fotogramas siguientes hasta cubrir la imagen
-completa, garantizando la readquisición del vehículo en cuanto vuelve a ser visible.
+\] y la ventana de búsqueda se centra en el punto predicho. Cuando la detección falla (por ejemplo, por una oclusión o porque el coche abandona el campo de visión de la cámara), la ventana se amplía progresivamente en los fotogramas siguientes hasta cubrir la imagen completa, garantizando la readquisición del vehículo en cuanto vuelve a ser visible.
+
+\subsection{Interpolación}
+\label{sec:interpolacion}
+
+La interpolación es la operación complementaria a la anterior. Mientras que la extrapolación estima un valor más allá de las muestras conocidas, la interpolación estima un valor situado entre dos de ellas suponiendo que la magnitud varía de forma lineal en ese intervalo. Dadas dos muestras tomadas en los instantes $t_n$ y $t_{n+1}$, el instante en el que la magnitud alcanza un valor intermedio se obtiene repartiendo el intervalo en la proporción que le corresponde:
+\[
+    t \approx t_n + \frac{\lvert d_n \rvert}{\lvert d_n \rvert + \lvert d_{n+1} \rvert}\,(t_{n+1} - t_n),
+\] donde $d_n$ y $d_{n+1}$ son las distancias con signo de la magnitud al valor buscado en cada una de las dos muestras. En este trabajo se emplea para determinar el instante del paso por meta a partir de las marcas de tiempo de los dos fotogramas entre los que el coche cruza la línea, con una precisión mayor que la que permitiría la cadencia de captura de la cámara (sección~\ref{subsec:control-meta}).
 
 \section{Sistemas distribuidos}
 \label{sec:sistemas-distribuidos}
-Un sistema distribuido es un conjunto de computadores independientes que se presenta ante
-sus usuarios como un único sistema coherente. Sus principales ventajas son
-la escalabilidad --la capacidad de crecer añadiendo más máquinas-- y la tolerancia a fallos
---la posibilidad de que el sistema continúe funcionando aunque alguno de sus componentes
-falle--. A cambio, introduce retos que no existen en las aplicaciones monolíticas: los
-procesos no comparten memoria y deben coordinarse mediante mensajes, la red añade latencia y
-puede perder paquetes, y los fallos son parciales, es decir, una parte del sistema puede
-caer mientras el resto sigue en marcha.
+Un sistema distribuido es un conjunto de computadores independientes que se presenta ante sus usuarios como un único sistema coherente. Sus principales ventajas son la escalabilidad (la capacidad de crecer añadiendo más máquinas) y la tolerancia a fallos (la posibilidad de que el sistema continúe funcionando aunque alguno de sus componentes falle). A cambio, introduce retos que no existen en las aplicaciones monolíticas: los procesos no comparten memoria y deben coordinarse mediante mensajes, la red añade latencia y puede perder paquetes, y los fallos son parciales, es decir, una parte del sistema puede caer mientras el resto sigue en marcha.
 
-Este trabajo convierte el sistema monolítico heredado en un sistema distribuido
-precisamente para ganar escalabilidad: el número de cámaras deja de estar limitado por los
-puertos y la capacidad de procesamiento de un único ordenador. Los conceptos de esta sección
-fundamentan las decisiones de diseño tomadas para afrontar los retos mencionados.
+Este trabajo convierte el sistema monolítico heredado en un sistema distribuido precisamente para ganar escalabilidad: el número de cámaras deja de estar limitado por los puertos y la capacidad de procesamiento de un único ordenador. Los conceptos de esta sección fundamentan las decisiones de diseño tomadas para afrontar los retos mencionados.
 
 \section{Control por Modulación por Ancho de Pulso (PWM)}
 \label{sec:pwm-fundamentos}
 
-La modulación por ancho de pulso (\gls{pwm}) es una técnica que genera una señal cuadrada de
-amplitud fija que alterna entre 0\,V y la tensión de alimentación a una frecuencia
-constante, variando únicamente la proporción de tiempo en la que permanece en nivel alto,
-denominada ciclo de trabajo o \textit{duty cycle}. Aunque la salida es
-digital, la carga percibe una tensión media equivalente a la tensión de alimentación
-multiplicada por el ciclo de trabajo, emulando así un control analógico de potencia con muy
-pocas pérdidas, ya que los transistores de conmutación operan siempre completamente
-encendidos o apagados.
+La modulación por ancho de pulso (\gls{pwm}) es una técnica que genera una señal cuadrada de amplitud fija que alterna entre 0\,V y la tensión de alimentación a una frecuencia constante, variando únicamente la proporción de tiempo en la que permanece en nivel alto, denominada ciclo de trabajo o \textit{duty cycle}. Aunque la salida es digital, la carga percibe una tensión media equivalente a la tensión de alimentación multiplicada por el ciclo de trabajo, emulando así un control analógico de potencia con muy pocas pérdidas, ya que los transistores de conmutación operan siempre completamente encendidos o apagados.
 
 \section{Trabajos relacionados}
 \label{sec:traballos-relacionados}
 
-El control automático de vehículos en pistas de Scalextric es un problema con una larga
-trayectoria en entornos didácticos y de prototipado, abordado tanto por soluciones
-comerciales como por proyectos académicos. Esta sección se centra en la
-línea de TFGs en los que se cimienta este trabajo.
+El control automático de vehículos en pistas de Scalextric es un problema con una larga trayectoria en entornos didácticos y de prototipado, abordado tanto por soluciones comerciales como por proyectos académicos. Esta sección se centra en la línea de TFGs en los que se cimienta este trabajo.
 
 \subsection{Línea de trabajos previos}
 
-La línea comienza con el TFG de Miguel Fernández López, centrado en la detección y el
-seguimiento visual de un coche de Scalextric, incluyendo la identificación de sectores de la
-pista y el cálculo de tiempos de vuelta, y con el TFG de Julián Barcia Facal, que aportó el
-diseño del hardware de control basado en Arduino y señales \gls{pwm}. Ambos trabajos están
-descritos en detalle en las memorias posteriores~\cite{tfgmario,tfgadrian}.
+La línea comienza con el TFG de Miguel Fernández López, centrado en la detección y el seguimiento visual de un coche de Scalextric, incluyendo la identificación de sectores de la pista y el cálculo de tiempos de vuelta, y con el TFG de Julián Barcia Facal, que aportó el diseño del hardware de control basado en Arduino y señales \gls{pwm}. Ambos trabajos están descritos en detalle en las memorias posteriores~\cite{tfgmario,tfgadrian}.
 
 \subsection{TFG de Mario López Cea}
 \label{sec:tfg-mario}
 
-El trabajo de Mario López Cea~\cite{tfgmario} logró por primera vez en esta línea el control
-autónomo y adaptativo del coche. Con una única cámara fija sobre el circuito, el sistema
-detecta dos etiquetas de color colocadas en el coche (delantera y trasera), reconstruye su
-trayectoria, calcula su velocidad instantánea y detecta los derrapes. Sobre esta base diseñó
-dos algoritmos de control de velocidad: uno de maximización de la velocidad media y otro de
-anticipación a las zonas de derrape, que aprende las curvas peligrosas del circuito y frena
-el coche antes de alcanzarlas.
+El trabajo de Mario López Cea~\cite{tfgmario} logró por primera vez en esta línea el control autónomo y adaptativo del coche. Con una única cámara fija sobre el circuito, el sistema detecta dos etiquetas de color colocadas en el coche (delantera y trasera), reconstruye su trayectoria, calcula su velocidad instantánea y detecta los derrapes. Sobre esta base diseñó dos algoritmos de control de velocidad: uno de maximización de la velocidad media y otro de anticipación a las zonas de derrape, que aprende las curvas peligrosas del circuito y frena el coche antes de alcanzarlas.
 
-De este trabajo se heredan directamente tres elementos. El primero es el esquema de doble
-pegatina, que este proyecto mantiene como base de la detección, así como las tecnicas de evaluación de
-tiempos por etapas del procesamiento, que en este proyecto se replica de forma distribuida
-mediante mensajes de telemetría.
+De este trabajo se heredan directamente tres elementos. El primero es el esquema de doble pegatina, que este proyecto mantiene como base de la detección, así como las tecnicas de evaluación de tiempos por etapas del procesamiento, que en este proyecto se replica de forma distribuida mediante mensajes de telemetría.
 
 \subsection{TFG de Adrián Rego Criado}
 \label{sec:tfg-adrian}
 
-El trabajo de Adrián Rego~\cite{tfgadrian} extendió el sistema a circuitos grandes
-sustituyendo la cámara única por una red de cámaras con campos de visión solapados o no, que
-cubren la totalidad del trazado. Introdujo además la detección automática de los coches y de
-la línea de meta mediante segmentación por color (eliminando la configuración manual), y una interfaz gráfica organizada en paneles.
+El trabajo de Adrián Rego~\cite{tfgadrian} extendió el sistema a circuitos grandes sustituyendo la cámara única por una red de cámaras con campos de visión solapados o no, que cubren la totalidad del trazado. Introdujo además la detección automática de los coches y de la línea de meta mediante segmentación por color (eliminando la configuración manual), y una interfaz gráfica organizada en paneles.
 
-Su limitación fundamental, señalada explícitamente en su propia memoria como línea de
-trabajo futuro, es que toda la aplicación se ejecuta como un único proceso en un único
-ordenador, al que deben conectarse físicamente todas las cámaras. De este trabajo se heredan la detección automática de la línea de meta por color y
-la filosofía de calibración automática sin configuración manual, todas ellas adaptadas a la
-arquitectura de nodos distribuidos.
+Su limitación fundamental, señalada explícitamente en su propia memoria como línea de trabajo futuro, es que toda la aplicación se ejecuta como un único proceso en un único ordenador, al que deben conectarse físicamente todas las cámaras. De este trabajo se heredan la detección automática de la línea de meta por color y la filosofía de calibración automática sin configuración manual, todas ellas adaptadas a la arquitectura de nodos distribuidos.
 
 \subsection{Posicionamiento de este trabajo}
 \label{sec:posicionamento}
 
-Este proyecto recoge el testigo de ambos trabajos y aborda precisamente la evolución que el
-segundo dejaba planteada: convertir el sistema en una arquitectura distribuida. Los
-principales avances respecto a los trabajos de partida son:
+Este proyecto recoge el testigo de ambos trabajos y aborda precisamente la evolución que el segundo dejaba planteada: convertir el sistema en una arquitectura distribuida. Los principales avances respecto a los trabajos de partida son:
 
 \begin{itemize}
-    \item Descomposición de la aplicación monolítica en nodos ROS2 independientes,
-    ejecutables en máquinas distintas de la red local.
+    \item Descomposición de la aplicación monolítica en nodos ROS2 independientes, ejecutables en máquinas distintas de la red local.
 
-    \item Escalabilidad horizontal: el número de cámaras deja de estar limitado por un
-    único equipo; añadir cobertura al circuito se reduce a lanzar un nuevo nodo cámara.
+    \item Escalabilidad horizontal: el número de cámaras deja de estar limitado por un único equipo; añadir cobertura al circuito se reduce a lanzar un nuevo nodo cámara.
 
     \item Adaptación del algoritmo de control de velocidad al entorno multicámara.
 
     \item Tolerancia a fallos con reinicio automatico de los nodos.
 
-    \item Despliegue reproducible mediante contenedores Docker, sin necesidad de instalar
-    ROS2 en las máquinas.
+    \item Despliegue reproducible mediante contenedores Docker, sin necesidad de instalar ROS2 en las máquinas.
 
     \item Telemetría distribuida y herramienta de grabación y análisis de las sesiones.
 \end{itemize}

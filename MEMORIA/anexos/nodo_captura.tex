@@ -109,7 +109,7 @@ Sobre ella se aplica además la máscara de trayectoria, de modo que solo sobrev
         \caption{Región tras la intersección entre la mascara y el ROI}
         \label{fig:roi-filtrado-d}
     \end{subfigure}
-    \caption{Explicación del proceso de obtención del ROI y aplicación dentro del sistema. En el detalle, las dos flechas encadenadas son el desplazamiento medido entre los dos últimos fotogramas. La cruz marca la posición predicha, que en este fotograma cae a 1,6 píxeles de la real. El último panel es lo único que llega al detector de color.}
+    \caption{Obtención del ROI a partir del desplazamiento entre los dos últimos fotogramas (las flechas encadenadas). La cruz es la posición predicha, a 1,6~px de la real, y el último panel es lo único que llega al detector de color}
     \label{fig:roi-filtrado}
 \end{figure}
 
@@ -151,7 +151,7 @@ El procedimiento empleado para la detección de la línea de meta es el de Adri�
         \caption{Rectángulo y segmento}
         \label{fig:deteccion-meta-c}
     \end{subfigure}
-    \caption{Detección de la línea de meta en la cámara~2. Los raíles parten la etiqueta en tres trozos que el cierre morfológico vuelve a unir; sobre la región resultante se ajusta el rectángulo de área mínima, rotado, y los puntos medios de sus lados cortos dan el segmento de meta.}
+    \caption{Detección de la línea de meta en la cámara~2. Los raíles parten la etiqueta en tres trozos que el cierre morfológico vuelve a unir, y el rectángulo de área mínima que la envuelve da el segmento de meta}
     \label{fig:deteccion-meta}
 \end{figure}
 

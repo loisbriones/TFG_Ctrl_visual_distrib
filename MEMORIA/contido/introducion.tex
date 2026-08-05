@@ -1,101 +1,42 @@
 \chapter{Introducción}
 \label{chap:introducion}
 
-\lettrine{E}{n} este capítulo se exponen las motivaciones que han dado lugar al desarrollo del
-proyecto, así como los objetivos concretos que se persiguen. A continuación, se presenta la
-solución propuesta para alcanzar dichos objetivos, destacando los principales enfoques
-técnicos utilizados. Finalmente, se describe la estructura general de la memoria, detallando
-el contenido de cada uno de los capítulos que la componen.
+\lettrine{E}{n} este capítulo se exponen las motivaciones que han dado lugar al desarrollo del proyecto, así como los objetivos concretos que se persiguen. A continuación, se presenta la solución propuesta para alcanzar dichos objetivos. Finalmente, se describe la estructura general de la memoria, detallando el contenido de cada uno de los capítulos que la componen.
 
 \section{Motivación}
 \label{sec:motivacion}
 
-El impulso por la automatización y la precisión en entornos dinámicos es la principal
-motivación de este proyecto. Los coches de carreras tipo Scalextric, cuya trayectoria se
-restringe a la pista y en los que fundamentalmente hay que controlar la aceleración, son
-especialmente aptos para la aplicación de técnicas de visión por computador y de algoritmos
-de inteligencia artificial y técnicas de aprendizaje: constituyen un banco de pruebas real,
-accesible y controlado en el que experimentar con problemas de percepción y control
-en tiempo real.
+La motivación de este trabajo nace de la principal limitación de los trabajos de fin de grado anteriores de esta línea. El sistema de seguimiento y control de coches tipo Scalextric presentado el año pasado se basaba en un único equipo con varias cámaras conectadas a través de \gls{usb}, y ese enfoque monolítico arrastra una limitación estructural, ya que todas las cámaras deben conectarse físicamente a la misma máquina y tanto su número de puertos como su capacidad de procesamiento acotan el tamaño del circuito que es posible cubrir. De ahí surge la idea de este proyecto, que consiste en diseñar una arquitectura distribuida en la que el control lo realice un conjunto de nodos repartidos por una red local (wifi y/o Ethernet), de forma que el sistema pueda crecer con el circuito en lugar de estar atado a un solo ordenador.
 
-Siguiendo la línea de trabajos de fin de grado anteriores, se plantea evolucionar el sistema
-de seguimiento y control de coches tipo Scalextric presentado el año pasado, que se basaba
-en un único nodo con varias cámaras conectadas a través de \gls{usb}, hacia un enfoque donde
-el sistema de control lo realice un conjunto de nodos distribuidos conectados por una red
-local (wifi y/o Ethernet). El enfoque monolítico presenta una limitación estructural: todas
-las cámaras deben conectarse físicamente al mismo equipo, cuyo número de puertos y capacidad
-de procesamiento acotan el tamaño del circuito que es posible cubrir. La evolución hacia una
-arquitectura distribuida permite desarrollar un sistema más robusto, automático y escalable,
-adaptado a circuitos de mayor tamaño y complejidad.
+El reto central que aborda este trabajo es estudiar la viabilidad de mantener un control efectivo y eficaz de los coches en esta arquitectura, de forma que puedan circular a la máxima velocidad posible en cada tramo del circuito sin salirse en las curvas, teniendo en cuenta la latencia que introduce la red y el tiempo de procesado de todo el lazo de control (detección, seguimiento, cálculo de la velocidad máxima en cada tramo y control de la velocidad). Al repartir el trabajo entre varias máquinas, la información que antes viajaba dentro de un mismo programa pasa a hacerlo por la red, y cabe esperar que ese retardo dificulte o llegue a comprometer el control del coche, que es un problema en el que hay que decidir rápido y sobre una posición que envejece deprisa.
 
-El reto central que aborda este trabajo es estudiar la viabilidad de mantener un control
-efectivo y eficaz de los coches en esta arquitectura, de forma que puedan circular a la
-máxima velocidad posible en cada tramo del circuito sin salirse en las curvas, teniendo en
-cuenta la latencia que introduce la red y el tiempo de procesado de todo el lazo de control:
-detección, seguimiento, cálculo de la velocidad máxima en cada tramo y control de la
-velocidad.
-
-El desarrollo propuesto puede servir de ayuda en el entrenamiento de las carreras de coches
-Scalextric o para determinar el mejor tiempo posible en un circuito. Además, el proyecto
-podría iterarse en el futuro para diseñar mecanismos en los que varios coches del mismo
-circuito colaboren y aprendan de forma conjunta.
+La tercera motivación es aprovechar esa misma arquitectura para monitorizar el sistema. Al circular toda la información por la red, cualquier equipo puede escucharla sin interferir en el control, lo que permite ver en tiempo real lo que está haciendo el coche y guardar la sesión para estudiarla después. Con ello se puede ayudar al entrenamiento en pista, buscar el mejor tiempo posible en un circuito o simplemente presentar de forma visual lo que ocurre durante la carrera.
 
 \section{Objetivos del trabajo}
 \label{sec:obxectivos}
 
-El objetivo general del proyecto es evolucionar el sistema de control visual de coches tipo
-Scalextric hacia una arquitectura distribuida capaz de operar en tiempo real sobre circuitos
-de cualquier tamaño. Este objetivo general se concreta en los siguientes objetivos
-específicos:
+El objetivo general del proyecto es evolucionar el sistema de control visual de coches tipo Scalextric hacia una arquitectura distribuida capaz de operar en tiempo real sobre circuitos de cualquier tamaño. Este objetivo general se concreta en los siguientes objetivos específicos:
 
 \begin{itemize}
-    \item Diseñar una arquitectura modular para el control visual distribuido en tiempo
-    real de la velocidad de cada coche en un circuito tipo Scalextric, usando varios nodos
-    de detección y procesamiento conectados en una red local.
+    \item Diseñar una arquitectura modular para el control visual distribuido en tiempo real de la velocidad de cada coche en un circuito tipo Scalextric, usando varios nodos de detección y procesamiento conectados en una red local.
 
-    \item Analizar las latencias de las comunicaciones de los diferentes nodos en la red
-    local (bien wifi, bien Ethernet), así como los tiempos de computación de cada etapa del
-    procesamiento, factores decisivos para lograr un control efectivo en tiempo real.
+    \item Analizar las latencias de las comunicaciones de los diferentes nodos en la red local (bien wifi, bien Ethernet), así como los tiempos de computación de cada etapa del procesamiento, factores decisivos para lograr un control efectivo en tiempo real.
 
-    \item Diseñar y evaluar la detección y el seguimiento en tiempo real de la posición de
-    cada coche en el circuito, empleando las cámaras necesarias, con o sin solapamiento
-    entre sus campos de visión.
+    \item Diseñar y evaluar la detección y el seguimiento en tiempo real de la posición de cada coche en el circuito, empleando las cámaras necesarias, con o sin solapamiento entre sus campos de visión.
 
-    \item Diseñar y evaluar el algoritmo de control adaptativo de la velocidad instantánea
-    de cada coche en la arquitectura de control distribuida propuesta.
+    \item Diseñar y evaluar el algoritmo de control adaptativo de la velocidad instantánea de cada coche en la arquitectura de control distribuida propuesta.
 
-    \item Evaluar la arquitectura propuesta en condiciones reales de operación, midiendo el
-    rendimiento, la latencia y la robustez del sistema.
+    \item Evaluar la arquitectura propuesta en condiciones reales de operación, midiendo el rendimiento, la latencia y la robustez del sistema.
 \end{itemize}
 
 \section{Propuesta de solución}
 \label{sec:proposta}
 
-Para implementar la arquitectura distribuida se emplea \gls{ros2}, un conjunto de
-middleware, bibliotecas y herramientas de código abierto diseñado para el desarrollo de
-aplicaciones robóticas complejas y escalables. Su adopción facilita el modelado del diseño
-propuesto y garantiza la extensibilidad del sistema en el futuro; asimismo, simplifica la
-gestión de las comunicaciones gracias a que incorpora protocolos de red optimizados y listos
-para operar en tiempo real.
+Para implementar la arquitectura distribuida se emplea \gls{ros2}, un conjunto de middleware, bibliotecas y herramientas de código abierto diseñado para el desarrollo de aplicaciones robóticas complejas y escalables. Su adopción facilita el modelado del diseño propuesto y garantiza la extensibilidad del sistema en el futuro; asimismo, simplifica la gestión de las comunicaciones gracias a que incorpora protocolos de red optimizados y listos para operar en tiempo real.
 
-Sobre este middleware, el sistema se descompone en tres tipos de nodos que cooperan a través
-de la red: un nodo cámara por cada cámara física, ejecutable en cualquier equipo de la red
-local, que detecta la posición de los coches mediante segmentación por color; un nodo
-controlador por cada rail que tengamos en circuito y por el que pueda circular un coche. 
-Reconstruye la trayectoria del circuito durante una vuelta de calibración y ajusta en tiempo real 
-la velocidad que hay que aplicar al carril en función de la posición junto con el comportamiento del vehículo; 
-y un nodo puente que traduce las consignas de velocidad en
-señales \gls{pwm} enviadas al Arduino que alimenta los carriles. El algoritmo de control
-heredado de los trabajos anteriores se actualiza para soportar este procesamiento
-distribuido, buscando maximizar el rendimiento sin comprometer la estabilidad.
+La propuesta consiste en coger la aplicación monolítica heredada, desacoplarla por completo y repartirla en tres funcionalidades bien delimitadas, que se convierten en los tres tipos de nodo del sistema. El \emph{nodo cámara} localiza al coche en la pista, el \emph{nodo de control} decide qué potencia hay que aplicarle y el \emph{nodo de potencia} es el único que actúa sobre el circuito. Cada uno se ejecuta por separado y solo se comunican intercambiando mensajes por la red, de modo que pueden repartirse entre las máquinas disponibles según convenga. El capítulo~\ref{chap:arquitectura} detalla el papel de cada nodo y cómo encajan entre sí.
 
-Los tiempos de computación, la resolución de las imágenes, la latencia de las comunicaciones
-y los retardos en el control \gls{pwm} son decisivos para lograr un control efectivo en
-tiempo real, por lo que el sistema incorpora telemetría en todas sus etapas y herramientas
-de grabación y análisis de las sesiones. La solución se completa con mecanismos de robustez
-ante fallos y perturbaciones. También se realiza la publicación en tiempo real de información de interés: las imágenes procesadas por las cámaras, la posición de cada
-coche y los tiempos por vuelta. Todo el sistema se despliega de forma reproducible mediante
-contenedores Docker.
+Con este reparto el sistema deja de estar limitado por un único equipo, y añadir cobertura al circuito se reduce a levantar un nodo cámara más. El algoritmo de control heredado de los trabajos anteriores se adapta a este funcionamiento distribuido, en el que cada nodo de control trabaja con la información parcial que le llega de varias cámaras. La solución se plantea además como una base sobre la que construir mejoras posteriores, y se completa con herramientas que recogen la información que circula por la red para verla durante la carrera y analizarla después. Todo el sistema se despliega de forma reproducible mediante contenedores Docker.
 
 \section{Estructura de la memoria}
 \label{sec:estrutura}
@@ -103,38 +44,21 @@ contenedores Docker.
 La memoria de este Trabajo de Fin de Grado se organiza en los siguientes capítulos:
 
 \begin{itemize}
-    \item \textbf{Capítulo 1. Introducción:} Se presenta el contexto general del proyecto,
-    las motivaciones que lo impulsan, los objetivos planteados, la solución propuesta y la
-    estructura que seguirá la memoria.
+    \item \textbf{Capítulo 1. Introducción:} Se presenta el contexto general del proyecto, las motivaciones que lo impulsan, los objetivos planteados, la solución propuesta y la estructura que seguirá la memoria.
 
-    \item \textbf{Capítulo 2. Tecnologías:} Se describen las tecnologías utilizadas durante
-    el desarrollo del proyecto, tanto a nivel de hardware como de software.
+    \item \textbf{Capítulo 2. Tecnologías:} Se describen las tecnologías utilizadas durante el desarrollo del proyecto, tanto a nivel de hardware como de software.
 
-    \item \textbf{Capítulo 3. Fundamentos teóricos y trabajos relacionados:} Se explican los
-    conceptos técnicos relevantes y se revisan los trabajos previos que sirven como base o
-    referencia para este proyecto.
+    \item \textbf{Capítulo 3. Fundamentos teóricos y trabajos relacionados:} Se explican los conceptos técnicos relevantes y se revisan los trabajos previos que sirven como base o referencia para este proyecto.
 
-    \item \textbf{Capítulo 4. Desarrollo del proyecto:} Se detallan los requisitos del
-    sistema, la metodología seguida, la planificación de tareas y los recursos empleados
-    durante el proceso de desarrollo.
+    \item \textbf{Capítulo 4. Desarrollo del proyecto:} Se detallan los requisitos del sistema, la metodología seguida, la planificación de tareas y los recursos empleados durante el proceso de desarrollo.
 
-    \item \textbf{Capítulo 5. Arquitectura y diseño:} Se expone la arquitectura general del
-    sistema distribuido y las fases por las que pasa, la trayectoria base sobre la que se
-    apoya, los mensajes que intercambian los nodos y el algoritmo de control.
+    \item \textbf{Capítulo 5. Arquitectura y diseño:} Se expone la arquitectura general del sistema distribuido y las fases por las que pasa, la trayectoria base sobre la que se apoya, los mensajes que intercambian los nodos y el algoritmo de control.
 
-    \item \textbf{Capítulo 6. Implementación del diseño:} Se describe cómo se construyó cada
-    pieza: la concurrencia interna de los nodos, la detección del coche y del paso por meta,
-    el algoritmo de velocidad, el sistema hardware, las herramientas de grabación y análisis
-    y el despliegue del sistema.
+    \item \textbf{Capítulo 6. Implementación del diseño:} Se describe cómo se construyó cada pieza: la concurrencia interna de los nodos, la detección del coche y del paso por meta, el algoritmo de velocidad, el sistema hardware, las herramientas de grabación y análisis y el despliegue del sistema.
 
-    \item \textbf{Capítulo 7. Pruebas:} Se presentan las pruebas realizadas para verificar
-    el funcionamiento del sistema, junto con los resultados obtenidos y su análisis.
+    \item \textbf{Capítulo 7. Pruebas:} Se presentan las pruebas realizadas para verificar el funcionamiento del sistema, junto con los resultados obtenidos y su análisis.
 
-    \item \textbf{Capítulo 8. Conclusiones y trabajo futuro:} Se recogen las conclusiones
-    del trabajo, se evalúa el grado de cumplimiento de los objetivos, se comentan las
-    dificultades encontradas y se proponen posibles líneas de mejora o continuidad.
+    \item \textbf{Capítulo 8. Conclusiones y trabajo futuro:} Se recogen las conclusiones del trabajo, se evalúa el grado de cumplimiento de los objetivos, se comentan las dificultades encontradas y se proponen posibles líneas de mejora o continuidad.
 \end{itemize}
 
-La memoria se completa con cuatro apéndices, que recogen las instrucciones de ejecución del
-sistema, el detalle del nodo de captura y del nodo de actuación, y los listados de código y
-de configuración a los que se hace referencia a lo largo del texto.
+La memoria se completa con cuatro apéndices, que recogen las instrucciones de ejecución del sistema, el detalle del nodo de captura y del nodo de actuación, y los códigos y ficheros de configuración a los que se hace referencia a lo largo del texto.

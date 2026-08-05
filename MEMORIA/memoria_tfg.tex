@@ -64,6 +64,12 @@
 \setcounter{topnumber}{3}               % flotantes que caben na cabeceira dunha páxina
 \setcounter{totalnumber}{4}             % flotantes que caben nunha páxina, en total
 
+%%% NOME DOS ENTORNOS DE CÓDIGO %%%
+% estilo_tfg.sty chámalles "Listado". Chámanse "Código" nesta memoria, e o índice que os
+% recolle (\lstlistoflistings, xunto co de figuras e o de táboas) "Índice de códigos".
+\renewcommand{\lstlistingname}{Código}
+\renewcommand{\lstlistlistingname}{Índice de códigos}
+
 %%% ESTILO COMÚN DAS TÁBOAS %%%
 % Aplícase xusto detrás do \centering de cada \begin{table}. Os tons son os da paleta
 % definida en estilo_tfg.sty, a mesma dos esquemas da arquitectura, para que as táboas
@@ -104,6 +110,7 @@
  \tableofcontents
  \listoffigures
  \listoftables
+ \lstlistoflistings
  \clearpage
  
  \pagenumbering{arabic}

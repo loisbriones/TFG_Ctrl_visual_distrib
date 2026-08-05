@@ -1,11 +1,7 @@
 \chapter{Tecnologías}
 \label{chap:tecnologias}
 
-\lettrine{E}{n} este capítulo se describen las tecnologías software y hardware utilizadas en
-el desarrollo del proyecto. Se detallan el lenguaje de programación empleado, el middleware
-de comunicación que permite crear la arquitectura distribuida, las principales librerías y
-herramientas integradas, así como los dispositivos físicos que permiten la interacción entre 
-el sistema y los coches del circuito.
+\lettrine{E}{n} este capítulo se describen las tecnologías software y hardware utilizadas en el desarrollo del proyecto. Se detallan el lenguaje de programación empleado, el middleware de comunicación que permite crear la arquitectura distribuida, las principales librerías y herramientas integradas, así como los dispositivos físicos que permiten la interacción entre  el sistema y los coches del circuito.
 
 
 \section{Herramientas de desarollo software}
@@ -15,10 +11,11 @@ el sistema y los coches del circuito.
 
 Python es un lenguaje de programación de código abierto, interpretado y de tipado dinámico, lo que significa que no requiere especificar el tipo de las variables de forma explícita y que el código se ejecuta directamente mediante un intérprete, sin necesidad de compilación previa~\cite{python}.
 
-Admite múltiples paradigmas de programación, como la orientación a objetos, la programación funcional y la programación por procedimientos, y es multiplataforma, lo que permite ejecutar el mismo programa en distintos sistemas operativos sin modificaciones. Su extenso ecosistema de librerías científicas y de visión artificial, junto con su sintaxis clara, lo han convertido en uno de los lenguajes más populares en la actualidad.  En este proyecto, Python es el único lenguaje empleado en el sistema principal: todos los nodos de la arquitectura distribuida están implementados en Python sobre la librería \texttt{rclpy} de ROS2.
-% TODO: Si documentas el firmware del Arduino, añade aquí un subsubsection breve sobre
-% C/C++ (lenguaje del sketch), como hacen Mario y Adrián.
+Admite múltiples paradigmas de programación, como la orientación a objetos, la programación funcional y la programación por procedimientos, y es multiplataforma, lo que permite ejecutar el mismo programa en distintos sistemas operativos sin modificaciones. Su extenso ecosistema de librerías científicas y de visión artificial, junto con su sintaxis clara, lo han convertido en uno de los lenguajes más populares en la actualidad.  En este proyecto es el lenguaje de todos los nodos de la arquitectura distribuida, implementados sobre la librería \texttt{rclpy} de ROS2, y también el de las herramientas de grabación y análisis de las sesiones.
+
 \subsubsection{C++}
+
+C++ es un lenguaje compilado de propósito general, con tipado estático y capaz de trabajar cerca del hardware, lo que lo convierte en la opción habitual para programar microcontroladores~\cite{cpp}. En este proyecto se emplea en el firmware de la placa Arduino (sección~\ref{sec:tecnoloxias-hardware}), que es la única parte del sistema que no está escrita en Python. Ese firmware lee por el puerto serie los valores que le envía el nodo de potencia y los aplica como ciclo de trabajo de la señal \gls{pwm} de cada carril, que es la que ataca al módulo controlador L293D.
 
 \subsection{Librerías}
 \subsubsection{OpenCV}
@@ -28,6 +25,15 @@ NumPy es una librería optimizada para el cálculo numérico con arreglos multid
 
 \subsubsection{pyserial}
 Pyserial permite establecer comunicación serie entre Python y dispositivos externos como microcontroladores~\cite{pyserial}. En este proyecto se emplea en el nodo puente para enviar los comandos de velocidad al Arduino a través del puerto \gls{usb}, así como para recibir las confirmaciones de la placa.
+
+\subsubsection{Plotly}
+Plotly es una librería de generación de gráficas interactivas que se visualizan en un navegador~\cite{plotly}. Con ella se construyen todas las figuras de la herramienta de análisis en diferido, que se entrega como una página web. El complemento \texttt{kaleido} permite además exportar esas mismas figuras a PDF vectorial desde el propio servidor, sin abrir el navegador, para poder incorporarlas a esta memoria.
+
+\subsubsection{pandas}
+Pandas es una librería de análisis de datos que organiza la información en tablas indexadas~\cite{pandas}. Se emplea en las herramientas de análisis para volcar en tablas los registros que deja el algoritmo de control y los mensajes leídos de las grabaciones, y calcular sobre ellas las métricas de cada sesión, como los tiempos por vuelta o el número de derrapes.
+
+\subsubsection{Módulos estándar de Python}
+La librería estándar de Python cubre el resto de necesidades del proyecto sin añadir dependencias. El módulo \texttt{json} guarda y recupera del disco las trayectorias aprendidas en la calibración, \texttt{os} construye las rutas y gestiona los ficheros de registro, \texttt{math} resuelve los cálculos geométricos puntuales que no llegan a justificar una operación vectorizada, \texttt{re} extrae mediante expresiones regulares los datos de los registros del algoritmo durante el análisis y \texttt{csv} exporta las tablas resultantes.
 
 \subsubsection{threading y concurrent.futures}
 Los módulos estándar \texttt{threading} y \texttt{concurrent.futures} permiten ejecutar tareas en paralelo dentro de un mismo proceso. En el nodo cámara se emplean para desacoplar la captura de vídeo del procesamiento (un hilo dedicado actualizar el buffer de la cámara) y para buscar en paralelo las pegatinas de varios coches sobre el mismo fotograma mediante un \textit{pool} de hilos.
@@ -44,50 +50,32 @@ Docker Compose complementa a Docker permitiendo describir en un fichero \gls{yam
 
 \subsubsection{Visual Studio Code}
 
-Visual Studio Code es un editor de código fuente gratuito y multiplataforma desarrollado por
-Microsoft~\cite{vscode}. Ofrece resaltado de sintaxis, autocompletado, depuración integrada
-y un amplio ecosistema de extensiones, entre ellas las de Python y ROS2, que facilitan el
-desarrollo y la depuración del proyecto.
+Visual Studio Code es un editor de código fuente gratuito y multiplataforma desarrollado por Microsoft~\cite{vscode}. Ofrece resaltado de sintaxis, autocompletado, depuración integrada y un amplio ecosistema de extensiones, entre ellas las de Python y ROS2, que facilitan el desarrollo y la depuración del proyecto.
 
 \subsubsection{Arduino IDE}
 
-Es el entorno de desarrollo oficial utilizado para programar placas Arduino~\cite{arduinoide}.
-Permite escribir el código del microcontrolador en un lenguaje basado en C/C++, compilarlo y
-cargarlo en la placa mediante la conexión serie. En este proyecto se emplea para cargar el
-firmware que interpreta los comandos de velocidad y genera las señales \gls{pwm} de los
-carriles.
+Es el entorno de desarrollo oficial utilizado para programar placas Arduino~\cite{arduinoide}. Permite escribir el código del microcontrolador en un lenguaje basado en C/C++, compilarlo y cargarlo en la placa mediante la conexión serie. En este proyecto se emplea para cargar el firmware que interpreta los comandos de velocidad y genera las señales \gls{pwm} de los carriles.
 
 \subsection{Control de versiones}
 \subsubsection{Git}
-Git es un sistema de control de versiones distribuido~\cite{git}. Todo el desarrollo del
-proyecto se ha gestionado con Git, empleando ramas para las líneas de trabajo principales y
-una convención de mensajes de \textit{commit} con etiquetas por funcionalidad (por ejemplo
-\texttt{[FUN-\allowbreak FINDCOLOR]}, o \texttt{[ALGO-CTRL]}) que facilita reconstruir la
-evolución del sistema.
+Git es un sistema de control de versiones distribuido~\cite{git}. Todo el desarrollo del proyecto se ha gestionado con Git, empleando ramas para las líneas de trabajo principales y una convención de mensajes de \textit{commit} con etiquetas por funcionalidad (por ejemplo \texttt{[FUN-\allowbreak FINDCOLOR]}, o \texttt{[ALGO-CTRL]}) que facilita reconstruir la evolución del sistema.
 
 \subsection{Formatos de datos}
 
 \subsubsection{YAML}
 
-El formato \gls{yaml} permite representar datos estructurados de forma legible para humanos
-y máquinas~\cite{pyyaml}. Es el formato estándar de configuración en ROS2 y de Docker
-Compose. En este proyecto centraliza toda la configuración del sistema en un único fichero
-de parámetros: colores de las pegatinas y de la meta, resolución de las cámaras, umbrales
-del algoritmo de control o el puerto del Arduino, entre otros.
+El formato \gls{yaml} permite representar datos estructurados de forma legible para humanos y máquinas~\cite{pyyaml}. Es el formato estándar de configuración en ROS2 y de Docker Compose. En este proyecto centraliza toda la configuración del sistema en un único fichero de parámetros: colores de las pegatinas y de la meta, resolución de las cámaras, umbrales del algoritmo de control o el puerto del Arduino, entre otros.
 
 \subsubsection{JSON}
 
-El formato \gls{json} es un estándar ligero de intercambio de datos basado en texto. Se
-emplea para persistir en disco las trayectorias obtenidas durante la vuelta de calibración
-(tanto las de cada cámara como las del controlador), de forma que en arranques posteriores
-el sistema pueda cargarlas y omitir la calibración.
+El formato \gls{json} es un estándar ligero de intercambio de datos basado en texto. Se emplea para persistir en disco las trayectorias obtenidas durante la vuelta de calibración (tanto las de cada cámara como las del controlador), de forma que en arranques posteriores el sistema pueda cargarlas y omitir la calibración.
 
 \section{ROS2}
 \label{sec:ros2}
 
 ROS2 (\textit{Robot Operating System 2}) es un conjunto de librerías y herramientas de código abierto para construir aplicaciones para robots~\cite{ros2docs}. A pesar de su nombre, no se trata de un sistema operativo, sino de un middleware que proporciona la infraestructura de comunicación, el sistema de construcción y las utilidades necesarias para componer aplicaciones a partir de procesos independientes llamados \textit{nodos}. En este trabajo se ha utilizado la distribución \textit{Humble Hawksbill}~\cite{ros2docs}, versión con soporte extendido (\gls{lts}) publicada en 2022.
 
-ROS2 constituye la columna vertebral de la arquitectura de este proyecto, del que se emplean los siguientes conceptos. De cada uno se da aquí la idea necesaria para seguir el resto de la memoria, junto con la referencia a la documentación oficial en la que puede ampliarse.
+ROS2 constituye la columna vertebral de la arquitectura de este proyecto, ya que sobre él se construyen tanto los nodos como todo lo que intercambian. Por ese motivo, las subsecciones que siguen recogen los conceptos de ROS2 que se emplean a lo largo de la memoria, cada uno con la idea justa para poder seguirla y con la referencia a la documentación oficial en la que puede ampliarse.
 
 \subsection{Nodos}
 \label{sec:ros2-nodos}
@@ -113,9 +101,11 @@ Scripts de lanzamiento que permiten arrancar varios nodos junto con sus configur
 \label{sec:ros2-namespaces}
 Es un mecanismo de encapsulación jerárquica que agrupa identificadores del sistema (nodos, tópicos, servicios o parámetros) bajo un prefijo de ruta común, de forma análoga a los directorios de un sistema de ficheros~\cite{ros2names}. Un nodo lanzado dentro de un \textit{namespace} ve resueltos sus nombres relativos bajo ese prefijo, de modo que el mismo código sirve para varias instancias sin colisionar entre ellas.
 
+Es lo que permite que en este proyecto haya un nodo de control por coche sin escribir un nodo distinto para cada uno. El nodo publica siempre en un tópico relativo llamado \texttt{pwd}, pero la instancia que se lanza en el \textit{namespace} \texttt{car1} acaba publicando en \texttt{/car1/pwd} y la que se lanza en \texttt{car2} lo hace en \texttt{/car2/pwd}, cada una escuchando también las posiciones de su propio coche en \texttt{/car1/position} y \texttt{/car2/position}. Con las cámaras ocurre lo mismo, ya que cada nodo cámara arranca en el \textit{namespace} de la cámara que gestiona.
+
 \subsection{Executors y \emph{callback groups}}
 \label{sec:ros2-executors}
-Un nodo atiende su trabajo mediante \textit{callbacks}, funciones que se disparan al llegar un mensaje o al vencer un temporizador (\textit{timer}), una tarea periódica que el propio nodo programa. El \textit{executor} es quien decide qué \textit{callback} se ejecuta y en qué hilo~\cite{ros2executors}. El más sencillo los atiende de uno en uno; el \texttt{MultiThreadedExecutor} dispone de varios hilos y puede atenderlos a la vez. Los \textit{callback groups} controlan ese paralelismo: los de un grupo mutuamente excluyente (\texttt{MutuallyExclusiveCallbackGroup}) nunca se ejecutan simultáneamente entre sí, mientras que los de grupos distintos sí pueden hacerlo.
+Un nodo atiende su trabajo mediante \textit{callbacks}, funciones que se disparan al llegar un mensaje o al vencer un temporizador (\textit{timer}), una tarea periódica que el propio nodo programa. El \textit{executor} es quien decide qué \textit{callback} se ejecuta y en qué hilo~\cite{ros2executors}. El más sencillo los atiende de uno en uno; el \texttt{MultiThreadedExecutor} dispone de varios hilos y puede atenderlos a la vez. Ese paralelismo se controla con los \textit{callback groups}, ya que los \textit{callbacks} de un mismo grupo mutuamente excluyente (\texttt{MutuallyExclusiveCallbackGroup}) nunca se ejecutan a la vez entre sí, mientras que los de grupos distintos sí pueden hacerlo.
 
 \subsection{Grabación de datos: rosbag2}
 \label{sec:ros2-rosbag}
@@ -135,7 +125,7 @@ El paradigma encaja de forma natural en el problema de este proyecto: cada nodo 
 \subsection{Middleware DDS y calidad de servicio (QoS)}
 \label{sec:dds-qos}
 
-\gls{dds} es un estándar de middleware publicador/suscriptor orientado a sistemas de tiempo real, definido por el Object Management Group~\cite{ddsspec}, sobre el que ROS2 construye toda su capa de comunicación. Dos de sus características son especialmente relevantes para este trabajo. La primera es el descubrimiento automático: los participantes de un mismo dominio (identificado por un número, el \textit{domain ID}~\cite{ros2domainid}) se anuncian periódicamente en la red local y establecen las conexiones entre publicadores y suscriptores sin ninguna configuración manual de direcciones y sin ningún proceso maestro. La segunda es la calidad de servicio (\gls{qos}~\cite{ros2qos}): cada publicador y suscriptor declara sus garantías de entrega mediante un conjunto de políticas, entre las que destacan:
+\gls{dds} es un estándar de middleware publicador/suscriptor orientado a sistemas de tiempo real, definido por el Object Management Group~\cite{ddsspec}, sobre el que ROS2 construye toda su capa de comunicación. Dos de sus características son especialmente relevantes para este trabajo. La primera es el descubrimiento automático, por el que los participantes de un mismo dominio (identificado por un número, el \textit{domain ID}~\cite{ros2domainid}) se anuncian periódicamente en la red local y establecen las conexiones entre publicadores y suscriptores sin ninguna configuración manual de direcciones y sin ningún proceso maestro. Esos anuncios se envían por multicast, de forma que un participante nuevo llega a todos los demás sin conocer sus direcciones, y de ahí que el sistema necesite una red local que permita el tráfico multicast y que los contenedores empleen la pila de red de la máquina que los ejecuta (sección~\ref{subsec:despliegue-docker}). La segunda característica es la calidad de servicio (\gls{qos}~\cite{ros2qos}), con la que cada publicador y suscriptor declara sus garantías de entrega mediante un conjunto de políticas, entre las que destacan:
 
 \begin{itemize}
 \item \textbf{Fiabilidad (\textit{reliability}):} en modo \textit{reliable} el middleware reenvía los mensajes perdidos hasta confirmar su entrega; en modo \textit{best effort} los mensajes se envían una única vez y pueden perderse.
@@ -186,44 +176,23 @@ La elección de estas políticas supone un compromiso entre latencia y garantía
 
 % TODO: Confirma marca y modelo del circuito y de los coches (Mario y Adrián usaron pista
 % analógica Carrera línea EVOLUTION y coche Carrera 27495).
-Se emplea un circuito analógico de coches tipo \textit{slot} con dos carriles alimentados de
-forma independiente, de modo que la tensión aplicada a cada carril determina la velocidad
-del coche que circula por él. Sobre los coches se colocan dos pegatinas de colores
-distintivos, una delantera y otra trasera, que el sistema de visión utiliza para determinar
-su posición y orientación. Además, sobre la pista se sitúa una marca de color en la línea de
-meta, que el sistema detecta automáticamente para contabilizar vueltas y finalizar la
-calibración. La parte delantera del coche va guiada por la ranura del carril, mientras que la
-trasera no lleva imán y es la que se abre en las curvas al superar la adherencia, que es justo
-lo que el sistema interpreta como un derrape. Este entorno físico constituye el escenario sobre
-el que interactúan la red de cámaras y el control hardware del sistema.
+Se emplea un circuito analógico de coches tipo \textit{slot} con dos carriles alimentados de forma independiente, de modo que la tensión aplicada a cada carril determina la velocidad del coche que circula por él. Sobre los coches se colocan dos pegatinas de colores distintivos, una delantera y otra trasera, que el sistema de visión utiliza para determinar su posición y orientación. Además, sobre la pista se sitúa una marca de color en la línea de meta, que el sistema detecta automáticamente para contabilizar vueltas y finalizar la calibración. La parte delantera del coche va guiada por la ranura del carril, mientras que la trasera no lleva imán y se abre en las curvas cuando el coche entra más rápido de lo que los neumáticos aguantan, que es justo lo que el sistema interpreta como un derrape.
 
 \subsection{Placa Elegoo Uno R3}
 
-La placa Elegoo Uno R3 es una réplica compatible de la placa Arduino Uno R3, basada en el
-microcontrolador ATmega328P. Dispone de entradas y salidas digitales y analógicas y de
-conexión \gls{usb}, y es totalmente compatible con el \gls{ide} oficial de Arduino. Su
-función en el sistema es recibir por el puerto serie los comandos de velocidad enviados por
-el nodo puente y generar las señales \gls{pwm} correspondientes para cada carril, actuando
-como intermediario entre el software y el mundo físico.
+La placa Elegoo Uno R3 es una réplica compatible de la placa Arduino Uno R3, basada en el microcontrolador ATmega328P. Dispone de entradas y salidas digitales y analógicas y de conexión \gls{usb}, y es totalmente compatible con el \gls{ide} oficial de Arduino. Su función en el sistema es recibir por el puerto serie los comandos de velocidad enviados por el nodo puente y generar las señales \gls{pwm} correspondientes para cada carril, actuando como intermediario entre el software y el mundo físico.
 
 \subsection{Módulo controlador L293D}
 
-El L293D es un circuito integrado que implementa dos puentes en H, lo que permite controlar
-dos flujos de corriente simultáneos e independientes. Se emplea habitualmente como
-controlador de motores de corriente continua. 
+El L293D es un circuito integrado que implementa dos puentes en H, lo que permite controlar dos flujos de corriente simultáneos e independientes. Se emplea habitualmente como controlador de motores de corriente continua. 
 
 \subsection{Webcams Microsoft LifeCam HD-5000}
 
 % TODO: Confirma el modelo y el número de cámaras empleadas.
-Las cámaras utilizadas son webcams Microsoft LifeCam HD-5000, capaces de capturar vídeo en
-alta definición (720p) a 30 fotogramas por segundo a través de \gls{usb}. Cada cámara se
-sitúa sobre una parte del trazado, de forma que el conjunto cubra el circuito completo. Para
-reducir el ancho de banda \gls{usb} se solicita a la cámara el flujo comprimido en
-\gls{mjpg}, y se desactiva el autoenfoque para evitar variaciones de imagen durante la
-carrera.
+Las cámaras utilizadas son webcams Microsoft LifeCam HD-5000, capaces de capturar vídeo en alta definición (720p) a 30 fotogramas por segundo a través de \gls{usb}. Cada cámara se sitúa sobre una parte del trazado, de forma que el conjunto cubra el circuito completo. Para reducir el ancho de banda \gls{usb} se solicita a la cámara el flujo comprimido en \gls{mjpg}, y se desactiva el autoenfoque para evitar variaciones de imagen durante la carrera.
 
 \subsection{Raspberry Pi 5}
-Estan equipadas con un procesador ARM Cortex-A76 de cuatro núcleos de 64 bits a 2,4 GHz, 4GB de RAM y puertos USB 3.0. En la arquitectura del sistema, este dispositivo se uso para conectar las cámaras y ejecutar los nodos de captura de ROS 2, adquiriendo las imágenes y publicando la posición del coche en tiempo real en la red para su posterior procesamiento.
+Están equipadas con un procesador ARM Cortex-A76 de cuatro núcleos de 64 bits a 2,4 GHz, 8 GB de \gls{ram} y puertos \gls{usb} 3.0. Al ser un ordenador completo con Linux, puede ejecutar cualquiera de los nodos del sistema, y de hecho la arquitectura no le asigna ningún papel fijo. En las pruebas de este trabajo se destinaron a los nodos de captura, conectándoles las cámaras para que adquirieran las imágenes y publicaran en la red la posición del coche en tiempo real.
 
 \subsection{ASUS Vivobook S 14}
 Esta equipado con un procesador AMD Ryzen AI 9 HX 370 de 12 núcleos a una frecuencia de hasta 5,16 GHz, gráficos integrados AMD Radeon 890M, 32 GB de memoria RAM LPDDR5X y 1 TB de almacenamiento SSD NVMe. El equipo opera bajo el sistema operativo Linux CachyOS en arquitectura x86\_64. Duranta las ejecuciones era donde iban los nodos de control y el nodo puente, al tener la conexión serie hacia el Arduino.
