@@ -339,7 +339,7 @@ Tanto el montaje como la comunicación con la placa son los del trabajo de Adri�
 \section{Sistema de visualización y análisis}
 \label{sec:sistema-visualizacion}
 
-El sistema de visualización se compone de dos herramientas independientes que solo se comunican a través de los ficheros que una genera y la otra consume. La de grabación se despliega junto al resto del sistema mientras la sesión está en marcha y almacena todos los mensajes que circulan por la red, en cambio, la de análisis coge la informacion en diferido. Se ejecuta si el usuario quiere al terminar y recibe como entrada el bag generado y los \emph{logs} de los algoritmos a partir de los cuales construye un \emph{dashboard} web que permite estudiar la carrera vuelta a vuelta (figura~\ref{fig:flujo-visualizacion}).
+El sistema de visualización se apoya en dos herramientas independientes que solo se comunican a través de los ficheros que una genera y la otra consume, más un panel que enseña la carrera en directo mientras se corre. La de grabación se despliega junto al resto del sistema mientras la sesión está en marcha y almacena todos los mensajes que circulan por la red, en cambio, la de análisis coge la informacion en diferido. Se ejecuta si el usuario quiere al terminar y recibe como entrada el bag generado y los \emph{logs} de los algoritmos a partir de los cuales construye un \emph{dashboard} web que permite estudiar la carrera vuelta a vuelta (figura~\ref{fig:flujo-visualizacion}).
 
 \begin{figure}[tbp]
     \centering
@@ -370,6 +370,18 @@ La herramienta de análisis convierte los datos crudos de una sesión en un conj
 El resultado es un \emph{dashboard}, una página web autocontenida con gráficas interactivas que permiten desplazarse, ampliar una zona y consultar el valor de cada punto, organizada en secciones numeradas. Como cada cámara trabaja en sus propias coordenadas de imagen, todas las gráficas espaciales se dibujan sobre un plano global común, aplicando a cada cámara una traslación fija. Desde el propio \emph{dashboard} pueden exportarse las gráficas en PDF, los datos en CSV y descargar un vídeo que combina las imágenes de todas las cámaras.
 
 También el análisis se ejecuta en un contenedor, que a diferencia del resto no forma parte del sistema desplegado. Se levanta bajo demanda indicándole qué sesión analizar, genera el \emph{dashboard}, lo sirve en un puerto accesible desde la máquina anfitriona y termina al pararlo.
+
+\subsection{Panel de carrera en directo}
+\label{subsec:visualizacion-directo}
+
+Frente a las dos herramientas anteriores, que trabajan en diferido, el panel de carrera enseña lo que está pasando mientras se corre. Es un nodo que se suscribe a los mismos \emph{topics} que ya publica el sistema y sirve su contenido por HTTP a un navegador, sin publicar nada a cambio, de modo que puede levantarse y cerrarse en mitad de una carrera sin que el resto se entere. La figura~\ref{fig:panel-directo} recoge una ejecución sobre el circuito en óvalo con una cámara. Arriba quedan la clasificación, con la vuelta en curso, los tiempos, la tensión aplicada y el estado del coche, y el circuito, que no se carga de ningún fichero sino que se va dibujando con las propias posiciones que llegan de la cámara, con la línea de meta marcada en naranja y el coche sobre ella, unido a su etiqueta trasera para que se vea a simple vista cuánto se separa de la trayectoria. Debajo, el registro de eventos deja por escrito lo que va ocurriendo, cada vuelta con su tiempo y los derrapes según se detectan.
+
+\begin{figure}[tbp]
+    \centering
+    \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/panel_directo.png}
+    \caption{Panel de carrera en directo durante una ejecución en el circuito en óvalo. El coche aparece derrapando, con la etiqueta trasera separada 21,7~px de la trayectoria.}
+    \label{fig:panel-directo}
+\end{figure}
 
 \section{Configuración y despliegue}
 \label{sec:configuracion_despliegue}

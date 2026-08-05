@@ -1,7 +1,7 @@
 \chapter{Listados de referencia}
 \label{chap:listados}
 
-\lettrine{E}{n} este anexo se recogen íntegras las definiciones de los mensajes propios del sistema (sección~\ref{subsec:mensajes-propios}) y los ficheros que definen su configuración y despliegue (sección~\ref{sec:configuracion_despliegue}). Los tres listados que se emplean como ejemplo en el cuerpo de la memoria —el mensaje \texttt{CarLocation} y el fichero de lanzamiento y el \emph{compose} del nodo de captura— están en los listados~\ref{lst:msg-carlocation}, \ref{lst:camera-launch} y~\ref{lst:compose-camera}.
+\lettrine{E}{n} este anexo se recogen íntegras las definiciones de los mensajes propios del sistema (sección~\ref{subsec:mensajes-propios}) y los ficheros que definen su configuración y despliegue (sección~\ref{sec:configuracion_despliegue}), junto con la política que se emplea en la prueba de la sección~\ref{sec:prueba-politica-optima}. Los tres listados que se emplean como ejemplo en el cuerpo de la memoria —el mensaje \texttt{CarLocation} y el fichero de lanzamiento y el \emph{compose} del nodo de captura— están en los listados~\ref{lst:msg-carlocation}, \ref{lst:camera-launch} y~\ref{lst:compose-camera}.
 
 \section{Definición de los mensajes}
 \label{sec:anexo-mensajes}
@@ -232,6 +232,49 @@ Point2D end
       port: "/dev/ttyACM0"
       baudrate: 115200
       calibration_speed: 60 
+\end{lstlisting}
+
+\section{Fichero de política}
+\label{sec:anexo-politica}
+
+La política que se emplea en la prueba de la sección~\ref{sec:prueba-politica-optima}, tal y como quedó guardada. Es el perfil que el algoritmo tenía justo después de su mejor vuelta, con la zona de derrape de las celdas 44 a 57 ya castigada, y es el que los tres intentos con el modo política repiten congelado.
+
+\begin{lstlisting}[caption={Política aplicada en la prueba de la política óptima (\texttt{politica\_CarController\_politica\_car1\_camara\_02.json}).}, label={lst:politica-json}]
+{
+  "_ayuda": "Plantilla de politica. Copiar a
+             politica_<nodo>_<camara>.json (sin _PLANTILLA), editar
+             los pwm de cada zona y arrancar el coche con
+             cars.<coche>.modo: politica. Las zonas se aplican por
+             INDICE DE CELDA, asi que valen para la cadena de
+             n_celdas que se indica aqui.",
+  "camara": "camara_02",
+  "n_celdas": 84,
+  "v_min": 65.0,
+  "v_max": 88.0,
+  "zonas": [
+    {
+      "ini": 0,
+      "fin": 43,
+      "pwm": 83.0,
+      "tipo": "libre",
+      "vueltas": []
+    },
+    {
+      "ini": 44,
+      "fin": 57,
+      "pwm": 79.0,
+      "tipo": "derrape",
+      "vueltas": []
+    },
+    {
+      "ini": 58,
+      "fin": 83,
+      "pwm": 83.0,
+      "tipo": "libre",
+      "vueltas": []
+    }
+  ]
+}
 \end{lstlisting}
 
 \section{Ficheros de lanzamiento}

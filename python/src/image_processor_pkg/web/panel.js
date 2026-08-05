@@ -267,6 +267,21 @@ function dibujar() {
         const salto = i > 0 && Math.hypot(x - pts[i-1][0], y - pts[i-1][1]) > saltoCorte;
         (i && !salto) ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
       });
+      // Y se CIERRA EL ANILLO. La lista es lineal pero el circuito no: cuando
+      // el coche completa la vuelta, el ultimo punto queda pegado al primero,
+      // solo que nadie dibujaba el segmento que los une. Quedaba un hueco en
+      // mitad del trazado, en un sitio distinto cada vez (donde estuviera el
+      // coche al conectarse el panel) y sin ninguna oclusion que lo explicara.
+      //
+      // El cierre pasa por el MISMO filtro que el resto de segmentos: si los
+      // dos extremos estan a mas de saltoCorte no se unen. Asi se respetan los
+      // dos casos en los que ese segmento no existe: una camara que solo ve un
+      // trozo del circuito (cadena abierta), y las sesiones en las que el
+      // trazado arranca con el coche entrando en el encuadre, donde el primer
+      // punto no esta sobre el trazado cerrado sino a un lado.
+      const [ax, ay] = pts[0], [zx, zy] = pts[pts.length - 1];
+      if (pts.length > 2 && Math.hypot(zx - ax, zy - ay) <= saltoCorte)
+        ctx.lineTo(...aPantalla(ax + ox, ay + oy));
       ctx.stroke();
       ctx.globalAlpha = 1;
     }

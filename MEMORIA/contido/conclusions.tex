@@ -1,58 +1,58 @@
 \chapter{Conclusiones y trabajo futuro}
-\label{chap:conclusions}
+\label{cap:conclusiones}
 
-\lettrine{E}{n} este último capítulo se presentan las conclusiones extraídas del trabajo
-realizado, valorando el grado de cumplimiento de los objetivos planteados en la
-introducción. Se comentan asimismo las principales limitaciones y dificultades encontradas
-durante el desarrollo, se reflexiona sobre las lecciones aprendidas y se proponen posibles
-líneas de trabajo futuro que den continuidad al proyecto.
+\lettrine{E}{n} este último capítulo se presentan las conclusiones extraídas del trabajo realizado, valorando el grado de cumplimiento de los objetivos planteados en la introducción. Se comentan asimismo las principales limitaciones y dificultades encontradas durante el desarrollo, se reflexiona sobre las lecciones aprendidas y se proponen posibles líneas de trabajo futuro que den continuidad al proyecto.
 
+% -----------------------------------------------------------------------------
 \section{Conclusiones}
-\label{sec:conclusions-final}
+\label{sec:conclusiones}
 
-% TODO: Redactar al final. Puntos a valorar contra los objetivos de la sección 1.2:
-%  - Se ha transformado un sistema monolítico en una arquitectura distribuida ROS2
-%    funcional: cámaras en máquinas independientes, controlador por coche y puente
-%    hardware desacoplado.
-%  - El sistema escala a circuitos arbitrarios añadiendo nodos cámara sin tocar código.
-%  - El algoritmo de control heredado se ha adaptado al entorno multicámara (longitud
-%    de arco, una trayectoria por cámara).
-%  - Tolerancia a fallos verificada: failover primary/spare y parada selectiva por
-%    carril.
-%  - Despliegue reproducible con Docker y telemetría completa para el análisis.
-% Relacionar también con las competencias de la titulación/mención, como hacen las
-% memorias de referencia.
+El objetivo general del trabajo era evolucionar el sistema de control visual de coches tipo Scalextric hacia una arquitectura distribuida capaz de operar en tiempo real sobre circuitos de cualquier tamaño, y se ha alcanzado. El sistema monolítico heredado se ha descompuesto en tres tipos de nodos con responsabilidades delimitadas (captura y detección, control por carril y actuación sobre el hardware) que se comunican exclusivamente mediante mensajes a través de la red local, sin memoria compartida. Lo relevante de este diseño no es tanto que el sistema funcione repartido, sino que el reparto pasa a ser una decisión de despliegue y no una propiedad del código. Los mismos nodos, sin ningún cambio, cubren las tres configuraciones posibles: con todos ellos en una misma máquina se reproduce el escenario del trabajo de Mario López \cite{lopezcea}, con varios nodos cámara en un mismo equipo, junto al controlador y al puente, el de Adrián Rego \cite{rego} y repartiendo los nodos cámara entre distintas máquinas se obtiene el caso nuevo que este trabajo aporta. La arquitectura propuesta no sustituye a las anteriores, las contiene como casos particulares. De esa modularidad se deriva además un beneficio práctico: añadir una funcionalidad se reduce a escribir un nodo y publicar o suscribirse a los \emph{topics} correspondientes, sin tocar el resto, y así se incorporaron la telemetría, la herramienta de grabación, el panel de carrera en directo y el nodo de sondeo empleado en las pruebas de red.
 
+La segunda conclusión, y probablemente la de mayor alcance, es que la red no es el factor que limita el control. Las pruebas de la sección~\ref{sec:pruebas-red} sitúan el peor escenario, el de WiFi, en 7,27~ms de mediana de ida y vuelta, sin una sola pérdida en más de mil seiscientos sondeos, y el tramo de red no llega a una quinta parte de los 22~ms que consume el lazo completo, que a su vez cabe holgadamente en los 33~ms que separan dos fotogramas. Sobre la pista la diferencia entre escenarios queda por debajo de la variabilidad que hay entre dos repeticiones del mismo escenario, y hubo que inyectar 100~ms de retardo artificial para apreciar algo en el cronómetro sin que el coche llegara siquiera a perder el control. Esto valida el supuesto sobre el que se apoya toda la propuesta.
+
+La detección y el seguimiento se han evaluado con una y con varias cámaras, con solapamiento y sin él, y el algoritmo de control se ha adaptado para operar sobre ese entorno coordinando las instancias por cámara sobre una trayectoria base común. La prueba frente a pilotos humanos de la sección~\ref{sec:prueba-algo-vs-personas} permite valorar el resultado el sistema gana la contrarreloj en todos los casos.
+
+Conviene señalar, por último, un resultado que no figuraba entre los objetivos iniciales pero que ha acabado siendo determinante: la telemetría de todas las etapas del procesamiento junto con las herramientas de grabación y análisis en diferido de la sección~\ref{sec:sistema-visualizacion}. En una arquitectura de nodos independientes esta instrumentación es prácticamente gratuita, porque basta con suscribirse a lo que ya circula por la red, y sin ella no habría sido posible descomponer la latencia del lazo, comparar ejecuciones separadas por semanas ni detectar los problemas de hardware que se describen a continuación y que en los trabajos anteriores no aparecen reportados. El trabajo entrega por tanto una arquitectura estable sobre la que seguir construyendo, un análisis que permite saber dónde está el margen de mejora y unas herramientas de análisis que hasta ahora no existían.
+
+% -----------------------------------------------------------------------------
 \section{Limitaciones y dificultades encontradas}
-\label{sec:limitacions}
+\label{sec:limitaciones}
 
-% TODO: Documentar honestamente, por ejemplo:
-%  - Dependencia de la iluminación en la segmentación por color (ajuste de rangos HSV).
-%  - Sincronización y solape entre campos de visión de cámaras contiguas (arbitraje
-%    de cámaras).
-%  - Latencia de red y su efecto en el control a altas velocidades.
-%  - Dificultades de depuración de un sistema multi-máquina (de ahí la herramienta de
-%    grabación y análisis).
-%  - Imposibilidad de probar sin el montaje físico completo.
+La planificación inicial asumió que la detección del coche estaba resuelta en los trabajos previos, que el algoritmo de control estaba correctamente implementado y que el hardware funcionaba de forma fiable. Las tres suposiciones resultaron ser solo parcialmente ciertas y condicionaron el desarrollo. La primera consecuencia fue de coste: aunque las ideas de detección por color y de seguimiento mediante región de interés estaban documentadas, la implementación no era reutilizable, al tratarse de código fuertemente cohesionado con la aplicación de escritorio y con su estado compartido en memoria, y hubo que reimplementar desde cero prácticamente toda la parte de visión. La segunda fue de diseño: al dar por buena la calidad del control heredado, el esfuerzo se orientó a distribuirlo antes que a revisarlo, y sus problemas solo se hicieron visibles cuando ya existían las herramientas para medirlos, con poco margen para replantear el enfoque. Tercero el hardware tenía problemas en el diseño que no sé detectaron hasta casi la fase final del proyecto mientras se estaban terminando las pruebas.
 
+El conjunto pista+coche+arduino ha resultado ser mucho menos determinista de lo previsto y es la fuente principal de las limitaciones del sistema. Con la misma configuración, el coche rojo completa las 50 vueltas 18 segundos antes que el azul, más de un 19~\% del tiempo total en el óvalo y hasta un 52~\% en el circuito en ocho, por diferencias en el coche ajenas al control. Y el mismo coche sobre el mismo circuito dio 1,774~s por vuelta un día y 3,095~s otro con idéntico valor de PWM, hasta el punto de necesitar 110 para acercarse al tiempo que semanas antes se conseguía con 74. A esa variabilidad contribuyen el montaje de la pista con piezas de varios modelos, el estado de las escobillas de contacto, la limpieza de raíles y neumáticos y el desgaste acumulado de un material que lleva varios cursos en uso. La actuación tampoco ayuda: el rango de PWM realmente utilizable es estrecho, su relación con el incremento no es lineal.
+
+Al algoritmo se le detectaron también limitaciones propias. La única señal que dispara el castigo de una zona es la separación de la etiqueta trasera respecto a la trayectoria base, un criterio binario que penaliza igual un derrape que empeora el tiempo por vuelta y otro que no lo hace, y que además resulta extremadamente sensible al umbral escogido, pasar de 12 a 9~px reduce la contrarreloj de 93,59 a 87,93~s y la desviación típica a menos de la mitad, como se ve en la sección~\ref{sec:prueba-algo-parametros}. Hay además derrapes que ese criterio no puede ver, porque el coche, tras ganar inercia progresivamente, sale disparado en un intervalo que con un muestreo de 33~ms no permite, por lo que por muy bien afinado que esté no hay información suficiente para reaccionar. Tampoco existe adaptación del rango, cuando el circuito responde peor de lo habitual el algoritmo agota su techo sin alcanzar la velocidad esperada y no dispone de mecanismo para elevarlo, de forma que la única salida es relanzarlo o retocar los parámetros en caliente. Y todo el sistema (la localización sobre el circuito, la partición en zonas, la máscara de búsqueda y la propia detección de derrapes) se apoya en la trayectoria base registrada en la calibración y se expresa en píxeles, así que cualquier cambio en el trazado, en la posición de la cámara o en la resolución obliga a recalibrar.
+
+% -----------------------------------------------------------------------------
 \section{Lecciones aprendidas}
-\label{sec:leccions}
+\label{sec:lecciones}
 
-% TODO: Reflexión personal: diseño de sistemas distribuidos con ROS2 (QoS, executors,
-% callback groups), importancia de la telemetría para validar sistemas en tiempo real,
-% valor de construir sobre trabajos previos y de documentar para los siguientes.
+Buena parte de las dificultades descritas vienen de haber dado por resueltos unos cimientos que solo lo estaban en parte, y validarlos antes de comprometer la planificación habría permitido detectar los problemas del hardware y del algoritmo mucho antes. De ahí se deriva la segunda, la instrumentación no es un accesorio que se añade al final, sino la condición para poder afirmar algo sobre el sistema; hasta que no existieron la telemetría y la herramienta de análisis, los problemas del circuito eran una sospecha.
 
+Trabajar sobre un sistema físico ha exigido además ser mucho más riguroso con el diseño de los experimentos. Cuando el resultado depende del código pero también del coche, del montaje de la pista y de la alimentación, una ejecución aislada no permite concluir nada. Hay que decidir de antemano qué variable se quiere medir, fijar todas las demás y repetir cada escenario lo suficiente como para distinguir un efecto real de la dispersión propia del montaje. Las pruebas del capítulo~7 se plantearon así, y es lo que permitió separar las limitaciones del algoritmo de las del hardware.
+
+% -----------------------------------------------------------------------------
 \section{Trabajo futuro}
-\label{sec:traballo-futuro}
+\label{sec:trabajofuturo}
 
-% TODO: Posibles líneas, coherentes con lo que quedó abierto:
-%  - Carreras multicoche reales con varios controladores compitiendo simultáneamente.
-%  - Arbitraje avanzado entre cámaras con campos de visión solapados y transferencia
-%    de seguimiento (hand-off) explícita.
-%  - Algoritmos de control más avanzados: perfil de velocidad continuo por sección
-%    (en lugar de dos niveles) o aprendizaje por refuerzo.
-%  - Elección de líder genérica (p. ej. algoritmo de elección distribuido) en lugar
-%    del esquema primary/spare estático.
-%  - Interfaz web de monitorización en tiempo real alimentada por los topics de
-%    telemetría.
-%  - Detección automática de la disposición de las cámaras y del orden de la ruta.
+El desarrollo ha dejado abiertas varias líneas de continuidad:
+
+\begin{itemize}
+\item \textbf{Revisar el criterio de derrape.} Sustituir el umbral único por un criterio que correlacione la separación de la trayectoria con el tiempo realmente perdido en esa zona, de modo que solo se penalicen los derrapes que empeoran la vuelta.
+
+\item \textbf{Búsqueda automática de parámetros.} El sistema ya carga y ejecuta políticas que asignan un PWM a cada celda, lo que permite buscarlas mediante programación genética, optimización bayesiana o aprendizaje por refuerzo, usando el tiempo por vuelta y las salidas de pista como función objetivo. La herramienta de grabación aporta ya los datos para entrenar y evaluar fuera de línea.
+
+\item \textbf{Rango de PWM adaptativo.} Permitir que el algoritmo eleve su propio techo cuando detecte que el circuito no responde como se espera, evitando el reajuste manual de un día para otro.
+
+\item \textbf{Reducir la dependencia de la trayectoria base.} Explorar calibraciones que no exijan una vuelta de registro completa o que se actualicen de forma incremental.
+
+\item \textbf{Renovar el material y fijar un protocolo de puesta a punto.} La pista, los coches y las cámaras acumulan un desgaste que condiciona los resultados; una mayor frecuencia de captura atacaría además el problema de los derrapes no observables.
+
+\item \textbf{Nodos dedicados a la observación.} Sacar la publicación de imágenes de depuración del nodo cámara para descargar el camino crítico del lazo de control y simplificar su integración con el nodo de visualización.
+
+\item \textbf{Automatizar el despliegue.} Con acceso SSH a todas las máquinas, una herramienta como Ansible permitiría levantar el sistema completo desde un único equipo, en lugar de ir máquina por máquina, y una interfaz de configuración facilitaría la edición de parámetros y la elección de qué nodos arrancar.
+
+\item \textbf{Monitorizar el estado del sistema.} Vigilar qué nodos están vivos y a qué cadencia publican, y sincronizar los relojes mediante NTP o PTP para poder medir latencias en un solo sentido.
+\end{itemize}
