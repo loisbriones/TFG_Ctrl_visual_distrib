@@ -548,4 +548,32 @@ Aparte de los resultados obtenidos en la realización de las pruebas de red, tam
 \section{Prueba nodo visualización y multiples coches}
 \label{sec:prueba-nodo-visualizacion-multiples-coches}
 
-Esta es una pequeña prueba para ver como se comporta la arquitectura con varios coches y como funciona además el nodo de visualización que tenemos creado para controlarlo 
+Esta es una pequeña prueba para ver como se comporta la arquitectura con varios coches y como funciona además el nodo de visualización que tenemos creado para controlarlo
+
+\section{Prueba de adaptación al circuito}
+\label{sec:prueba-adaptacion-circuito}
+
+Esta prueba comprueba si el algoritmo es capaz de adaptarse él solo a las modificaciones que se hacen sobre el circuito. Para ello se pusieron peraltes en las curvas del circuito en ocho, que hacen que la pista agarre más, y se comparó con la misma ejecución sin ellos. Las dos son del mismo día, sobre el mismo circuito y con la misma configuración, y entre una y otra no se tocó ningún parámetro del algoritmo ni se volvieron a colocar las cámaras.
+
+% htbp y no el tbp del resto del capítulo: la sección es corta y con tbp la
+% tabla se iba a la cabecera de la página anterior, debajo del título de otra
+% sección. Con la h delante se queda pegada al párrafo que la presenta.
+\begin{table}[htbp]
+  \centering
+  \estilotabla[3]
+  \caption{Las dos ejecuciones del circuito en ocho, con y sin peraltes (PWM 60--85, umbral de derrape 12~px, dos cámaras).}
+  \label{tab:peraltes}
+  \begin{tabular}{lrrr}
+    \toprule
+    \rowcolor{ArqAzulClaro}
+    Ejecución & Contrarreloj & Mejor & Mediana \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) \\
+    \midrule
+    Sin peraltes & 141,36 & 2,665 & 2,832 \\
+    Con peraltes & 136,53 & 2,571 & 2,728 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Como se ve en la tabla~\ref{tab:peraltes}, con peraltes el coche da las 50 vueltas casi cinco segundos antes, en torno a un 3~\% menos, y mejora tanto la vuelta rápida como la mediana. A nadie le hizo falta avisar al algoritmo de que la pista había cambiado, ya que él solo fue subiendo la tensión hasta donde el nuevo trazado se lo permitió.
+
