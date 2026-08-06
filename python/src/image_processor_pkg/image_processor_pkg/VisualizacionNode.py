@@ -20,10 +20,33 @@ un WebSocket necesitaria una libreria externa. SSE es un
 "Content-Type: text/event-stream" y escribir "data: {...}\n\n" cada vez que hay
 algo nuevo; el navegador lo lee con EventSource y reconecta el solo si se cae.
 
-La pagina son tres ficheros normales en web/ (index.html, estilos.css y
-panel.js), no un string dentro de este fichero: asi se pueden abrir y editar
-con resaltado de sintaxis y aviso de errores. Ademas se leen del disco en cada
-peticion, asi que retocar el CSS o el JS y recargar el navegador basta.
+La pagina son ficheros normales en web/ (index.html, estilos.css y panel.js, mas
+camaras.html y camaras.js del mosaico), no un string dentro de este fichero: asi
+se pueden abrir y editar con resaltado de sintaxis y aviso de errores. Ademas se
+leen del disco en cada peticion, asi que retocar el CSS o el JS y recargar el
+navegador basta.
+
+Las imagenes: la pagina /camaras
+--------------------------------
+Segunda pagina, en el mismo servidor, con un mosaico de lo que ve cada camara.
+Es la herramienta de ANTES de la carrera: se levantan solo los nodos camara, se
+abre esta pagina y se van encuadrando hasta que entre todas se vea el circuito
+entero, sin tener que ir maquina por maquina enchufando el USB.
+
+Las camaras ya publican /camara_XX/camara_debug con la imagen COMPRIMIDA en
+JPEG (CompressedImage), asi que aqui no se decodifica nada: los bytes de
+msg.data se le pasan tal cual a un <img> del navegador con el formato MJPEG
+(multipart/x-mixed-replace, el mismo de toda la vida de las camaras IP). Sin
+cv_bridge, sin OpenCV y sin una sola linea de JavaScript de video: el <img> lo
+hace todo.
+
+Y la suscripcion es BAJO DEMANDA. Las imagenes son el grueso del trafico de la
+red -por eso el panel de datos nunca se suscribio a ellas- asi que cada camara
+lleva la cuenta de cuantos navegadores la estan mirando ('visores'): el hilo
+HTTP solo toca ese contador y es ajustar_subs_imagen, en el hilo de ROS, quien
+da de alta la suscripcion cuando pasa de 0 y la destruye cuando vuelve a 0. Con
+la pagina cerrada -o con esa camara en pausa- el trafico es exactamente el
+mismo que antes de que existiera esta pagina.
 
 El mapa y las varias camaras
 ----------------------------
@@ -53,6 +76,7 @@ from rclpy.qos import (
     QoSHistoryPolicy,
 )
 from std_msgs.msg import Bool
+from sensor_msgs.msg import CompressedImage
 from image_processor_pkg.msg import (
     CarLocation,
     SpeedCarril,
@@ -86,6 +110,11 @@ FICHEROS_WEB = {
     "/index.html": ("index.html", "text/html; charset=utf-8"),
     "/estilos.css": ("estilos.css", "text/css; charset=utf-8"),
     "/panel.js": ("panel.js", "application/javascript; charset=utf-8"),
+    # Segunda pagina: el mosaico de lo que ve cada camara (ver "Las imagenes"
+    # mas abajo). Comparte estilos.css con el panel
+    "/camaras": ("camaras.html", "text/html; charset=utf-8"),
+    "/camaras.html": ("camaras.html", "text/html; charset=utf-8"),
+    "/camaras.js": ("camaras.js", "application/javascript; charset=utf-8"),
 }
 
 
@@ -98,6 +127,18 @@ PUERTO = 8990
 # sobra para el ojo (las camaras publican a ~30 Hz) y mantiene el trafico en
 # unos pocos cientos de bytes por envio, porque solo van los datos que cambian
 PERIODO_ENVIO = 0.1
+
+# Ritmo maximo al que se le manda una imagen al navegador en /camaras. Mismo
+# criterio que PERIODO_ENVIO: 10 imagenes por segundo sobran para encuadrar una
+# camara, y con cuatro mosaicos abiertos evita cargar al navegador con 120
+# JPEG/s que no le aportan nada al ojo
+PERIODO_IMAGEN = 0.1
+
+# Segundos sin recibir ni un JPEG tras los que se cierra el stream de una
+# camara. Es el caso de una camara con 'camera.debug: False': existe en el grafo
+# pero no publica imagenes, y sin esto el hilo del navegador se quedaria dando
+# vueltas para siempre. La pagina lo reintenta sola en su siguiente sondeo
+SIN_IMAGEN = 10.0
 
 # Segundos sin recibir /carX/position para dar el coche por perdido y pintarlo
 # en gris. Generoso a proposito respecto al timeout_camara_activa del
@@ -125,6 +166,11 @@ COLORES_COCHES = ["#e6194b", "#4363d8", "#3cb44b", "#f58231", "#911eb4"]
 # criterio que analisis/lectura_bag.py al recorrer los topics de un bag)
 RE_COCHE = re.compile(r"^/(car[^/]+)/position$")
 RE_CAMARA = re.compile(r"^/(camara_[^/]+)/camara_debug$")
+
+# La unica ruta del servidor que no es fija: /video/camara_01 es el MJPEG de esa
+# camara. El nombre se valida contra self.camaras antes de usarlo, asi que de
+# aqui no puede salir nada que no sea una camara que ya existe
+RE_RUTA_VIDEO = re.compile(r"^/video/(camara_[^/]+)$")
 
 
 class VisualizacionNode(Node):
@@ -190,6 +236,7 @@ class VisualizacionNode(Node):
         # reproduccion, casi siempre despues que el panel
         self.create_timer(2.0, self.descubrir)
         self.create_timer(0.5, self.vigilar_senal)
+        self.create_timer(0.5, self.ajustar_subs_imagen)
 
         hilo = threading.Thread(target=self.servir, daemon=True)
         hilo.start()
@@ -197,6 +244,9 @@ class VisualizacionNode(Node):
         self.get_logger().info(
             f"🖥️  Panel de carrera en http://localhost:{PUERTO}  "
             f"(esperando a que publique alguien)"
+        )
+        self.get_logger().info(
+            f"📷 Camaras en directo en http://localhost:{PUERTO}/camaras"
         )
 
     # -----------------------------------------------------------------
@@ -215,10 +265,12 @@ class VisualizacionNode(Node):
                 continue
             m = RE_CAMARA.match(topic)
             if m:
-                # De la camara solo interesa SABER que existe, para poder
-                # avisar en la barra de salud de que esta ahi pero no ve el
-                # coche. NO se suscribe a camara_debug: las imagenes son el
-                # grueso del trafico de la red y el panel es de datos
+                # Del topic de imagenes solo se coge, aqui, el NOMBRE de la
+                # camara: con eso la barra de salud ya puede avisar de que la
+                # camara esta ahi pero no ve el coche. La suscripcion a las
+                # imagenes no se crea aqui, porque son el grueso del trafico de
+                # la red: la crea ajustar_subs_imagen, y solo mientras alguien
+                # las este mirando en /camaras
                 self.alta_camara(m.group(1))
 
     def alta_coche(self, coche):
@@ -299,12 +351,72 @@ class VisualizacionNode(Node):
                 "meta": None,
                 # Marcas de tiempo de los ultimos mensajes, para el ritmo en Hz
                 "marcas": deque(maxlen=30),
+                # --- imagen en directo de /camaras ---
+                # Solo el ULTIMO JPEG recibido, no una cola: si el navegador va
+                # mas lento que la camara lo que quiere ver es lo de ahora, no
+                # el atasco de hace un segundo. 'seq' es lo que le dice a cada
+                # navegador si esto que hay guardado ya se lo mando o no
+                "jpeg": None,
+                "seq": 0,
+                "t_imagen": 0.0,
+                # Cuantos navegadores estan mirando esta camara ahora mismo. Lo
+                # suben y bajan los hilos HTTP; ajustar_subs_imagen lo lee para
+                # decidir si hace falta estar suscrito a sus imagenes
+                "visores": 0,
             }
         self.evento("camara", f"📷 {camara} conectada")
+
+    def ajustar_subs_imagen(self):
+        """Da de alta y de baja las suscripciones a las imagenes de las camaras
+        segun quien las este mirando en /camaras.
+
+        Corre en el hilo de ROS (es un timer), que es el mismo sitio desde el
+        que descubrir() crea las suscripciones de siempre: los hilos del
+        servidor HTTP se limitan a subir y bajar el contador 'visores' y no
+        tocan el grafo. Medio segundo de periodo para que al abrir la pagina la
+        imagen aparezca casi al momento; descubrir() va a 2 s porque una camara
+        que se enciende tarde no tiene ninguna prisa."""
+        with self.lock:
+            miradas = {c for c, d in self.camaras.items() if d["visores"] > 0}
+            camaras = list(self.camaras.items())
+
+        for camara, datos in camaras:
+            topic = f"/{camara}/camara_debug"
+            if camara in miradas:
+                # crear_sub no hace nada si ya existe, asi que esto se puede
+                # llamar cada medio segundo sin comprobar nada mas
+                self.crear_sub(
+                    topic,
+                    CompressedImage,
+                    lambda m, c=camara: self.cb_imagen(m, c),
+                    # El publisher es BEST_EFFORT (qos_profile_sensor_data): con
+                    # el QoS fiable por defecto no llegaria ni una sola imagen,
+                    # y encima sin ningun error, simplemente en silencio
+                    qos_profile_sensor_data,
+                )
+            elif topic in self.subs:
+                self.destroy_subscription(self.subs.pop(topic))
+                # Se tira tambien la ultima imagen: si dentro de un rato alguien
+                # vuelve a mirar, mejor un hueco que un fotograma de hace horas
+                with self.lock:
+                    datos["jpeg"] = None
+                    datos["t_imagen"] = 0.0
 
     # -----------------------------------------------------------------
     # Callbacks de ROS
     # -----------------------------------------------------------------
+    def cb_imagen(self, msg: CompressedImage, camara):
+        # msg.data ya es un JPEG (lo comprime la camara en _tarea_debug con
+        # calidad 70): se guarda tal cual, sin decodificar, porque lo unico que
+        # se va a hacer con el es escribirlo en un socket
+        with self.lock:
+            datos = self.camaras.get(camara)
+            if datos is None:
+                return
+            datos["jpeg"] = bytes(msg.data)
+            datos["seq"] += 1
+            datos["t_imagen"] = time.monotonic()
+
     def cb_posicion(self, msg: CarLocation, coche):
         camara = msg.camara_id
         if not camara:
@@ -672,12 +784,22 @@ class VisualizacionNode(Node):
         class Manejador(BaseHTTPRequestHandler):
             def do_GET(self):
                 try:
-                    if self.path in FICHEROS_WEB:
-                        self.fichero()
-                    elif self.path == "/estado":
+                    # Sin la parte de "?...": camaras.js le añade un ?t=<ahora>
+                    # al reabrir un video para que el navegador no le sirva de
+                    # su cache la conexion anterior, ya cerrada
+                    ruta = self.path.split("?", 1)[0]
+                    video = RE_RUTA_VIDEO.match(ruta)
+
+                    if ruta in FICHEROS_WEB:
+                        self.fichero(ruta)
+                    elif ruta == "/estado":
                         self.estado()
-                    elif self.path == "/stream":
+                    elif ruta == "/stream":
                         self.stream()
+                    elif ruta == "/estado_camaras":
+                        self.estado_camaras()
+                    elif video:
+                        self.video(video.group(1))
                     else:
                         self.send_error(404, f"ruta desconocida: {self.path}")
                 except (BrokenPipeError, ConnectionResetError):
@@ -685,8 +807,8 @@ class VisualizacionNode(Node):
                 except Exception as e:  # noqa: BLE001 - el panel nunca tumba al nodo
                     nodo.get_logger().warn(f"panel: {type(e).__name__}: {e}")
 
-            def fichero(self):
-                nombre, tipo = FICHEROS_WEB[self.path]
+            def fichero(self, ruta):
+                nombre, tipo = FICHEROS_WEB[ruta]
                 # Se lee del disco en CADA peticion, no una vez al arrancar.
                 # Como los docker-compose compilan con --symlink-install, lo
                 # que hay en el share es un enlace al fichero del repositorio:
@@ -737,6 +859,115 @@ class VisualizacionNode(Node):
                     )
                     self.wfile.flush()
                     time.sleep(PERIODO_ENVIO)
+
+            def estado_camaras(self):
+                """Lista de camaras para el mosaico: quien hay y quien esta
+                mandando imagen ahora mismo.
+
+                Endpoint aparte y no /estado a proposito: /estado devuelve la
+                instantanea entera de la carrera (trazados incluidos, que son
+                miles de puntos) y esta pagina la sondea cada dos segundos solo
+                para saber los nombres."""
+                ahora = time.monotonic()
+                with nodo.lock:
+                    datos = [
+                        {
+                            "id": camara,
+                            # Que la camara este publicando imagenes AHORA. En
+                            # falso o porque tiene 'camera.debug: False', o
+                            # porque se acaba de pedir y aun no ha llegado la
+                            # primera
+                            "imagen": ahora - d["t_imagen"] < 2.0,
+                            "visores": d["visores"],
+                        }
+                        for camara, d in sorted(nodo.camaras.items())
+                    ]
+                cuerpo = json.dumps(datos).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(cuerpo)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(cuerpo)
+
+            def video(self, camara):
+                """Las imagenes de una camara, en MJPEG.
+
+                multipart/x-mixed-replace es el formato de siempre de las
+                camaras IP: una respuesta que no termina nunca y va soltando un
+                JPEG detras de otro separados por un delimitador. El navegador
+                lo entiende de serie en un <img>, asi que la pagina no necesita
+                ni una linea de JavaScript para pintar el video."""
+                with nodo.lock:
+                    if camara not in nodo.camaras:
+                        self.send_error(404, f"camara desconocida: {camara}")
+                        return
+                    # A partir de aqui esta camara cuenta como mirada, y en el
+                    # medio segundo siguiente ajustar_subs_imagen la suscribe
+                    nodo.camaras[camara]["visores"] += 1
+
+                try:
+                    self.send_response(200)
+                    self.send_header(
+                        "Content-Type",
+                        "multipart/x-mixed-replace; boundary=frame",
+                    )
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+
+                    # Memoria de ESTA conexion, igual que en stream(): el numero
+                    # de la ultima imagen que se le mando a este navegador
+                    ultimo = -1
+                    t_envio = 0.0
+                    t_espera = time.monotonic()
+
+                    while True:
+                        ahora = time.monotonic()
+                        with nodo.lock:
+                            datos = nodo.camaras.get(camara)
+                            jpeg = datos["jpeg"] if datos else None
+                            seq = datos["seq"] if datos else -1
+
+                        if jpeg is None:
+                            # La camara existe pero no publica imagenes. Se
+                            # espera un rato por si esta arrancando y, si no
+                            # llega nada, se cierra: el hilo no puede quedarse
+                            # aqui para siempre. La pagina lo reintenta sola
+                            if ahora - t_espera > SIN_IMAGEN:
+                                return
+                            time.sleep(PERIODO_IMAGEN)
+                            continue
+                        t_espera = ahora
+
+                        # Se reenvia la ultima imagen aunque no haya cambiado si
+                        # hace mas de un segundo del ultimo envio. No es para el
+                        # ojo: es la forma de ENTERARSE de que el navegador se
+                        # fue, porque lo que descubre la pestaña cerrada es que
+                        # este write falle. Sin esto, una camara congelada
+                        # dejaria el hilo y su suscripcion vivos para siempre
+                        if seq == ultimo and ahora - t_envio < 1.0:
+                            time.sleep(PERIODO_IMAGEN)
+                            continue
+                        ultimo = seq
+                        t_envio = ahora
+
+                        self.wfile.write(b"--frame\r\n")
+                        self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                        self.wfile.write(
+                            f"Content-Length: {len(jpeg)}\r\n\r\n".encode("ascii")
+                        )
+                        self.wfile.write(jpeg)
+                        self.wfile.write(b"\r\n")
+                        self.wfile.flush()
+                        time.sleep(PERIODO_IMAGEN)
+                finally:
+                    # Pase lo que pase -y lo que pasa casi siempre es un
+                    # BrokenPipeError al cerrar la pestaña- esta camara deja de
+                    # estar mirada. Si era el ultimo, ajustar_subs_imagen
+                    # destruye la suscripcion y su trafico desaparece de la red
+                    with nodo.lock:
+                        if camara in nodo.camaras:
+                            nodo.camaras[camara]["visores"] -= 1
 
             def log_message(self, formato, *args):
                 pass  # sin ruido de peticiones por consola

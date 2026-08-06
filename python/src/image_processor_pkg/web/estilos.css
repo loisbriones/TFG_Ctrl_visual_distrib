@@ -1,5 +1,6 @@
-/* Estilos del panel de carrera en directo (index.html).
-   Los sirve VisualizacionNode.py; el navegador los pide en /estilos.css */
+/* Estilos de las dos paginas que sirve VisualizacionNode.py: el panel de la
+   carrera en directo (index.html) y el mosaico de camaras (camaras.html), que
+   comparten cabecera y colores. El navegador los pide en /estilos.css */
 
 :root {
   --fondo: #101215;
@@ -392,4 +393,90 @@ button:hover {
 
 .ev.calibracion {
   color: var(--amarillo);
+}
+
+
+/* ---------------------------------------------------------------------------
+   Mosaico de camaras (camaras.html)
+   --------------------------------------------------------------------------- */
+
+.enlace-pagina {
+  color: var(--suave);
+  text-decoration: none;
+  font-size: 13px;
+  border-bottom: 1px dotted var(--borde);
+}
+
+.enlace-pagina:hover {
+  color: var(--texto);
+}
+
+.aviso-mosaico {
+  font-size: 12px;
+  color: var(--suave);
+  margin-bottom: 10px;
+  max-width: 70ch;
+}
+
+/* auto-fit y no un numero fijo de columnas: con una camara ocupa el ancho
+   entero, con cuatro se reparten solas en dos filas, y en el portatil de al
+   lado de la pista bajan a una columna sin tener que tocar nada */
+#mosaico {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 12px;
+}
+
+#mosaico.vacio::before {
+  content: "Ninguna cámara publicando todavía…";
+  color: var(--suave);
+}
+
+.camara-caja {
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.camara-barra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.camara-nombre {
+  font-weight: 600;
+  flex: 1;
+}
+
+.camara-estado {
+  font-size: 12px;
+  color: var(--suave);
+}
+
+.camara-estado.viva {
+  color: var(--verde);
+}
+
+.camara-estado.muerta {
+  color: var(--rojo);
+}
+
+/* Altura reservada con aspect-ratio: sin esto, cada camara que empieza a
+   mandar imagen empuja a las de abajo y el mosaico pega un salto justo
+   mientras se estan encuadrando. 4/3 es la relacion de todos los modos de
+   camera.mode (640x480 y compañia) */
+.camara-img {
+  width: 100%;
+  display: block;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  background: var(--fondo);
+  border-radius: 4px;
+}
+
+.camara-caja.pausada .camara-img {
+  opacity: .35;
 }
