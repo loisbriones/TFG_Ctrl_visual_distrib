@@ -6,16 +6,37 @@ COLOR_RANGES = {
         (np.array([0, 100, 100]), np.array([10, 255, 255])),
         (np.array([160, 100, 100]), np.array([180, 255, 255])),
     ],
+    # El techo del tono sube de 120 a 130: la misma pegatina azul da H=96..99 en
+    # camara_01/02/03 pero H=112 en camara_04, con muestras hasta 123. Con el
+    # techo en 120 esa camara se quedaba fuera. S y V no se tocan (ver el
+    # comentario del verde: aflojarlos no mejora nada y empieza a confundir).
     "azul": [
         (
-            np.array([80, 114, 80], dtype=np.uint8),
-            np.array([120, 255, 255], dtype=np.uint8),
+            np.array([85, 114, 80], dtype=np.uint8),
+            np.array([130, 255, 255], dtype=np.uint8),
         )
     ],
+    # El suelo del tono baja de 50 a 35. La MISMA pegatina verde da un tono
+    # distinto en cada camara porque cada una fija su balance de blancos por su
+    # cuenta (medido en PRUEBA_FINAL_003/004, sobre el blob que contiene el
+    # centro que publica el propio detector):
+    #     camara_01  H mediana 49 (34-53)     camara_02  H mediana 51 (34-60)
+    #     camara_03  H mediana 52 (39-61)     camara_04  H mediana 45 (28-80)
+    # Con el suelo en 50 la camara_04 (Logitech, la que renderiza mas calido)
+    # quedaba fuera entera: cero detecciones en 5217 fotogramas, sin un solo
+    # error, y de ahi una calibracion vacia que la dejaba ciega. Y las otras
+    # tres iban raspando: solo pasaba el NUCLEO de la pegatina, asi que el area
+    # del blob se quedaba rondando min_area (40 px) y cualquier perdida la
+    # tumbaba. Con el tono ancho pasa la pegatina entera (~200 px).
+    # Buscando dentro de un ROI de 150 px pegado al coche, el acierto sube de
+    # 16/15/12 % a 97/79/87 % en camara_01/02/03, con 0 % de falsos positivos.
+    # S y V se dejan como estaban a proposito: aflojarlos por separado solo
+    # sube el acierto al 23/19/13 %, y de S40 V50 en adelante empieza a
+    # confundir el fondo (7-22 %). El problema era el tono, no la saturacion.
     "verde": [
         (
-            np.array([50, 60, 130], dtype=np.uint8),
-            np.array([69, 255, 255], dtype=np.uint8),
+            np.array([35, 60, 130], dtype=np.uint8),
+            np.array([70, 255, 255], dtype=np.uint8),
         )
     ],
     "naranja": [
