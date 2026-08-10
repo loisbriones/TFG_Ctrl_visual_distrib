@@ -1,9 +1,23 @@
 \chapter{Pruebas}
 \label{cap:pruebas}
 
+% Enlace al vídeo de una ejecución. El primer argumento es el identificador de
+% YouTube (lo que va detrás de youtu.be/), que es lo único que cambia de una
+% fila a otra: la base va aquí para no repetirla setenta veces y poder
+% cambiarla en un solo sitio. El segundo, opcional, es el texto del enlace;
+% por defecto «ver», y se cambia por el número de repetición en las filas de la
+% sección de red, donde una misma fila resume tres ejecuciones.
+% El \detokenize es porque uno de los identificadores empieza por guion bajo y
+% sin él LaTeX lo lee como un subíndice.
+\newcommand{\video}[2][ver]{\href{https://youtu.be/\detokenize{#2}}{#1}}
+
 \lettrine{E}{n} este capítulo se recogen las pruebas realizadas sobre el sistema ya montado. La primera cuantifica la diferencia de comportamiento entre los dos coches con una misma configuración. La segunda comprueba, con un PWM que sube solo, hasta dónde aguanta el mismo circuito en días distintos. La tercera ajusta el umbral de derrape del algoritmo y mide qué se gana con ello. La cuarta enfrenta al algoritmo con pilotos humanos, en el óvalo y en el circuito en ocho. La quinta le enfrenta a su propio perfil congelado, para ver si repetir la mejor vuelta que llegó a dar sirve de algo. La sexta mide cuánto retardo añade la red y a partir de qué punto llega a notarse. Las dos últimas llevan el sistema a circuitos grandes con varias cámaras y a una carrera con varios coches.
 
 Todas las gráficas que se muestran proceden de la herramienta de análisis en diferido descrita en la sección~\ref{sec:sistema-visualizacion}.
+
+De cada ejecución de este capítulo se grabó un vídeo con la imagen de las cámaras sincronizada y los datos del control sobrepuestos, y todos están publicados. Las tablas de resultados llevan por eso una columna con el enlace al vídeo de cada fila, de manera que cualquier cifra se puede contrastar viendo lo que hizo el coche en la pista.
+
+Los pilotos que participaron en las pruebas de conducción manual se identifican como \emph{piloto 1} a \emph{piloto 5}, y la numeración es la misma en todo el capítulo: un mismo número es siempre la misma persona, aunque aparezca en secciones y circuitos distintos.
 
 \section{Prueba comparativa entre coches}
 \label{sec:prueba-comparativa-coches}
@@ -86,14 +100,14 @@ Los tiempos de las dos ejecuciones, recogidos en la tabla~\ref{tab:comparativa-c
   \estilotabla[3]
   \caption{Métricas de tiempo por vuelta de ambos coches con la misma configuración (PWM 70--94, umbral de derrape 12~px).}
   \label{tab:comparativa-coches}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Coche & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-          \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
+    Coche & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
+          \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    Azul & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 \\
-    Rojo & 75,44 & 1,315 & 1,377 & 1,509 & 0,232 \\
+    Azul & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 & \video{de7VRDY5RnY} \\
+    Rojo & 75,44 & 1,315 & 1,377 & 1,509 & 0,232 & \video{xmcztHiHQiI} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -110,18 +124,18 @@ Durante las pruebas unitarias aparecieron problemas en el comportamiento del cir
   \estilotabla[3]
   \caption{Resumen ejecuciones de la prueba con PWM incremental.}
   \label{tab:incremental-sesiones}
-  \begin{tabular}{llcrcrc}
+  \begin{tabular}{llcrcrcc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Coche & Día & Sesión & Vueltas & PWM & Mejor & Sin mejora \\
-          \rowcolor{ArqAzulClaro} & & & & & (s) & desde PWM \\
+    Coche & Día & Sesión & Vueltas & PWM & Mejor & Sin mejora & Vídeo \\
+          \rowcolor{ArqAzulClaro} & & & & & (s) & desde PWM & \\
     \midrule
-    Azul & 22/07 & 001 & 243 & 70--93  & 1,697 & 74 \\
-    Azul & 22/07 & 002 & 236 & 70--92  & 1,702 & 85 \\
-    Azul & 03/09 & ---  & 361 & 75--110 & 1,863 & 92 \\
-    Rojo & 22/07 & 001 & 277 & 70--95  & 1,581 & 93 \\
-    Rojo & 22/07 & 002 & 261 & 70--95  & 1,584 & 93 \\
-    Rojo & 03/09 & ---  & 360 & 75--110 & 1,350 & 98 \\
+    Azul & 22/07 & 001 & 243 & 70--93  & 1,697 & 74 & \video{vWmz8njpSms} \\
+    Azul & 22/07 & 002 & 236 & 70--92  & 1,702 & 85 & \video{nFKPtPt1Fyo} \\
+    Azul & 03/09 & ---  & 361 & 75--110 & 1,863 & 92 & \video{Nv9B-PkH_S0} \\
+    Rojo & 22/07 & 001 & 277 & 70--95  & 1,581 & 93 & \video{rRfFRlq_6wQ} \\
+    Rojo & 22/07 & 002 & 261 & 70--95  & 1,584 & 93 & \video{RSUEXODBiNw} \\
+    Rojo & 03/09 & ---  & 360 & 75--110 & 1,350 & 98 & \video{PgBBuL6WXzg} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -130,7 +144,7 @@ Con el coche azul, el 22/07 una vuelta se daba en 1,774~s con un PWM de 75, mien
 
 \begin{table}[tbp]
   \centering
-  \estilotabla[3]
+  \estilotabla[4]
   \caption{Tiempo por vuelta ($t$, mediana del escalón) y distancia de derrape ($d$, percentil 95) en los valores de PWM comunes a los dos días. Se usan las sesiones 001 del 22/07.}
   \label{tab:incremental-por-pwm}
   \begin{tabular}{lrrrrrrrr}
@@ -138,6 +152,11 @@ Con el coche azul, el 22/07 una vuelta se daba en 1,774~s con un PWM de 75, mien
     \rowcolor{ArqAzulClaro}
     & \multicolumn{2}{c}{Azul 22/07} & \multicolumn{2}{c}{Azul 03/09}
     & \multicolumn{2}{c}{Rojo 22/07} & \multicolumn{2}{c}{Rojo 03/09} \\
+    % Aquí las filas no son ejecuciones sino escalones de PWM, así que el enlace
+    % al vídeo va en la cabecera de cada grupo de columnas, que sí lo es.
+    \rowcolor{ArqAzulClaro}
+    & \multicolumn{2}{c}{\video{vWmz8njpSms}} & \multicolumn{2}{c}{\video{Nv9B-PkH_S0}}
+    & \multicolumn{2}{c}{\video{rRfFRlq_6wQ}} & \multicolumn{2}{c}{\video{PgBBuL6WXzg}} \\
     \rowcolor{ArqAzulClaro}
     PWM & $t$ (s) & $d$ (px) & $t$ (s) & $d$ (px)
         & $t$ (s) & $d$ (px) & $t$ (s) & $d$ (px) \\
@@ -255,15 +274,15 @@ Las métricas de las tres ejecuciones se recogen en la tabla~\ref{tab:parametros
   \estilotabla[3]
   \caption{Métricas de tiempo por vuelta del coche azul en el circuito en óvalo para las tres configuraciones probadas.}
   \label{tab:parametros-azul}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    ALGO 012 (70--90, 12~px) & 96,41 & 1,731 & 1,788 & 1,928 & 0,291 \\
-    ALGO 013 (70--94, 12~px) & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 \\
-    ALGO 014 (70--94, 9~px)  & 87,93 & 1,663 & 1,733 & 1,759 & 0,094 \\
+    ALGO 012 (70--90, 12~px) & 96,41 & 1,731 & 1,788 & 1,928 & 0,291 & \video{pMCgdZVa09U} \\
+    ALGO 013 (70--94, 12~px) & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 & \video{de7VRDY5RnY} \\
+    ALGO 014 (70--94, 9~px)  & 87,93 & 1,663 & 1,733 & 1,759 & 0,094 & \video{fNCppyaiqFQ} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -286,17 +305,17 @@ Las tablas~\ref{tab:vs-personas-azul} y~\ref{tab:vs-personas-rojo} recogen los r
   \estilotabla[3]
   \caption{Coche azul en el circuito en óvalo, algoritmo vs pilotos humanos.}
   \label{tab:vs-personas-azul}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    ALGO 014 (70--94, 9~px)  & 87,93 & 1,663 & 1,733 & 1,759 & 0,094 \\
-    ALGO 013 (70--94, 12~px) & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 \\
-    Manual (piloto 1)        & 94,30 & 1,659 & 1,833 & 1,886 & 0,197 \\
-    ALGO 012 (70--90, 12~px) & 96,41 & 1,731 & 1,788 & 1,928 & 0,291 \\
-    Manual (piloto 2)        & 107,54 & 1,674 & 1,911 & 2,151 & 0,646 \\
+    ALGO 014 (70--94, 9~px)  & 87,93 & 1,663 & 1,733 & 1,759 & 0,094 & \video{fNCppyaiqFQ} \\
+    ALGO 013 (70--94, 12~px) & 93,59 & 1,661 & 1,755 & 1,872 & 0,228 & \video{de7VRDY5RnY} \\
+    Manual (piloto 2)        & 94,30 & 1,659 & 1,833 & 1,886 & 0,197 & \video{tk9p-LSDYqc} \\
+    ALGO 012 (70--90, 12~px) & 96,41 & 1,731 & 1,788 & 1,928 & 0,291 & \video{pMCgdZVa09U} \\
+    Manual (piloto 1)        & 107,54 & 1,674 & 1,911 & 2,151 & 0,646 & \video{fUY1f5KRpHw} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -306,22 +325,22 @@ Las tablas~\ref{tab:vs-personas-azul} y~\ref{tab:vs-personas-rojo} recogen los r
   \estilotabla[3]
   \caption{Coche rojo en el circuito en óvalo, algoritmo vs pilotos humanos.}
   \label{tab:vs-personas-rojo}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    ALGO 013 (70--94, 12~px) & 75,44 & 1,315 & 1,377 & 1,509 & 0,232 \\
-    ALGO 014 (70--94, 9~px)  & 75,67 & 1,329 & 1,399 & 1,513 & 0,214 \\
-    ALGO 012 (70--90, 12~px) & 80,82 & 1,436 & 1,510 & 1,616 & 0,220 \\
-    Manual (piloto 1)        & 82,36 & 1,291 & 1,421 & 1,647 & 0,787 \\
-    Manual (piloto 2)        & 93,86 & 1,276 & 1,587 & 1,877 & 1,151 \\
+    ALGO 013 (70--94, 12~px) & 75,44 & 1,315 & 1,377 & 1,509 & 0,232 & \video{xmcztHiHQiI} \\
+    ALGO 014 (70--94, 9~px)  & 75,67 & 1,329 & 1,399 & 1,513 & 0,214 & \video{qKWnKtoUocw} \\
+    ALGO 012 (70--90, 12~px) & 80,82 & 1,436 & 1,510 & 1,616 & 0,220 & \video{k782nnuUPPU} \\
+    Manual (piloto 2)        & 82,36 & 1,291 & 1,421 & 1,647 & 0,787 & \video{upcqPpoIFTo} \\
+    Manual (piloto 1)        & 93,86 & 1,276 & 1,587 & 1,877 & 1,151 & \video{V6U8hjjOiS0} \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-La diferencia entre los dos coches también reaparece aquí, como ya habíamos intuido en las pruebas anteriores. En el rojo la mejor ejecución automática le saca casi 7~segundos al mejor piloto, mientras que en el azul el margen se estrecha hasta los 0,7~segundos que separan a ALGO 013 del piloto 1, porque el coche es tan sensible que encontrar el punto de funcionamiento correcto resulta difícil para las dos partes. De hecho ALGO 012, con los parámetros mal ajustados, queda por debajo del piloto 1 en una de las ejecuciones.
+La diferencia entre los dos coches también reaparece aquí, como ya habíamos intuido en las pruebas anteriores. En el rojo la mejor ejecución automática le saca casi 7~segundos al mejor piloto, mientras que en el azul el margen se estrecha hasta los 0,7~segundos que separan a ALGO 013 del piloto 2, porque el coche es tan sensible que encontrar el punto de funcionamiento correcto resulta difícil para las dos partes. De hecho ALGO 012, con los parámetros mal ajustados, queda por debajo del piloto 2 en una de las ejecuciones.
 
 % ---------------------------------------------------------------------
 %  Circuito en ocho
@@ -334,18 +353,18 @@ Los resultados sobre el circuito en ocho se recogen en las tablas~\ref{tab:vs-pe
   \estilotabla[3]
   \caption{Coche azul en el circuito en ocho, algoritmo vs pilotos humanos.}
   \label{tab:vs-personas-ocho-azul}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    ALGO 002 (60--75, 9~px)  & 202,89 & 3,588 & 3,804 & 4,058 & 0,626 \\
-    ALGO 004 (63--85, 8~px)  & 205,00 & 3,549 & 4,011 & 4,100 & 0,563 \\
-    ALGO 001 (60--75, 10~px) & 210,22 & 3,576 & 3,885 & 4,204 & 0,733 \\
-    ALGO 003 (60--85, 9~px)  & 243,92 & 3,697 & 4,200 & 4,878 & 2,094 \\
-    Manual (piloto 2)        & 276,72 & 3,972 & 4,893 & 5,534 & 1,876 \\
-    Manual (piloto 3)        & 427,23 & 4,615 & 6,589 & 8,545 & 4,997 \\
+    ALGO 002 (60--75, 9~px)  & 202,89 & 3,588 & 3,804 & 4,058 & 0,626 & \video{tckNBd3eRhw} \\
+    ALGO 004 (63--85, 8~px)  & 205,00 & 3,549 & 4,011 & 4,100 & 0,563 & \video{8vJvvsCTsHY} \\
+    ALGO 001 (60--75, 10~px) & 210,22 & 3,576 & 3,885 & 4,204 & 0,733 & \video{tO7fcSTKdFE} \\
+    ALGO 003 (60--85, 9~px)  & 243,92 & 3,697 & 4,200 & 4,878 & 2,094 & \video{zR1phTaohws} \\
+    Manual (piloto 4)        & 276,72 & 3,972 & 4,893 & 5,534 & 1,876 & \video{Y9i3PZdikUc} \\
+    Manual (piloto 1)        & 427,23 & 4,615 & 6,589 & 8,545 & 4,997 & \video{VqUzG9dBvx8} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -357,27 +376,28 @@ En el coche azul la distancia entre el algoritmo y los pilotos se dispara respec
   \estilotabla[3]
   \caption{Coche rojo en el circuito en ocho, algoritmo vs pilotos humanos.}
   \label{tab:vs-personas-ocho-rojo}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    ALGO 001 (60--75, 10~px)     & 138,23 & 2,603 & 2,713 & 2,765 & 0,152 \\
-    Manual (piloto 1, intento 2) & 141,24 & 2,456 & 2,656 & 2,825 & 0,548 \\
-    ALGO 003 (65--90, 10~px)     & 141,81 & 2,618 & 2,756 & 2,836 & 0,225 \\
-    ALGO 002 (60--90, 10~px)     & 152,13 & 2,632 & 2,862 & 3,043 & 0,571 \\
-    Manual (piloto 1, intento 4) & 154,87 & 2,387 & 2,567 & 3,097 & 1,307 \\
-    Manual (piloto 1, intento 1) & 159,73 & 2,522 & 2,838 & 3,195 & 1,232 \\
-    Manual (piloto 1, intento 3) & 162,10 & 2,424 & 2,689 & 3,242 & 1,659 \\
-    Manual (piloto 2)            & 182,11 & 2,523 & 2,944 & 3,642 & 1,981 \\
+    ALGO 001 (60--75, 10~px)     & 138,23 & 2,603 & 2,713 & 2,765 & 0,152 & \video{Pcsduvlut2I} \\
+    Manual (piloto 3, intento 2) & 141,24 & 2,456 & 2,656 & 2,825 & 0,548 & \video{nGnAZCQA5O4} \\
+    ALGO 003 (65--90, 10~px)     & 141,81 & 2,618 & 2,756 & 2,836 & 0,225 & \video{wOlqn0TWTVU} \\
+    ALGO 002 (60--90, 10~px)     & 152,13 & 2,632 & 2,862 & 3,043 & 0,571 & \video{smJhc-zRyB4} \\
+    Manual (piloto 3, intento 4) & 154,87 & 2,387 & 2,567 & 3,097 & 1,307 & \video{xWMoQNsaqcY} \\
+    Manual (piloto 3, intento 1) & 159,73 & 2,522 & 2,838 & 3,195 & 1,232 & \video{7RyzojS1YOo} \\
+    Manual (piloto 3, intento 3) & 162,10 & 2,424 & 2,689 & 3,242 & 1,659 & \video{TkDBuh4IOtQ} \\
+    Manual (piloto 4)            & 182,11 & 2,523 & 2,944 & 3,642 & 1,981 & \video{PMoiJAFFVuA} \\
+    Manual (piloto 1)            & 306,88 & 3,015 & 3,585 & 6,138 & 5,057 & \video{5ftndcuH4iU} \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-Con el coche rojo el resultado es mucho más ajustado, y es el que mejor ilustra la diferencia entre las dos formas de conducir. ALGO 001 gana la contrarreloj con 138,23~s y el mejor intento manual se queda a 3,01~s. El piloto 1 repitió la prueba cuatro veces y sus vueltas rápidas mejoraron en cada intento, de 2,522 a 2,387~s, hasta quedar por debajo de la mejor vuelta del algoritmo; en dos de ellos incluso su mediana, 2,656 y 2,567~s, baja de los 2,713~s de ALGO 001, así que su vuelta típica llega a ser más rápida que la del sistema. Lo que no mejora es el acumulado, porque sus cuatro contrarrelojes, 159,73, 141,24, 162,10 y 154,87~s, no dibujan ninguna tendencia.
+Con el coche rojo el resultado es mucho más ajustado, y es el que mejor ilustra la diferencia entre las dos formas de conducir. ALGO 001 gana la contrarreloj con 138,23~s y el mejor intento manual se queda a 3,01~s. El piloto 3 repitió la prueba cuatro veces y sus vueltas rápidas mejoraron en cada intento, de 2,522 a 2,387~s, hasta quedar por debajo de la mejor vuelta del algoritmo; en dos de ellos incluso su mediana, 2,656 y 2,567~s, baja de los 2,713~s de ALGO 001, así que su vuelta típica llega a ser más rápida que la del sistema. Lo que no mejora es el acumulado, porque sus cuatro contrarrelojes, 159,73, 141,24, 162,10 y 154,87~s, no dibujan ninguna tendencia.
 
-La explicación está en las vueltas que la mediana no ve. Buscar la vuelta rápida saca el coche de la pista, y cada salida obliga a recogerlo, colocarlo y arrancar otra vez desde parado, de manera que un puñado de vueltas así borra todo lo ganado en las demás: la media ya se le da la vuelta al piloto, 2,825 y 3,097~s frente a los 2,765~s del algoritmo, y su desviación típica no baja de 0,548~s frente a los 0,152~s de ALGO 001. Si hubiese podido repetir su mejor vuelta las cincuenta veces habría cerrado en 119,35~s, casi 19~segundos por debajo del algoritmo, así que el margen existe; lo que no existe es la forma de sostenerlo. El piloto 2 es el mismo caso en su extremo, con una mejor vuelta perfectamente competitiva de 2,523~s y una contrarreloj de 182,11~s. Entre las configuraciones automáticas conviene señalar que ALGO 002 y ALGO 003 solo se diferencian en el suelo del rango, 60 frente a 65, y esos cinco puntos cuestan más de 10~segundos, 152,13 frente a 141,81~s: el suelo es el valor al que puede llegar el castigo, así que ajustar el rango no es solo cuestión de cuánto se deja correr al coche sino de cuánto se le permite frenar.
+La explicación está en las vueltas que la mediana no ve. Buscar la vuelta rápida saca el coche de la pista, y cada salida obliga a recogerlo, colocarlo y arrancar otra vez desde parado, de manera que un puñado de vueltas así borra todo lo ganado en las demás: la media ya se le da la vuelta al piloto, 2,825 y 3,097~s frente a los 2,765~s del algoritmo, y su desviación típica no baja de 0,548~s frente a los 0,152~s de ALGO 001. Si hubiese podido repetir su mejor vuelta las cincuenta veces habría cerrado en 119,35~s, casi 19~segundos por debajo del algoritmo, así que el margen existe; lo que no existe es la forma de sostenerlo. Los pilotos 4 y 1 son el mismo caso llevado al extremo, con mejores vueltas perfectamente competitivas, 2,523 y 3,015~s, y contrarrelojes de 182,11 y 306,88~s. Entre las configuraciones automáticas conviene señalar que ALGO 002 y ALGO 003 solo se diferencian en el suelo del rango, 60 frente a 65, y esos cinco puntos cuestan más de 10~segundos, 152,13 frente a 141,81~s: el suelo es el valor al que puede llegar el castigo, así que ajustar el rango no es solo cuestión de cuánto se deja correr al coche sino de cuánto se le permite frenar.
 
 La comparación entre los dos coches vuelve a aparecer aquí y con más fuerza que en el óvalo. ALGO 001 se ejecutó con exactamente la misma configuración, con el rango de 60 a 75 y el umbral en 10~px, sobre los dos vehículos, y el resultado es de 210,22~s en el azul frente a 138,23~s en el rojo, casi 72~segundos y un 52\,\% más, cuando en el óvalo la misma comparación se quedaba en un 19\,\%. Un trazado más largo y con más curvas multiplica el efecto de la diferencia de adherencia descrita en la sección~\ref{sec:prueba-comparativa-coches}, y lo hace por igual para las dos partes, porque a los pilotos el coche azul también les cuesta mucho más que el rojo.
 
@@ -397,16 +417,16 @@ Los resultados se recogen en la tabla~\ref{tab:politica-tiempos} y a primera vis
   \estilotabla[3]
   \caption{Métricas de las 50 vueltas de la ejecución de referencia con el algoritmo y de las tres repeticiones de la política congelada (coche azul, PWM 65--88, umbral de derrape 11~px).}
   \label{tab:politica-tiempos}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    Política 001 & 90,42 & 1,766 & 1,804 & 1,808 & 0,039 \\
-    Política 002 & 91,64 & 1,719 & 1,797 & 1,833 & 0,137 \\
-    Política 003 & 91,71 & 1,760 & 1,803 & 1,834 & 0,124 \\
-    Algoritmo    & 98,29 & 1,681 & 1,814 & 1,966 & 0,393 \\
+    Política 001 & 90,42 & 1,766 & 1,804 & 1,808 & 0,039 & \video{8AshsEd_YOk} \\
+    Política 002 & 91,64 & 1,719 & 1,797 & 1,833 & 0,137 & \video{eEmS34UGi2o} \\
+    Política 003 & 91,71 & 1,760 & 1,803 & 1,834 & 0,124 & \video{3QtbiEr307M} \\
+    Algoritmo    & 98,29 & 1,681 & 1,814 & 1,966 & 0,393 & \video{KF01-uVxoSs} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -425,16 +445,16 @@ Si se descuentan esas vueltas de arranque la ventaja desaparece. La tabla~\ref{t
   \estilotabla[3]
   \caption{Las mismas métricas contando solo desde la vuelta 21, con el algoritmo ya estabilizado.}
   \label{tab:politica-estable}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
+    Ejecución & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    Política 001 & 53,85 & 1,766 & 1,783 & 1,795 & 0,028 \\
-    Algoritmo    & 54,33 & 1,742 & 1,804 & 1,811 & 0,045 \\
-    Política 003 & 54,43 & 1,760 & 1,803 & 1,814 & 0,087 \\
-    Política 002 & 54,68 & 1,719 & 1,785 & 1,823 & 0,152 \\
+    Política 001 & 53,85 & 1,766 & 1,783 & 1,795 & 0,028 & \video{8AshsEd_YOk} \\
+    Algoritmo    & 54,33 & 1,742 & 1,804 & 1,811 & 0,045 & \video{KF01-uVxoSs} \\
+    Política 003 & 54,43 & 1,760 & 1,803 & 1,814 & 0,087 & \video{3QtbiEr307M} \\
+    Política 002 & 54,68 & 1,719 & 1,785 & 1,823 & 0,152 & \video{eEmS34UGi2o} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -461,15 +481,17 @@ La tabla~\ref{tab:red-rtt} recoge lo que mide el nodo de sondeo, el nodo que se 
   \estilotabla[3]
   \caption{Tiempo de ida y vuelta por escenario, con las tres repeticiones juntas.}
   \label{tab:red-rtt}
-  \begin{tabular}{lrrrrr}
+  % Cada fila resume las TRES repeticiones del escenario, así que la celda del
+  % vídeo lleva los tres enlaces numerados en vez de un único «ver».
+  \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Escenario & Sondeos & Mediana & p95 & p99 & Máximo \\
-              \rowcolor{ArqAzulClaro} & & (ms) & (ms) & (ms) & (ms) \\
+    Escenario & Sondeos & Mediana & p95 & p99 & Máximo & Vídeos \\
+              \rowcolor{ArqAzulClaro} & & (ms) & (ms) & (ms) & (ms) & \\
     \midrule
-    A1 (una máquina) & 1680 & 3,36 & 8,74 & 19,80 & 54,27 \\
-    A2 (cable)       & 1720 & 2,42 & 10,00 & 12,54 & 16,92 \\
-    A3 (WiFi)        & 1664 & 7,27 & 14,96 & 17,76 & 27,80 \\
+    A1 (una máquina) & 1680 & 3,36 & 8,74 & 19,80 & 54,27 & \video[1]{_k24VAe4ZKA} \video[2]{UcFcyrnVMPU} \video[3]{B5GPN1_kwRk} \\
+    A2 (cable)       & 1720 & 2,42 & 10,00 & 12,54 & 16,92 & \video[1]{s7n5IlJ0zcY} \video[2]{NUcfTrVroxo} \video[3]{xYX2Y-OD7LU} \\
+    A3 (WiFi)        & 1664 & 7,27 & 14,96 & 17,76 & 27,80 & \video[1]{gaz0K9iMLp4} \video[2]{Y6tdL2naRiI} \video[3]{hypQh8q4sQI} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -499,15 +521,15 @@ Sobre la pista no se traduce en nada, y eso lo dice la tabla~\ref{tab:red-tiempo
   \estilotabla[3]
   \caption{Tiempos de las 50 vueltas por escenario.}
   \label{tab:red-tiempos-a}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Escenario & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
-              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) \\
+    Escenario & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeos \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    A3 (WiFi)        & 97,91 & 1,725 & 1,819 & 1,958 & 0,285 \\
-    A2 (cable)       & 100,83 & 1,716 & 1,808 & 2,017 & 0,552 \\
-    A1 (una máquina) & 102,45 & 1,740 & 1,843 & 2,049 & 0,405 \\
+    A3 (WiFi)        & 97,91 & 1,725 & 1,819 & 1,958 & 0,285 & \video[1]{gaz0K9iMLp4} \video[2]{Y6tdL2naRiI} \video[3]{hypQh8q4sQI} \\
+    A2 (cable)       & 100,83 & 1,716 & 1,808 & 2,017 & 0,552 & \video[1]{s7n5IlJ0zcY} \video[2]{NUcfTrVroxo} \video[3]{xYX2Y-OD7LU} \\
+    A1 (una máquina) & 102,45 & 1,740 & 1,843 & 2,049 & 0,405 & \video[1]{_k24VAe4ZKA} \video[2]{UcFcyrnVMPU} \video[3]{B5GPN1_kwRk} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -521,17 +543,17 @@ Como la regla está en la salida de la Raspberry Pi, el retardo lo sufre el sent
   \estilotabla[3]
   \caption{Retardo medido y tiempos de las 50 vueltas según el retardo inyectado. El punto de 0~ms es A3 sin tocar.}
   \label{tab:red-tiempos-b}
-  \begin{tabular}{lrrrrrr}
+  \begin{tabular}{lrrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Retardo & Ida y vuelta & Contrarreloj & Mejor & Mediana & Media & $\sigma$ \\
+    Retardo & Ida y vuelta & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeos \\
             \rowcolor{ArqAzulClaro}
-    inyectado & (ms) & (s) & (s) & (s) & (s) & (s) \\
+    inyectado & (ms) & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    0 ms   & 7,27 & 97,91 & 1,725 & 1,819 & 1,958 & 0,285 \\
-    25 ms  & 33,21 & 100,98 & 1,750 & 1,870 & 2,020 & 0,322 \\
-    50 ms  & 58,48 & 99,69 & 1,730 & 1,857 & 1,994 & 0,307 \\
-    100 ms & 108,35 & 105,41 & 1,735 & 1,889 & 2,108 & 0,427 \\
+    0 ms   & 7,27 & 97,91 & 1,725 & 1,819 & 1,958 & 0,285 & \video[1]{gaz0K9iMLp4} \video[2]{Y6tdL2naRiI} \video[3]{hypQh8q4sQI} \\
+    25 ms  & 33,21 & 100,98 & 1,750 & 1,870 & 2,020 & 0,322 & \video[1]{OKxPSBEzGvA} \video[2]{njiwCS1gtBc} \video[3]{2R-SNNJ0Sb4} \\
+    50 ms  & 58,48 & 99,69 & 1,730 & 1,857 & 1,994 & 0,307 & \video[1]{XJpB3IVhecY} \video[2]{h5jY27Ne27U} \video[3]{OADJDD47o-8} \\
+    100 ms & 108,35 & 105,41 & 1,735 & 1,889 & 2,108 & 0,427 & \video[1]{vQzWw2bY3Wk} \video[2]{EtzGwm9uMgg} \video[3]{UZWNLb6DXgc} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -543,7 +565,139 @@ La conclusión es que la red no es lo que limita el control. Por cable o por WiF
 \section{Pruebas en Circuitos Grandes}
 \label{sec:pruebas-circuitos-grande}
 
-Aparte de los resultados obtenidos en la realización de las pruebas de red, también hicimos dos circuitos un poco grandes para demostrar que la arquitectura es completamente funcional en circunstancias distribuidas con multiples camaras como también estaba pensado. Vamos a tener dos circuitos donde vamos a ver como se comporta el coche si somos capaces de controlador y ver lo qeu pasa. Para está prueab vamos va tener 2 rasberry pi 5 para controlar cada una como nodo camara y después en el ordenador vamos a tener un controlador y el nodo puente que permite controlar el arduino. 
+El resto del capítulo trabaja sobre trazados pequeños, que caben enteros en una cámara o en dos. Esta prueba lleva el sistema a circuitos grandes, del tamaño con el que se juega de verdad, para comprobar que la arquitectura sigue funcionando cuando hace falta repartir el trabajo entre varias máquinas, que es para lo que se diseñó. Se montaron dos trazados, y el segundo es mayor que el primero. Los dos se cubrieron con cuatro cámaras: dos de ellas en sendas Raspberry Pi 5 conectadas por WiFi, y las otras dos en el propio ordenador, donde también se ejecutan el controlador del coche y el nodo puente que habla con el Arduino.
+
+En cada circuito se hicieron ejecuciones con el algoritmo y ejecuciones de conducción manual, de 50 vueltas todas ellas, de manera que aquí se comprueban dos cosas a la vez: que el sistema escala a un trazado grande repartido entre varias máquinas, y que sobre él el algoritmo sigue por delante de una persona.
+
+\subsection{Primer circuito}
+\label{subsec:circuito-grande-1}
+
+Sobre este montaje se hicieron dos ejecuciones automáticas seguidas, una con cada coche, con un rango de PWM de 65 a 85. Entre una y otra no se movió ninguna cámara ni se cambió nada más que el umbral de derrape, 12~px en el azul y 13~px en el rojo. Al día siguiente, con el circuito y las cámaras sin tocar, el piloto 1 dio sus 50 vueltas con cada coche.
+
+Lo primero que hay que decir es que las dos ejecuciones automáticas terminaron sus 50 vueltas sin que nadie tuviera que intervenir, con las cuatro cámaras repartidas entre tres máquinas y sin más configuración que añadirlas a la lista de cámaras. La figura~\ref{fig:circuito-grande-tiempos} recoge el tiempo de cada vuelta. Las dos curvas hacen lo mismo que en el resto de las pruebas, bajan durante las primeras vueltas mientras el algoritmo sube el perfil y después se estabilizan, solo que el azul parte de una primera vuelta de 6,05~s y necesita diecisiete para alcanzar su tiempo de crucero, mientras que el rojo arranca en 4,51~s y llega en doce.
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\linewidth]{imaxes/PRUEBAS/CIRCUITO_GRANDE/tiempos_vuelta.pdf}
+  \caption{Tiempo por vuelta de las dos ejecuciones automáticas sobre el primer circuito grande.}
+  \label{fig:circuito-grande-tiempos}
+\end{figure}
+
+Los tiempos de la tabla~\ref{tab:circuito-grande-tiempos} son los esperados. El coche rojo completa las 50 vueltas en 188,85~s frente a los 212,48~s del azul, casi 24~segundos de diferencia, y además es mucho más regular, con una $\sigma$ de 0,257~s frente a 0,540~s. Es el mismo resultado que ya daba la sección~\ref{sec:prueba-comparativa-coches} sobre el óvalo y con una sola cámara, así que cambiar de trazado y repartir el circuito entre cuatro cámaras no altera el orden entre los coches: lo que separa a uno del otro sigue siendo el coche.
+
+Frente al piloto la distancia es mayor que en cualquiera de los trazados pequeños. El algoritmo le saca 85~s con el coche rojo y 105~s con el azul, un 45 y un 49\,\% más de tiempo acumulado, y la desviación típica del piloto pasa de los 2,6~s en las dos ejecuciones frente a los 0,26 y 0,54~s del algoritmo.
+
+\begin{table}[tbp]
+  \centering
+  \estilotabla[3]
+  \caption{Tiempos de las 50 vueltas sobre el primer circuito grande. Las ejecuciones automáticas van con PWM 65--85.}
+  \label{tab:circuito-grande-tiempos}
+  \begin{tabular}{llrrrrrc}
+    \toprule
+    \rowcolor{ArqAzulClaro}
+    Ejecución & Coche & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
+              \rowcolor{ArqAzulClaro} & & (s) & (s) & (s) & (s) & (s) & \\
+    \midrule
+    % PENDIENTE-VIDEO: CIRCUITO_FINAL_ROJO_001
+    Algoritmo         & Rojo & 188,85 & 3,449 & 3,715 & 3,777 & 0,257 & \\
+    % PENDIENTE-VIDEO: CIRCUITO_FINAL_AZUL_001
+    Algoritmo         & Azul & 212,48 & 3,805 & 3,992 & 4,250 & 0,540 & \\
+    % PENDIENTE-VIDEO: CIRCUITO_FINAL_ROJO_MANUAL_001
+    Manual (piloto 1) & Rojo & 274,18 & 3,148 & 4,535 & 5,484 & 2,754 & \\
+    % PENDIENTE-VIDEO: CIRCUITO_FINAL_AZUL_MANUAL_001
+    Manual (piloto 1) & Azul & 317,03 & 4,434 & 5,321 & 6,341 & 2,627 & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Durante las dos ejecuciones automáticas siguió corriendo el nodo de sondeo de la sección~\ref{sec:pruebas-red}, midiendo el tiempo de ida y vuelta hasta cada una de las dos Raspberry. La tabla~\ref{tab:circuito-grande-red} recoge esas medidas. Las medianas se quedan entre 6,90 y 7,88~ms, prácticamente las mismas que allí se midieron por WiFi (7,27~ms), y de los 4.306 sondeos enviados solo se perdió uno. Lo que sí sube aquí es la cola de la distribución, con percentiles 99 que llegan a los 135~ms y algún pico suelto por encima de los 190. Es razonable, porque ahora hay cuatro cámaras publicando su imagen de depuración y la sesión entera grabándose en disco, una carga que ninguna de las ejecuciones de la sección anterior tenía encima. Con los datos que se tienen no se puede repartir la culpa entre el enlace WiFi y la máquina, pero sí se ve que los picos son sueltos y que la mediana no se mueve.
+
+\begin{table}[tbp]
+  \centering
+  \estilotabla[3]
+  \caption{Tiempo de ida y vuelta hasta cada una de las dos Raspberry Pi durante las dos ejecuciones automáticas del primer circuito.}
+  \label{tab:circuito-grande-red}
+  \begin{tabular}{llrrrrr}
+    \toprule
+    \rowcolor{ArqAzulClaro}
+    Ejecución & Enlace & Sondeos & Mediana & p95 & p99 & Máximo \\
+              \rowcolor{ArqAzulClaro} & & & (ms) & (ms) & (ms) & (ms) \\
+    \midrule
+    Coche azul & camara\_01 & 1136 & 7,63 & 16,23 & 135,43 & 196,49 \\
+               & camara\_02 & 1136 & 6,90 & 15,24 & 34,72 & 127,95 \\
+    Coche rojo & camara\_01 & 1017 & 7,88 & 16,06 & 98,56 & 170,91 \\
+               & camara\_02 & 1017 & 7,27 & 16,54 & 30,89 & 135,26 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Aun con esos picos, en la pista no se notó nada, y encaja con lo que ya decía la sección~\ref{sec:pruebas-red}: allí hubo que inyectar 100~ms de retardo a mano, más de diez veces el que se mide aquí, para empezar a ver una diferencia en los tiempos, y ni siquiera entonces el coche perdía el control.
+
+\subsection{Segundo circuito}
+\label{subsec:circuito-grande-2}
+
+El segundo trazado es más largo que el primero, y se montó el mismo día por la tarde con el mismo reparto de cámaras y máquinas. La diferencia se nota en la calibración: la trayectoria base pasa de 144 a 177 nodos sumando las cuatro cámaras, y a cada una de ellas le toca una porción mayor del trazado. Aquí las ejecuciones automáticas no comparten configuración, porque el circuito se estrenó ese mismo día y hubo que buscar el rango de PWM de cada coche por separado: 65 a 78 en el azul y 70 a 90 en el rojo, las dos con el umbral de derrape en 10~px. Por eso esta tabla no compara los dos coches entre sí, cosa que ya hace la del primer circuito; lo que compara es cada coche con las personas que lo condujeron.
+
+La figura~\ref{fig:circuito-grande-2-tiempos} muestra el tiempo por vuelta de las dos ejecuciones automáticas y se lee igual que la del primer circuito, con la bajada inicial mientras el perfil sube y la estabilización después.
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\linewidth]{imaxes/PRUEBAS/CIRCUITO_GRANDE/tiempos_vuelta_002.pdf}
+  \caption{Tiempo por vuelta de las dos ejecuciones automáticas sobre el segundo circuito grande.}
+  \label{fig:circuito-grande-2-tiempos}
+\end{figure}
+
+Los resultados están en la tabla~\ref{tab:circuito-grande-2-tiempos} y el algoritmo gana las dos comparaciones con holgura. Con el coche rojo cierra en 217,56~s frente a los 358,27~s del piloto 1, un 65\,\% más para la persona, y con el azul en 322,41~s frente a los 458,51 y 536,30~s de los pilotos 1 y 5. Aquí, además, ni siquiera queda el consuelo de la vuelta rápida: la mejor vuelta es del algoritmo en los dos coches, 4,129~s frente a 4,355~s en el rojo y 5,636~s frente a 6,076~s en el azul. La diferencia de fondo es la de siempre y se ve en la última columna, porque la desviación típica del algoritmo se queda en 0,238 y 0,939~s mientras que la de los pilotos no baja de 2,7~s.
+
+\begin{table}[tbp]
+  \centering
+  \estilotabla[3]
+  \caption{Tiempos de las 50 vueltas sobre el segundo circuito grande. Las ejecuciones automáticas van con PWM 65--78 en el azul y 70--90 en el rojo, y umbral de derrape de 10~px las dos.}
+  \label{tab:circuito-grande-2-tiempos}
+  \begin{tabular}{llrrrrrc}
+    \toprule
+    \rowcolor{ArqAzulClaro}
+    Ejecución & Coche & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
+              \rowcolor{ArqAzulClaro} & & (s) & (s) & (s) & (s) & (s) & \\
+    \midrule
+    % PENDIENTE-VIDEO: CIRCUITO_FINAL_ROJO_003
+    Algoritmo         & Rojo & 217,56 & 4,129 & 4,250 & 4,351 & 0,238 & \\
+    % PENDIENTE-VIDEO: CIRCUITO_FINAL_AZUL_002 (el de BAGS_GUARDAR, PWM 65-78)
+    Algoritmo         & Azul & 322,41 & 5,636 & 6,281 & 6,448 & 0,939 & \\
+    % PENDIENTE-VIDEO: CIRCUITO_FINAL_ROJO_MANUAL_002_LOIS
+    Manual (piloto 1) & Rojo & 358,27 & 4,355 & 5,684 & 7,165 & 3,009 & \\
+    % PENDIENTE-VIDEO: CIRCUITO_FINAL_AZUL_MANUAL_002_LOIS
+    Manual (piloto 1) & Azul & 458,51 & 6,076 & 7,907 & 9,170 & 2,720 & \\
+    % PENDIENTE-VIDEO: CIRCUITO_FINAL_AZUL_MANUAL_002_MANU
+    Manual (piloto 5) & Azul & 536,30 & 6,093 & 8,007 & 10,726 & 6,556 & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+El sondeo de red se mantuvo también en estas dos ejecuciones y sus medidas están en la tabla~\ref{tab:circuito-grande-2-red}. Salen prácticamente iguales que las del primer circuito, con medianas entre 6,70 y 7,86~ms y la misma cola de percentiles 99 por encima de los 100~ms, y de los 5.826 sondeos enviados se perdieron cuatro. Que un trazado mayor no mueva estas cifras tiene sentido, porque lo que viaja por el enlace es una posición por fotograma y eso no depende de lo largo que sea el circuito.
+
+\begin{table}[tbp]
+  \centering
+  \estilotabla[3]
+  \caption{Tiempo de ida y vuelta hasta cada una de las dos Raspberry Pi durante las dos ejecuciones automáticas del segundo circuito.}
+  \label{tab:circuito-grande-2-red}
+  \begin{tabular}{llrrrrr}
+    \toprule
+    \rowcolor{ArqAzulClaro}
+    Ejecución & Enlace & Sondeos & Mediana & p95 & p99 & Máximo \\
+              \rowcolor{ArqAzulClaro} & & & (ms) & (ms) & (ms) & (ms) \\
+    \midrule
+    Coche azul & camara\_01 & 1698 & 7,29 & 15,17 & 131,20 & 207,86 \\
+               & camara\_02 & 1698 & 6,70 & 15,67 & 70,22 & 175,23 \\
+    Coche rojo & camara\_01 & 1215 & 7,86 & 19,04 & 126,00 & 177,52 \\
+               & camara\_02 & 1215 & 7,04 & 17,24 & 99,77 & 169,51 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+En resumen, el sistema se comportó como estaba pensado en los dos circuitos. Cuatro cámaras repartidas entre tres máquinas cubren un circuito grande, cada una aprende su porción del trazado, el controlador va conmutando entre ellas según por dónde pase el coche y el algoritmo ajusta el perfil de la misma forma que con una sola cámara. Escalar el montaje no exigió tocar ningún parámetro del algoritmo ni ninguna otra parte del sistema, y la red no fue un problema en ninguna de las cuatro ejecuciones automáticas.
+
+Frente a los pilotos el algoritmo gana las cinco comparaciones, y por márgenes mayores que en el óvalo y el circuito en ocho de la sección~\ref{sec:prueba-algo-vs-personas}: allí la distancia iba del 2 al 36\,\% según el coche y el trazado, y aquí del 42 al 65\,\%. El motivo es el que ya se explicó en esa sección y no hace falta repetirlo, solo que aquí se ve más: cuanto más largo es el trazado, más sitios hay donde perder el coche y más vueltas cuesta cada error, mientras que el algoritmo se limita a repetir el mismo tiempo cincuenta veces.
 
 \section{Prueba nodo visualización y multiples coches}
 \label{sec:prueba-nodo-visualizacion-multiples-coches}
@@ -563,14 +717,16 @@ Esta prueba comprueba si el algoritmo es capaz de adaptarse él solo a las modif
   \estilotabla[3]
   \caption{Las dos ejecuciones del circuito en ocho, con y sin peraltes (PWM 60--85, umbral de derrape 12~px, dos cámaras).}
   \label{tab:peraltes}
-  \begin{tabular}{lrrr}
+  \begin{tabular}{lrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
-    Ejecución & Contrarreloj & Mejor & Mediana \\
-              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) \\
+    Ejecución & Contrarreloj & Mejor & Mediana & Vídeo \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & \\
     \midrule
-    Sin peraltes & 141,36 & 2,665 & 2,832 \\
-    Con peraltes & 136,53 & 2,571 & 2,728 \\
+    % PENDIENTE-VIDEO: PRUEBA_CIRCUITO_OCHO_002
+    Sin peraltes & 141,36 & 2,665 & 2,832 & \\
+    % PENDIENTE-VIDEO: PRUEBA_CIRCUITO_OCHO_002_peraltes
+    Con peraltes & 136,53 & 2,571 & 2,728 & \\
     \bottomrule
   \end{tabular}
 \end{table}
