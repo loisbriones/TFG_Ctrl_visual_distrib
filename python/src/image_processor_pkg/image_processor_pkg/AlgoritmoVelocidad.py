@@ -426,34 +426,14 @@ class EstrategiaPerfil:
         dist = np.hypot(dif[:, 0], dif[:, 1])
         saltos = [int(i) for i in np.nonzero(dist > self.umbral_celda_gigante)[0]]
 
-        # Volcado de los huecos de la calibración. Un hueco es un tramo en el
-        # que la cámara dejó de ver el coche: la cadena lo tapa interpolando
-        # una recta (o, si pasa de umbral_celda_gigante, con una celda
-        # gigante). Si el tramo tapado era en realidad una curva, la cadena
-        # deja de describir la pista ahí y el coche pasa a varios píxeles de
-        # una trayectoria que no existe, con derrapes falsos vuelta tras
-        # vuelta. Desde la lista de puntos NO se puede saber si el hueco cae
-        # sobre una recta (inofensivo) o sobre una curva, así que no se juzga:
-        # se listan todos y se decide leyendo el log
-        huecos = [
-            (int(i), float(dist[i]))
-            for i in np.nonzero(dist > 3.0 * self.paso_celda)[0]
-        ]
+        # Esta línea describe la lista CRUDA, tal y como llegó del controlador:
+        # es lo que permite reconstruir después qué se grabó de verdad. El
+        # aviso de huecos va más abajo, sobre la lista ya orientada.
         self.saveLogFile(
             f"[TRAY] Trayectoria de calibración: {len(filtrados)} puntos, "
             f"separación entre puntos mín={float(dist.min()):.1f} "
             f"mediana={float(np.median(dist)):.1f} máx={float(dist.max()):.1f} px"
         )
-        if huecos:
-            detalle = ", ".join(
-                f"{L:.0f} px tras el punto {i}" for i, L in huecos
-            )
-            self.saveLogFile(
-                f"[TRAY] AVISO: {len(huecos)} hueco(s) de más de "
-                f"{3.0 * self.paso_celda:.0f} px en la calibración ({detalle}). "
-                f"Si el coche derrapa siempre en el mismo sitio, repetir la "
-                f"calibración"
-            )
 
         cierre = math.hypot(
             float(filtrados[-1][0] - filtrados[0][0]),
@@ -502,6 +482,42 @@ class EstrategiaPerfil:
                 f"ABIERTA (porción del circuito); saltos interiores "
                 f"tapados: {len(saltos)}"
             )
+
+        # Volcado de los huecos, YA SOBRE LA LISTA ORIENTADA. Un hueco es un
+        # tramo en el que la cámara dejó de ver el coche: la cadena lo tapa
+        # interpolando una recta (o, si pasa de umbral_celda_gigante, con una
+        # celda gigante). Si el tramo tapado era en realidad una curva, la
+        # cadena deja de describir la pista ahí y el coche pasa a varios
+        # píxeles de una trayectoria que no existe, con derrapes falsos vuelta
+        # tras vuelta. Desde la lista de puntos NO se puede saber si el hueco
+        # cae sobre una recta (inofensivo) o sobre una curva, así que no se
+        # juzga: se listan todos y se decide leyendo el log.
+        #
+        # Va DESPUÉS de la rotación y no antes. En la lista cruda de la cámara
+        # que ve la meta hay siempre un salto enorme que NO es un hueco de la
+        # pista: la vuelta de calibración empieza y acaba en la meta, y la meta
+        # cae en mitad de su porción, así que la lista llega como [cola del
+        # tramo, salto, cabeza del tramo] y ese salto es el resto del circuito.
+        # La rotación lo elimina. Calculando los huecos antes, esa cámara
+        # avisaba SIEMPRE de un hueco de varios cientos de píxeles que la línea
+        # siguiente borraba, y el aviso no servía para decidir nada.
+        dif_final = np.diff(filtrados, axis=0)
+        dist_final = np.hypot(dif_final[:, 0], dif_final[:, 1])
+        huecos = [
+            (int(i), float(dist_final[i]))
+            for i in np.nonzero(dist_final > 3.0 * self.paso_celda)[0]
+        ]
+        if huecos:
+            detalle = ", ".join(
+                f"{L:.0f} px tras el punto {i}" for i, L in huecos
+            )
+            self.saveLogFile(
+                f"[TRAY] AVISO: {len(huecos)} hueco(s) de más de "
+                f"{3.0 * self.paso_celda:.0f} px en la calibración ({detalle}). "
+                f"Si el coche derrapa siempre en el mismo sitio, repetir la "
+                f"calibración"
+            )
+
         return filtrados, cerrada
 
     def _construir_celdas(self, p):

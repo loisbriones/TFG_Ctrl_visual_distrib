@@ -36,6 +36,26 @@ QOS_FINISH_LINE = QoSProfile(
     history=QoSHistoryPolicy.KEEP_LAST,
 )
 
+# Fotogramas de separación como mucho entre los dos mensajes que compara
+# verificar_linea_meta. El cruce de meta es un CAMBIO DE LADO entre dos
+# fotogramas SEGUIDOS; si entre ellos la cámara procesó muchos sin ver el
+# coche, el guardado no es el fotograma anterior sino el de la última vez que
+# lo vio, y el coche pudo reaparecer al otro lado de la recta sin cruzar la
+# meta (le dio la vuelta al circuito por fuera del encuadre).
+#
+# Medido en CIRCUITO_FINAL_{ROJO,AZUL}_MANUAL_002 y CIRCUITO_FINAL_AZUL_002:
+# los cruces REALES van con 1 a 4 fotogramas de separación (el 93-96 % con 1),
+# y los falsos con 117 a 520. Cualquier valor entre 5 y 100 da el mismo
+# recuento de vueltas, así que esto no es un umbral que haya que ajustar: es
+# un corte en mitad de un hueco de dos órdenes de magnitud.
+#
+# Se cuenta en FOTOGRAMAS y no en segundos ni en píxeles a propósito: n_frame
+# dice cuántos fotogramas procesó esa cámara sin ver el coche, y eso no
+# depende del tamaño del circuito, ni de la velocidad del coche, ni de lo que
+# dure la vuelta. Un umbral en segundos quedaría atado a la duración de la
+# vuelta y uno en píxeles a la altura de la cámara.
+MAX_SALTO_FRAMES_META = 10
+
 
 class CarControllerNode(Node):
     def __init__(self):
@@ -179,8 +199,8 @@ class CarControllerNode(Node):
         # vuelta es la diferencia de dos stamps de la MISMA Raspberry, el
         # desfase de reloj entre máquinas se cancela (no hace falta NTP).
         #
-        # (punto_front, stamp_ns, distancia_con_signo) del mensaje ANTERIOR
-        # de la cámara de meta
+        # (punto_front, stamp_ns, distancia_con_signo, n_frame) del mensaje
+        # ANTERIOR de la cámara de meta
         self.front_meta_anterior = None
         # Instante interpolado (ns, reloj de la Raspberry de meta) del
         # último cruce; la diferencia entre dos de estos es el lap_time, y
@@ -385,7 +405,7 @@ class CarControllerNode(Node):
             self.puntos_crudos[camara].append((fx, fy))
 
         # Como ya dimos una vuelta podemos terminar la calibración
-        if self.verificar_linea_meta(camara, punto_front, msg.stamp):
+        if self.verificar_linea_meta(camara, punto_front, msg.stamp, msg.n_frame):
             msg_fin_calibracion = Bool()
             msg_fin_calibracion.data = False
             self.pub_modo_calibracion.publish(msg_fin_calibracion)
@@ -459,13 +479,25 @@ class CarControllerNode(Node):
             # Solo se avisa de los que pasan de umbral_celda_gigante, que son
             # los que ademas cambian la forma de la cadena; el detalle completo
             # de todos los huecos va al log del algoritmo ([TRAY] AVISO).
+            #
+            # EXCEPTO si la ruta se cierra sobre si misma: eso significa que la
+            # meta cae en mitad de la porcion que ve esta camara, la lista llega
+            # como [cola del tramo, salto, cabeza del tramo] y el salto es el
+            # resto del circuito, no un hueco. setTrayectoria la rota y el salto
+            # desaparece. Sin esta condicion, la camara que ve la meta avisaba
+            # SIEMPRE de un hueco de varios cientos de px que no existia, y el
+            # aviso no servia para decidir si repetir la calibracion.
             umbral_hueco = self.params_algoritmo["umbral_celda_gigante"]
+            cierre = math.hypot(
+                ruta_limpia[-1][0] - ruta_limpia[0][0],
+                ruta_limpia[-1][1] - ruta_limpia[0][1],
+            )
             huecos = [
                 math.hypot(b[0] - a[0], b[1] - a[1])
                 for a, b in zip(ruta_limpia, ruta_limpia[1:])
                 if math.hypot(b[0] - a[0], b[1] - a[1]) > umbral_hueco
             ]
-            if huecos:
+            if huecos and cierre > self.params_algoritmo["umbral_cierre"]:
                 self.get_logger().warn(
                     f"⚠️ {camara}: la calibración trae {len(huecos)} hueco(s) de "
                     f"más de {umbral_hueco:.0f} px (el mayor {max(huecos):.0f} px): "
@@ -508,7 +540,7 @@ class CarControllerNode(Node):
         punto_front = np.array([fx, fy], dtype=np.float32)
         punto_back = np.array([bx, by], dtype=np.float32)
 
-        if self.verificar_linea_meta(camara, punto_front, msg.stamp):
+        if self.verificar_linea_meta(camara, punto_front, msg.stamp, msg.n_frame):
             self.registrar_vuelta_algoritmos()
 
         # El número de fotograma lo pone la cámara emisora y se guarda por
@@ -745,7 +777,7 @@ class CarControllerNode(Node):
         AP = P - A
         return float(AB[0] * AP[1] - AB[1] * AP[0]) / float(np.linalg.norm(AB))
 
-    def verificar_linea_meta(self, camara_id, p_front, stamp):
+    def verificar_linea_meta(self, camara_id, p_front, stamp, n_frame):
         """
         Procesa un mensaje de la cámara que ve la meta y devuelve True si
         con él se ha completado una vuelta.
@@ -756,7 +788,8 @@ class CarControllerNode(Node):
         exacto se interpola dentro de ese intervalo, proporcionalmente a lo
         cerca que estaba la delantera de la recta en cada extremo.
 
-        La pegatina trasera no interviene: basta con la delantera.
+        Solo entra aquí la cámara que ve la meta: el resto sale en la primera
+        condición. La pegatina trasera no interviene: basta con la delantera.
         """
         if (
             self.finish_line["camara_id"] is None
@@ -782,8 +815,21 @@ class CarControllerNode(Node):
                 "🏁 Primer fotograma de la cámara de meta recibido: "
                 "empieza la vigilancia del cruce de la línea."
             )
+        elif not (0 < n_frame - self.front_meta_anterior[3] <= MAX_SALTO_FRAMES_META):
+            # Lo guardado no es el fotograma anterior: entre medias la cámara
+            # procesó fotogramas en los que no vio el coche (salió del
+            # encuadre y le dio la vuelta al circuito por fuera), así que
+            # comparar los lados diría que "cruzó" sin haber pasado por la
+            # meta. Se re-siembra con este punto y ya se compara con el
+            # siguiente, que sí será el de al lado.
+            #
+            # La condición es una sola a propósito: el "0 <" cubre además el
+            # n_frame que retrocede cuando respawn relanza el nodo cámara y su
+            # contador vuelve a empezar, sin un caso aparte para eso.
+            self.front_meta_anterior = (p_front.copy(), t_stamp, d_curr, n_frame)
+            return False
         else:
-            p_prev, t_prev, d_prev = self.front_meta_anterior
+            p_prev, t_prev, d_prev, _ = self.front_meta_anterior
 
             # d == 0 es la delantera JUSTO encima de la recta, y pasa de
             # verdad: el centro de la pegatina es x + w/2 del boundingRect,
@@ -852,7 +898,7 @@ class CarControllerNode(Node):
         # Guardamos SIEMPRE los datos de la delantera: en el próximo
         # fotograma serán el "antes" con el que comparar el signo (el
         # equivalente a trayectoria[-1] en el código de Mario)
-        self.front_meta_anterior = (p_front.copy(), t_stamp, d_curr)
+        self.front_meta_anterior = (p_front.copy(), t_stamp, d_curr, n_frame)
 
         return vuelta_completada
 

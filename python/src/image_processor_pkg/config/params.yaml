@@ -77,9 +77,9 @@
     controller:
       # Velocidad minima a la que podemos ir. Es con la que arranca la carrera
       # y el suelo por debajo del cual no baja ninguna zona del perfil
-      minimum_speed: 65
+      minimum_speed: 70
       # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
-      maximum_speed: 85 
+      maximum_speed: 90
       # Separacion minima (px) entre nodos de la trayectoria base. Los puntos
       # que la camara envia durante la calibracion llegan mas o menos juntos
       # segun lo rapido que fuese el coche: al quedarnos solo con los que estan
@@ -113,7 +113,7 @@
         # a partir de la cual se considera que el coche derrapa. Ajustado en
         # pista: con 15 px el derrape se confirmaba tan tarde que el coche ya
         # se habia salido
-        umbral_derrape: 12.0
+        umbral_derrape: 10.0
         # Si la pegatina DELANTERA aparece a mas de esta distancia (px) de la
         # ruta, la deteccion es falsa y se descarta el fotograma entero: el
         # controlador mantiene entonces la velocidad anterior
@@ -166,5 +166,5 @@
     arduino:
       port: "/dev/ttyACM0"
       baudrate: 115200
-      calibration_speed: 65 
+      calibration_speed: 70
 
