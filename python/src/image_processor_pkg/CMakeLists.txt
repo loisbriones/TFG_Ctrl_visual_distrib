@@ -18,6 +18,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TimePerLap.msg"
   "msg/CarControlTelemetry.msg"
   "msg/BoundingRect.msg"
+  # Sondeos de latencia de red (NetProbeNode <-> CameraNode). No son parte del
+  # camino de datos: se pueden apagar enteros con net_probe.enabled
+  "msg/NetProbe.msg"
+  "msg/NetProbeEcho.msg"
   DEPENDENCIES builtin_interfaces
 )
 
@@ -40,6 +44,9 @@ install(PROGRAMS
   # Panel de la carrera en directo. Su pagina no va aqui: son los tres ficheros
   # de web/, que se instalan arriba en el share
   image_processor_pkg/VisualizacionNode.py
+  # Medidor de latencia de red. No forma parte del camino de datos: se puede
+  # apagar entero con net_probe.enabled sin desmontar nada
+  image_processor_pkg/NetProbeNode.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

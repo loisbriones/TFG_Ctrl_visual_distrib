@@ -4,7 +4,13 @@ import rclpy
 from rclpy.node import Node
 import cv2 as cv
 import numpy as np
-from image_processor_pkg.msg import CarLocation, FinishLine, BoundingRect
+from image_processor_pkg.msg import (
+    CarLocation,
+    FinishLine,
+    BoundingRect,
+    NetProbe,
+    NetProbeEcho,
+)
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
 
@@ -29,6 +35,9 @@ from rclpy.qos import (
 from rcl_interfaces.msg import SetParametersResult, ParameterDescriptor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
+# Para reconstruir el stamp de captura (builtin_interfaces/Time) y poder
+# restarlo del instante de publicacion en publish_car_position
+from rclpy.time import Time
 
 from threading import Thread, Lock
 
@@ -64,6 +73,14 @@ class ImageProcessor(Node):
         self.image_processor_group = MutuallyExclusiveCallbackGroup()
         # Debug
         self.debug_group = MutuallyExclusiveCallbackGroup()
+        # Eco de los sondeos de red. Grupo PROPIO, con su hilo reservado en el
+        # MultiThreadedExecutor de main(), y no por simetria con los de arriba:
+        # el eco tiene que salir en cuanto llega el sondeo. Si compartiese
+        # grupo con el procesado del fotograma, cada sondeo esperaria a que
+        # terminase la deteccion en curso y ese tiempo de cola se sumaria al
+        # RTT como si fuese latencia de red. La medida diria entonces cuanto
+        # tarda la camara en atender, que es justo lo que NO se quiere medir.
+        self.net_probe_group = MutuallyExclusiveCallbackGroup()
 
         # ---- ID NODO ----
         self.declare_parameter("camara_id", "camara")
@@ -261,6 +278,37 @@ class ImageProcessor(Node):
         )
         # ---------------------------------------
 
+        # ---- ECO DE SONDEOS DE RED ----
+        # Responde a los NetProbe que manda el NetProbeNode desde el PC para
+        # medir la latencia del enlace. Esta camara no mide nada: solo rebota
+        # el sondeo tal cual y apunta cuanto tardo ella en hacerlo, para que el
+        # emisor pueda descontarlo del RTT. Toda la explicacion de por que se
+        # mide de ida y vuelta y no de ida sola esta en NetProbeNode.py.
+        #
+        # Topics RELATIVOS: el nodo corre en el namespace de la camara (el
+        # node_id que le pasa CameraLaunch), asi que "net_probe" resuelve a
+        # /camara_XX/net_probe, igual que "camara_debug" de aqui arriba.
+        #
+        # enabled: True por defecto — el sondeo es un mensaje pequeno cada 200
+        # ms y no estorba. Se puede apagar para comprobar que el sistema se
+        # comporta exactamente igual sin la instrumentacion.
+        self.declare_parameter("net_probe.enabled", True)
+        self.net_probe_enabled = self.get_parameter("net_probe.enabled").value
+
+        if self.net_probe_enabled:
+            self.net_probe_publisher = self.create_publisher(
+                NetProbeEcho, "net_probe_echo", qos_profile_sensor_data
+            )
+            self.net_probe_subscription = self.create_subscription(
+                NetProbe,
+                "net_probe",
+                self.callback_net_probe,
+                qos_profile_sensor_data,
+                callback_group=self.net_probe_group,
+            )
+            self.get_logger().info("📡 Eco de sondeos de red activo")
+        # -------------------------------
+
         # ---- TIMER ----
         # Posicion
         self.timer = self.create_timer(0.033, self.process_frame, callback_group=self.image_processor_group)
@@ -403,6 +451,40 @@ class ImageProcessor(Node):
 
             self.get_logger().warn(f"Reiniciando Calibracion ({car_name})")
 
+    def callback_net_probe(self, msg):
+        """Devuelve el sondeo tal cual, cronometrando lo que tarda en hacerlo.
+
+        Corre en su propio grupo de callbacks con hilo reservado
+        (net_probe_group), asi que no espera a que termine el procesado del
+        fotograma en curso.
+
+        proc_ns se mide con time.monotonic_ns() y NO con el reloj del nodo: es
+        una DURACION dentro de esta maquina, y el monotonico no da saltos si
+        NTP corrige la hora del sistema a mitad de la medida. Como es una
+        duracion y no un instante, el emisor puede restarla de su RTT sin que
+        el desfase entre los relojes de las dos maquinas entre en la cuenta.
+        """
+        # Primera linea, sin nada delante: lo que se hiciera antes quedaria
+        # fuera de proc_ns y el emisor lo acabaria contando como red
+        t_entrada_ns = time.monotonic_ns()
+
+        eco = NetProbeEcho()
+        # Todo esto se copia SIN TOCAR. En especial t_send: aqui no se compara
+        # con nada del reloj local (seria una resta entre relojes de maquinas
+        # distintas, justo lo que se evita), solo se devuelve para que el
+        # sondeo quede identificado tambien dentro del bag
+        eco.seq = msg.seq
+        eco.origen = msg.origen
+        eco.destino = msg.destino
+        eco.t_send = msg.t_send
+        # El mismo relleno de vuelta, para que el eco pese lo que la ida y los
+        # dos sentidos del viaje se midan en igualdad de condiciones
+        eco.padding = msg.padding
+
+        # Ultimo instante antes de publicar: a partir de aqui ya es red
+        eco.proc_ns = time.monotonic_ns() - t_entrada_ns
+        self.net_probe_publisher.publish(eco)
+
     def parameters_callback(self, params):
         result = SetParametersResult(successful=True)
 
@@ -544,6 +626,28 @@ class ImageProcessor(Node):
         # fotograma que lleva el número quemado en la imagen de debug
         object_location_msg.n_frame = n_frame
 
+        # EDAD DEL DATO: lo que ha envejecido esta posición desde que el
+        # fotograma salió del hardware hasta que el mensaje sale por la red.
+        # Es el tramo "procesado en cámara" del presupuesto de latencia, y es
+        # bastante más que proc_time: ahí solo entra la llamada a
+        # detector.find_object, y se quedan fuera la espera del fotograma en
+        # latest_frame hasta que dispara el timer de 33 Hz, los fotogramas que
+        # is_processing descarta, el recorte del ROI con su bitwise_and, el
+        # despacho al ThreadPool con la espera a todos los coches y el armado
+        # del mensaje. Además en calibración proc_time se publica como 0.0.
+        # Comparar el proc_time con el tramo de red daba por eso una cámara
+        # artificialmente rápida.
+        #
+        # Las dos marcas son del reloj de ESTA máquina: el stamp lo toma
+        # _capture_loop justo después de cam.read() y este instante se lee con
+        # el mismo get_clock(). La resta es intra-reloj, así que vale sin NTP
+        # ni sincronización de ningún tipo — la misma regla que siguen el
+        # lap_time y el pipeline_time.
+        ahora = self.get_clock().now()
+        object_location_msg.age_at_publish = (
+            ahora - Time.from_msg(frame_stamp)
+        ).nanoseconds / 1e9
+
         self.publisher_coche[car_name].publish(object_location_msg)
 
     def process_frame(self):
@@ -655,7 +759,13 @@ class ImageProcessor(Node):
             if detections["front"] is not None:
                 info["puntos_trayectoria"].append((detections["front"]["cx"], detections["front"]["cy"]))
                 # Usamos 0,0 como offset porque es el frame completo
-                # Solo publicamos en calibración si hemos detectado algo
+                # Solo publicamos en calibración si hemos detectado algo.
+                # El 0.0 es el proc_time: en calibración no se cronometra la
+                # detección, así que se publica a cero. El age_at_publish del
+                # mensaje SÍ sale bien también aquí (lo calcula
+                # publish_car_position a partir del frame_stamp, sin depender
+                # de este parámetro), y por eso es la medida que sirve para el
+                # presupuesto de latencia y proc_time no.
                 self.publish_car_position(detections, 0.0, 0, 0, car_name, frame_stamp, n_frame)
             return
 
@@ -844,7 +954,16 @@ def main(args=None):
     rclpy.init(args=args)
     image_processor = ImageProcessor()
 
-    executor = MultiThreadedExecutor(num_threads=3)
+    # Un hilo por grupo de callbacks que tiene que poder correr a la vez:
+    #   1) image_processor_group  timer de posicion (el procesado del fotograma)
+    #   2) debug_group            timer de la imagen de debug
+    #   3) grupo por defecto      las suscripciones /<coche>/modo_calibracion
+    #   4) net_probe_group        el eco de los sondeos de red
+    # El cuarto es lo que garantiza que un sondeo se responde en cuanto llega y
+    # no detras del procesado del fotograma en curso: si el eco tuviera que
+    # esperar turno, esa espera se sumaria al RTT y la medida diria cuanto
+    # tarda la camara en atender en vez de cuanto tarda la red.
+    executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(image_processor)
 
     try:

@@ -71,4 +71,21 @@ def generate_launch_description():
             )
         )
 
+    # 4. Medidor de latencia de red. Va SIN namespace y sin filtrar por coche:
+    #    lo que mide es el enlace con cada camara, que es del montaje y no de
+    #    ningun coche en concreto (las camaras que sondea salen de
+    #    net_probe.camaras en el params.yaml). Se lanza siempre; cuando no hay
+    #    campana de medidas en marcha se deja net_probe.enabled: False y el
+    #    nodo arranca, avisa y no hace nada, sin tener que tocar este fichero.
+    ld.add_action(
+        Node(
+            package="image_processor_pkg",
+            executable="NetProbeNode.py",
+            name="net_probe",
+            parameters=[params_file],
+            respawn=True,
+            respawn_delay=2.0,
+        )
+    )
+
     return ld

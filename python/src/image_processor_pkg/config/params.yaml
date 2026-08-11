@@ -168,3 +168,72 @@
       baudrate: 115200
       calibration_speed: 70
 
+    # MEDIDOR DE LATENCIA DE RED (NetProbeNode en el PC + eco en cada camara).
+    # Nada de esto forma parte del camino de datos: es instrumentacion para las
+    # pruebas de red de la memoria y se puede apagar entera sin desmontar nada.
+    #
+    # Se mide el viaje de IDA Y VUELTA (RTT) y no el de ida solo. El motivo, que
+    # esta desarrollado en la cabecera de NetProbeNode.py: en un RTT las dos
+    # marcas de tiempo las toma el MISMO reloj, asi que el desfase entre los
+    # relojes de las dos maquinas se cancela al restar (RFC 2681, 2.7.1). En una
+    # medida unidireccional ese desfase se suma entero al resultado, y sobre
+    # WiFi es del mismo orden de magnitud que la latencia que se quiere medir.
+    # Aqui no hay NTP en ninguna parte, y es deliberado.
+    net_probe:
+      # Interruptor general, lo leen LOS DOS nodos: el emisor del PC y el eco de
+      # la camara. Con False el sistema queda exactamente como si esto no
+      # existiera (ni sondeos, ni suscripciones, ni ficheros). Se deja en True
+      # los dias de medicion y en False el resto del tiempo.
+      enabled: True
+
+      # Camaras a sondear. Los nombres tienen que ser los mismos node_id con los
+      # que se levanta cada CameraNode (los que pasa docker-compose-camera.yml
+      # en NODE_ID), porque de ahi sale su namespace: el eco escucha en
+      # /<node_id>/net_probe. Un enlace por camara y una medida independiente
+      # por enlace: mezclar una camara por cable con otra por WiFi en la misma
+      # media no diria nada de ninguna de las dos.
+      #
+      # Aqui van SOLO las camaras que corren en una Raspberry, que son las que
+      # cruzan la red de verdad: camara_03 y camara_04 corren en el mismo PC que
+      # el emisor y sondearlas mediria el loopback, no el enlace.
+      camaras: ["camara_01", "camara_02"]
+
+      # Cadencia de sondeo, con timer FIJO: sale un sondeo por camara cada tick
+      # pase lo que pase, sin esperar al eco anterior. Que la cadencia sea
+      # constante es lo que hace que el porcentaje de perdida signifique algo.
+      # 5 Hz es el compromiso: bastantes muestras para una mediana y un p95
+      # decentes en una ejecucion de 30 vueltas, y muy por debajo de los 30 Hz
+      # del camino real para no falsear la medida metiendo trafico propio.
+      frecuencia_hz: 5.0
+
+      # Relleno del sondeo, en bytes. Sirve para que el paquete pese mas o menos
+      # lo que un CarLocation real y atraviese la red en las mismas condiciones:
+      # un datagrama de 40 bytes y uno de 200 no se fragmentan igual ni esperan
+      # lo mismo en las colas. 128 B deja el NetProbe a la altura de un
+      # CarLocation con sus dos pegatinas y sus dos rectangulos.
+      padding_bytes: 128
+
+      # Un sondeo que lleve mas de esto sin volver se da por PERDIDO: se apunta
+      # con perdido=1 y sale del calculo de latencia. No se cuenta como "muy
+      # lento" a proposito — si no, la cola de la distribucion se llenaria de
+      # sondeos que en realidad no llegaron nunca y el p95 acabaria midiendo
+      # este umbral en vez de la red. 500 ms es mas de dos veces el peor punto
+      # del barrido de tc netem (200 ms de ida y vuelta = 400 ms), asi que un
+      # sondeo que lo supera es que se ha perdido de verdad.
+      umbral_perdida_ms: 500.0
+
+      # Etiqueta de la ejecucion. Va en el nombre del CSV
+      # (netprobe_<etiqueta>_<camara>.csv) y es lo que permite separar despues
+      # unos de otros los escenarios de una campana de medidas: A1_rep1,
+      # A2_rep3, B_100ms... SE CAMBIA A MANO ENTRE EJECUCIONES. Si se olvida,
+      # los ficheros se abren en modo "a" y dos ejecuciones quedan pegadas en el
+      # mismo CSV, mezcladas y sin forma de separarlas.
+      etiqueta: "sin_etiqueta"
+
+      # Donde se escriben los CSV. Por defecto dentro del paquete, igual que los
+      # logs_carrera del algoritmo: docker-compose-brain.yml monta
+      # src/image_processor_pkg desde el host, asi que lo que se escribe ahi
+      # sobrevive a parar el contenedor y se lee sin entrar en el. Esta ruta es
+      # la de DENTRO del contenedor.
+      directorio_csv: "/ros2_ws/src/image_processor_pkg/logs_red"
+
