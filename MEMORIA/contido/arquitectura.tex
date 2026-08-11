@@ -203,8 +203,8 @@ El algoritmo es el componente que decide, en cada instante y para cada punto del
 
 \begin{figure}[tbp]
     \centering
-    \includegraphics[width=\textwidth]{imaxes/ARQUITECTURA/explicacion_algo_sencilla.png}
-    \caption{Ciclo del algoritmo: se parte de una única zona, un derrape crea una zona más lenta que se anticipa a la curva, y las zonas sin derrape siguen subiendo}
+    \includegraphics[width=\textwidth]{imaxes/ARQUITECTURA/diseno_algoritmo.pdf}
+    \caption{Ciclo del algoritmo. En una vuelta limpia sube el PWM de todo el trazado; cuando se detecta un derrape se abre una zona que se extiende hacia atrás desde el punto en el que se detectó, para anticiparse a la curva; y al cerrar la vuelta esa zona baja su PWM mientras las que no derraparon siguen subiendo}
     \label{fig:arq-algo}
 \end{figure}
  
