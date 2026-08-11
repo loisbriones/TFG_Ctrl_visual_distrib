@@ -248,10 +248,42 @@ GRABACIONES/config_conversion.yaml
 # de ese dia y a esa colocacion de las camaras.
 #   - logs_carrera/          los derrapesLog_*.txt del algoritmo (los que se le
 #                            pasan al analisis; se abren en "w" en cada arranque)
+#   - logs_red/              los netprobe_*.csv del medidor de latencia. Son las
+#                            medidas de UNA campana concreta (esa red, esa
+#                            Raspberry, ese dia), no configuracion; los que
+#                            acaben en la memoria se copian a mano fuera
 #   - cache_trayectoria_*    la trayectoria aprendida en la calibracion
 #   - politica_*_PLANTILLA   se reescribe en cada arranque, en cualquier modo
 #   - politica_*.json        la politica editada a mano para el modo politica.
 #                            Si alguna merece guardarse, `git add -f`.
 python/src/image_processor_pkg/logs_carrera/
+python/src/image_processor_pkg/logs_red/
 python/src/image_processor_pkg/cache_trayectoria_*.json
 python/src/image_processor_pkg/politica_*.json
+
+# Salida de las herramientas de analisis: se regenera entera a partir de los
+# bags y sus logs, asi que en el repo se versiona la herramienta y no su
+# resultado. Si alguno merece entregarse DENTRO del repo, `git add -f`, igual
+# que las politica_*.json de arriba.
+#
+# Los HTML de analisis de las pruebas (unos 600 MB, uno por ejecucion). Los saca
+# analisis/generar_htmls.py, que esta versionado.
+RESULTADOS_PRUEBAS/
+
+# Los mp4 de las pruebas (unos 7 GB). Su sitio es YouTube, que es desde donde
+# los referencia la memoria: aqui solo se versionaria la herramienta que los
+# saca. Se ignora videos/salida/ y NO videos/ entera a proposito.
+videos/salida/
+
+# Script de UN SOLO USO que saca las figuras de la prueba de PWM incremental de
+# la memoria. No se metio en analisis/ porque el dashboard no dibuja el tiempo
+# por vuelta frente al PWM aplicado y ninguna otra prueba lo necesita: meterlo
+# alli arrastraria esa figura a todas las sesiones. Lo que hay que conservar son
+# sus PDF, que si van al repo en MEMORIA/imaxes/PRUEBAS/PWM_INCREMENTAL/.
+analisis_incremental/
+
+# Material de la comparativa con/sin peraltes (seccion 7.9): dos HTML de
+# comparativa, dos mp4 y el informe con los numeros. Todo derivado de bags que
+# tampoco se versionan. Lo que se conserva en el repo es la tabla, que ya esta
+# en MEMORIA/contido/pruebas.tex.
+analisis_peraltes/

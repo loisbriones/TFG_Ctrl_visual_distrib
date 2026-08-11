@@ -35,6 +35,32 @@ contenedor y traduce las rutas.
 
 ---
 
+## Todas las pruebas de la memoria de una vez
+
+`generar_htmls.py` lanza lo anterior sobre **todas las ejecuciones del catálogo**
+del capítulo de pruebas y deja los HTML ordenados por sección en
+`RESULTADOS_PRUEBAS/`, con un `INDICE.md` y un `INDICE.html` para navegarlos.
+
+```bash
+analisis/env/bin/python analisis/generar_htmls.py
+analisis/env/bin/python analisis/generar_htmls.py --seccion 7.5
+analisis/env/bin/python analisis/generar_htmls.py --rehacer
+```
+
+Sin `--rehacer` se salta los que ya existen, así que se puede cortar y retomar.
+
+Qué bag corresponde a qué fila de qué tabla lo dice el `CATALOGO` de
+`videos/generar_videos.py`, de donde este script lo importa: esa correspondencia
+se escribe **una sola vez** y vive allí. Por eso cada HTML se llama igual que su
+mp4 y el análisis y el vídeo de una misma prueba se emparejan de un vistazo. Los
+logs los busca dentro de la carpeta del bag, y cuando hay dos coches los filtra
+por coche (si no, al indexarse por cámara, el log de uno pisaría el del otro).
+
+Va con `--sin-servidor`, así que la sección 7 queda vacía a propósito: para ver
+las cámaras están los vídeos.
+
+---
+
 ## Qué hay en cada fichero
 
 | Fichero | Qué hace |
@@ -50,6 +76,7 @@ contenedor y traduce las rutas.
 | `web/plantilla.html` | El esqueleto de la página, con marcadores `{{...}}` |
 | `web/estilos.css` | El estilo. Los colores no se repiten aquí: `pagina.py` mete los de `figuras.py` en las variables `--col-*` |
 | `web/panel.js` | Toda la interactividad: los checkboxes de la 2, las flechas ← → de la 3, la sincronización entre las dos y la vuelta que se lleva el botón de PDF |
+| `generar_htmls.py` | Herramienta aparte: el lote de las pruebas de la memoria, ordenado en `RESULTADOS_PRUEBAS/` |
 | `comparativa.py` | Herramienta aparte: superpone los tiempos de varios HTML **ya generados** |
 | `Dockerfile` / `run.sh` | La imagen y el lanzador |
 
