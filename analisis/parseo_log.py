@@ -4,18 +4,15 @@ Parser del log de EstrategiaPerfil (derrapesLog_<nodo>_<camara>.txt, formato
 de CADENA DE CELDAS + ZONAS con etiquetas [INIT]/[TRAY]/[FRAME]/[DERRAPE]/
 [ZONA]/[PERFIL]/[VUELTA]).
 
-Código movido TAL CUAL de analizar_log_algoritmo.py al unificar el análisis
-en el dashboard (analisis.py): las regex son copias de los f-string de
-AlgoritmoVelocidad.py; si se cambia un mensaje allí hay que retocar aquí la
-regex correspondiente.
+Las regex son copias de los f-string de AlgoritmoVelocidad.py: si se cambia
+un mensaje allí, hay que retocar aquí la regex correspondiente. Ese formato
+es un CONTRATO, porque los logs ya grabados tienen que seguir leyéndose.
 
 Contenido:
-  - Umbrales del detector de anomalías (constantes bajo esta cabecera).
   - Una regex por tipo de línea del log.
   - Carrera: contenedor de todo lo extraído de UN log (una cámara).
   - parsear_log(): una pasada por el fichero -> Carrera.
   - derivar_por_vuelta() / tabla_vueltas(): estado del algoritmo por vuelta.
-  - detectar_anomalias(): comprobaciones automáticas.
   - camara_del_log(): nombre de la cámara desde la línea [INIT] del fichero.
 """
 
@@ -24,24 +21,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-# ---------------------------------------------------------------------------
-# Umbrales del detector de anomalías. Ahora todo se mide en CELDAS de la
-# cadena (paso_celda px cada una, 30 por defecto); se ajustan aquí.
-# ---------------------------------------------------------------------------
-# Un derrape individual (evento [DERRAPE] CERRADO) que abarque más de esta
-# fracción de la cadena se marca como anómalo: un derrape real dura unas
-# pocas celdas, no medio circuito.
-FRAC_CELDAS_DERRAPE_ANOMALO = 0.15
-
-# Una zona de derrape que cubra más de esta fracción de la cadena bloquea el
-# aprendizaje de casi todo el perfil (queda protegida tras cada reincidencia).
-FRAC_ZONA_GIGANTE = 0.40
-
-# Salto de celda de la pegatina TRASERA entre dos frames consecutivos con un
-# derrape abierto. El derrape se extiende frame a frame con la celda de la
-# trasera: una localización falsa lejos estira el intervalo de golpe.
-SALTO_CELDAS_TRASERA_ANOMALO = 3
 
 # ---------------------------------------------------------------------------
 # Expresiones regulares: UNA por mensaje de AlgoritmoVelocidad.py. El prefijo
@@ -881,43 +860,31 @@ def enlazar_zonas_entre_camaras(datos_camaras,
 def derivar_por_vuelta(c: Carrera):
     """Reconstruye el estado del algoritmo vuelta a vuelta.
 
-    Devuelve (vueltas, perfil_vuelta, zonas_ini_vuelta, zonas_fin_vuelta):
+    Devuelve (vueltas, perfil_vuelta, zonas_ini_vuelta):
       vueltas          lista ordenada de números de vuelta con frames
       perfil_vuelta    {v: array de PWM por celda} = perfil CON EL QUE SE
                        CORRIÓ la vuelta v (último volcado [PERFIL] anterior a
                        su primer frame)
       zonas_ini_vuelta {v: [zona]} = partición al EMPEZAR la vuelta v, con el
                        `id` y el `delta` que les pone seguir_zonas()
-      zonas_fin_vuelta {v: [zona]} = partición al TERMINAR la vuelta v
-                       (último volcado anterior al primer frame de v+1)
     """
     vueltas = sorted(c.frames["vuelta"].unique().tolist())
     primera_linea = c.frames.groupby("vuelta")["linea"].min().to_dict()
 
     perfil_vuelta = {}
     zonas_ini_vuelta = {}
-    zonas_fin_vuelta = {}
     for v in vueltas:
-        frontera_ini = primera_linea[v]
-        candidatos = [s for s in c.snapshots_perfil if s["linea"] < frontera_ini]
+        # El perfil de la vuelta v es el último volcado [PERFIL] ANTERIOR a su
+        # primer frame: con ese es con el que el coche corrió la vuelta.
+        candidatos = [s for s in c.snapshots_perfil if s["linea"] < primera_linea[v]]
         if candidatos:
             perfil_vuelta[v] = zonas_a_celdas(candidatos[-1]["zonas"], c.n_celdas)
             zonas_ini_vuelta[v] = candidatos[-1]["zonas"]
         else:
             perfil_vuelta[v] = np.full(c.n_celdas, np.nan)
             zonas_ini_vuelta[v] = []
-        idx = vueltas.index(v)
-        frontera_fin = (
-            primera_linea[vueltas[idx + 1]] if idx + 1 < len(vueltas) else float("inf")
-        )
-        candidatos = [s for s in c.snapshots_perfil if s["linea"] < frontera_fin]
-        zonas_fin_vuelta[v] = candidatos[-1]["zonas"] if candidatos else []
-    # Solo la partición de INICIO se sigue entre vueltas: es la que dibuja la
-    # gráfica 4 (el perfil con el que se corrió la vuelta). La de fin la usa
-    # detectar_anomalias, a la que el id no le aporta nada.
     return (vueltas, perfil_vuelta,
-            seguir_zonas(vueltas, zonas_ini_vuelta, c.n_celdas, c.cerrada),
-            zonas_fin_vuelta)
+            seguir_zonas(vueltas, zonas_ini_vuelta, c.n_celdas, c.cerrada))
 
 
 def tabla_vueltas(c: Carrera, vueltas, perfil_vuelta) -> pd.DataFrame:
@@ -962,112 +929,6 @@ def tabla_vueltas(c: Carrera, vueltas, perfil_vuelta) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(filas)
-
-
-# ---------------------------------------------------------------------------
-# Detector de anomalías: las comprobaciones que responden a "esta zona se ha
-# creado de forma rara". Devuelve una lista de textos (vacía si todo normal).
-# ---------------------------------------------------------------------------
-def detectar_anomalias(c: Carrera, zonas_fin_vuelta, vueltas):
-    avisos = []
-    n = max(c.n_celdas, 1)
-
-    # 1) Derrapes individuales que abarcan demasiadas celdas: un derrape
-    # físico dura unas pocas; media cadena indica que la trasera se localizó
-    # mal en algún frame intermedio y el intervalo se estiró
-    for _, d in c.derrapes.iterrows():
-        if d["n_celdas"] >= FRAC_CELDAS_DERRAPE_ANOMALO * n:
-            avisos.append(
-                f"Derrape SOSPECHOSO de {int(d['n_celdas'])} celdas "
-                f"({100 * d['n_celdas'] / n:.0f} % de la cadena) en la vuelta "
-                f"{int(d['vuelta'])}, {c.camara} frame {int(d['frame'])}: celdas "
-                f"[{int(d['ini'])}, {int(d['fin'])}]. Un derrape real dura "
-                f"unas pocas celdas: revisar los saltos de celda de la "
-                f"trasera en esos frames (siguiente comprobación)."
-            )
-
-    # 2) Saltos de celda de la pegatina trasera ENTRE frames consecutivos con
-    # el derrape abierto: el mecanismo exacto por el que se estira el intervalo
-    fr = c.frames
-    dc_b = fr["c_b"].diff().abs()
-    # Los números de frame son del contador de ESTA cámara y avanzan de uno en
-    # uno mientras publique, así que la diferencia mide de verdad "cuántos
-    # fotogramas han pasado". Un hueco significa que la cámara procesó ese
-    # fotograma pero no publicó (no vio el coche). Se toleran 2 para no perder
-    # el caso de un frame descartado en medio.
-    # (Antes el número era un contador global del controlador, con los mensajes
-    # de todas las cámaras mezclados: con dos cámaras la diferencia entre
-    # frames consecutivos de la misma ya era >= 2 y esta comprobación se
-    # quedaba sin casos. Ver NUMERACION_FRAMES.md.)
-    consecutivos = fr["frame"].diff() <= 2
-    con_derrape = fr["derrapando"] & fr["derrapando"].shift(fill_value=False)
-    saltos = fr[(dc_b > SALTO_CELDAS_TRASERA_ANOMALO) & con_derrape & consecutivos]
-    for _, s in saltos.iterrows():
-        avisos.append(
-            f"Salto de celda de la TRASERA con derrape abierto en la vuelta "
-            f"{int(s['vuelta'])}, {c.camara} frame {int(s['frame'])}: pasó a la celda "
-            f"{int(s['c_b'])} ({int(dc_b.loc[s.name])} celdas de golpe) — el "
-            f"derrape en curso se extiende hasta ahí."
-        )
-
-    # 3) Zonas de derrape gigantes al final de la carrera: cubren tanta cadena
-    # que su protección bloquea la subida del perfil en casi todo el circuito
-    if vueltas:
-        for z in zonas_fin_vuelta[vueltas[-1]]:
-            if z["tipo"] != "derrape":
-                continue
-            cobertura = (z["fin"] - z["ini"] + 1) / n
-            if cobertura >= FRAC_ZONA_GIGANTE:
-                avisos.append(
-                    f"Zona GIGANTE al final: [{z['ini']}, {z['fin']}] cubre el "
-                    f"{100 * cobertura:.0f} % de la cadena (pwm {z['pwm']}). "
-                    f"Una zona así congela el perfil de casi todo el circuito."
-                )
-
-    # 4) Datos informativos que ayudan a interpretar lo anterior
-    unos = int((c.derrapes["n_celdas"] == 1).sum())
-    if unos:
-        avisos.append(
-            f"INFO: {unos} de {len(c.derrapes)} derrapes duran 1 sola celda. "
-            f"Son picos de un frame por encima del umbral: puede interesar "
-            f"exigir una duración mínima antes de registrar zona."
-        )
-    if c.descartados:
-        avisos.append(
-            f"INFO: {len(c.descartados)} frames DESCARTADOS por ruido "
-            f"(front a más de max_dist_ruta de la trayectoria)."
-        )
-    if c.zona_muerta:
-        avisos.append(
-            f"INFO: {len(c.zona_muerta)} aperturas de derrape ignoradas por "
-            f"zona muerta (junto a un extremo o a una celda gigante)."
-        )
-    if c.incoherentes:
-        celdas = sorted({e["celda"] for e in c.incoherentes})
-        avisos.append(
-            f"INFO: {len(c.incoherentes)} aperturas de derrape ignoradas porque "
-            f"las dos pegatinas se localizaron en celdas incompatibles "
-            f"(trasera en {celdas}). El coche circulaba por un tramo sin "
-            f"celdas: mirar los huecos que lista [TRAY] AVISO."
-        )
-    if c.cierres_vision:
-        avisos.append(
-            f"INFO: {len(c.cierres_vision)} derrapes cerrados por salir del "
-            f"campo de visión (fin de cadena o pérdida de la ruta)."
-        )
-    if c.derrames:
-        avisos.append(
-            f"INFO: {len(c.derrames)} derrames de reducción hacia la cámara "
-            f"precedente (px: "
-            + ", ".join(f"{d['px']:.0f}" for d in c.derrames) + ")."
-        )
-    if c.externas:
-        avisos.append(
-            f"INFO: {len(c.externas)} reducciones externas recibidas de la "
-            f"cámara siguiente (px: "
-            + ", ".join(f"{d['px']:.0f}" for d in c.externas) + ")."
-        )
-    return avisos
 
 
 def camara_del_log(ruta: Path) -> str:

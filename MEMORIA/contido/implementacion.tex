@@ -366,7 +366,7 @@ Se escogió el formato \emph{mcap} porque lleva embebida la definición de cada 
 
 La herramienta de análisis convierte los datos crudos de una sesión en un conjunto de gráficas. Combina dos fuentes, la grabación (\emph{bags}), de la que obtiene todo lo que se publicó en la red, y los ficheros de \emph{logs} que escribe el algoritmo, de los que obtiene su estado interno.
 
-El resultado es un \emph{dashboard}, una página web autocontenida con gráficas interactivas que permiten desplazarse, ampliar una zona y consultar el valor de cada punto, organizada en secciones numeradas. Desde el propio \emph{dashboard} pueden exportarse las gráficas en PDF, los datos en CSV y descargar un vídeo que combina las imágenes de todas las cámaras.
+El resultado es un \emph{dashboard}, una página web autocontenida con gráficas interactivas que permiten desplazarse, ampliar una zona y consultar el valor de cada punto, organizada en secciones numeradas. Mientras la página se sirve, cada gráfica puede además exportarse en PDF vectorial para llevarla a un documento.
 
 También el análisis se ejecuta en un contenedor, que a diferencia del resto no forma parte del sistema desplegado. Se levanta bajo demanda indicándole qué sesión analizar, genera el \emph{dashboard}, lo sirve en un puerto accesible desde la máquina anfitriona y termina al pararlo.
 

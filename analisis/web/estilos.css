@@ -1,0 +1,80 @@
+/* Estilo del dashboard. Los colores no se repiten aquí a mano: pagina.py
+   sustituye los --col-* de :root por la paleta de figuras.py, para que la
+   página y las gráficas vayan a juego. */
+:root { color-scheme: light; }
+
+body {
+  font-family: var(--fuente);
+  background: var(--col-superficie);
+  color: var(--col-tinta);
+  max-width: 1250px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+h1 { font-size: 22px; }
+h2 {
+  font-size: 17px;
+  margin-top: 40px;
+  border-bottom: 1px solid var(--col-grid);
+  padding-bottom: 6px;
+}
+h3 { font-size: 14px; color: var(--col-tinta-2); }
+p  { color: var(--col-tinta-2); font-size: 13px; line-height: 1.5; }
+ul { color: var(--col-tinta-2); font-size: 13px; }
+code { background: var(--col-grid); padding: 1px 5px; border-radius: 3px; }
+
+/* Tabla de tiempos de la sección 5. OJO: comparativa.py lee estas filas del
+   HTML generado (busca table.tiempos y tr class="mejor|anomala"), así que su
+   marcado es un contrato; el estilo, no. */
+table.tiempos { border-collapse: collapse; font-size: 13px; }
+table.tiempos th,
+table.tiempos td {
+  border: 1px solid var(--col-grid);
+  padding: 3px 12px;
+  text-align: right;
+}
+table.tiempos tfoot td { font-weight: 600; }
+tr.mejor td { background: #e4f2e4; font-weight: 600; }
+tr.anomala td { background: #f9e9e2; }
+
+/* La tabla de tiempos y la tendencia, una al lado de la otra */
+.fila-tiempos { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+.fila-tiempos .mini-grafica { flex: 1 1 500px; min-width: 380px; }
+
+a.boton {
+  display: inline-block;
+  font-size: 12px;
+  text-decoration: none;
+  color: var(--col-tinta);
+  background: var(--col-grid);
+  border-radius: 4px;
+  padding: 4px 12px;
+  margin: 4px 8px 4px 0;
+}
+a.boton:hover { background: #d2d1c8; }
+
+/* Checkboxes de capas de la sección 2 */
+.checks-tray {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--col-tinta);
+}
+.checks-tray label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  background: var(--col-grid);
+  border: 1px solid #d2d1c8;
+  border-radius: 4px;
+  padding: 3px 10px;
+}
+.checks-tray label:hover { background: #d2d1c8; }
+.checks-tray input[type=checkbox] { cursor: pointer; margin: 0; }
+
+/* Fila de controles bajo una gráfica (botones de PDF, checkboxes) */
+.controles { margin: 4px 0 18px; }

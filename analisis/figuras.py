@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 """
-Todas las figuras plotly del dashboard unificado (analisis.py).
-
-Las figuras 6b/6c (heatmap de PWM y resumen por vuelta) vienen de
-analizar_log_algoritmo.py; solo cambió el número de sección en el título. El
-resto (circuito con PWM, derrape 3D, trayectorias, distancia del bag) sigue
-el mismo estilo: paleta validada del skill dataviz, chrome común en
-_layout_base y sliders por vuelta.
+Todas las figuras plotly del dashboard (analisis.py). Hay una función por
+figura, `grafica_<n>_<nombre>`, donde <n> es el número de la sección en la
+que sale. Todas comparten paleta y `chrome` a través de _layout_base.
 
 TODOS los sliders por vuelta son INSTANTÁNEOS: cada paso muestra SOLO su
-vuelta (figuras 1, 2, 3b y 4). Se implementan con arrays de visibilidad: las
+vuelta (figuras 1, 2, 3 y 4). Se implementan con arrays de visibilidad: las
 trazas "estáticas" (fondos, trayectorias, fantasmas de leyenda) siempre
 visibles y un bloque de trazas por vuelta. Además las figuras con plano
 (1, 2) llevan los EJES FIJOS, calculados sobre toda la carrera: si cada
@@ -24,7 +20,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from parseo_log import Carrera, celdas_de_zona, enlazar_zonas_entre_camaras
+from parseo_log import celdas_de_zona, enlazar_zonas_entre_camaras
 
 # ---------------------------------------------------------------------------
 # Colores (paleta validada del skill dataviz, modo claro). Los roles de estado
@@ -43,14 +39,6 @@ COL_SERIO = "#ec835a"        # naranja estado "serious": zonas de derrape
 COL_AVISO = "#b58324"        # ámbar: celdas gigantes y derrames entre cámaras
 COL_BUENO = "#0ca30c"        # verde estado "good": vuelta con subida de perfil
 COL_CONTEXTO = "#c3c2b7"     # gris de las series de fondo/contexto
-
-# Rampa secuencial azul claro->oscuro para el PWM: claro = lento (v_min),
-# oscuro = rápido (v_max), en estructura colorscale de plotly.
-_RAMPA_AZUL = [
-    "#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7",
-    "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b",
-]
-ESCALA_PWM = [[i / (len(_RAMPA_AZUL) - 1), c] for i, c in enumerate(_RAMPA_AZUL)]
 
 # Tipografía de todo el HTML y las figuras (sans del sistema, sin serifas)
 FUENTE = 'system-ui, -apple-system, "Segoe UI", sans-serif'
@@ -270,105 +258,15 @@ def _layout_base(fig, titulo, alto):
 
 
 # ===========================================================================
-# FIGURA 6b: heatmap del perfil de PWM (vuelta x celda)
+# FIGURA 3: la distancia de derrape DEL BAG, vuelta a vuelta
 # ===========================================================================
-# Cada fila es el perfil CON EL QUE EL COCHE CORRIÓ esa vuelta (el último
-# volcado [PERFIL] anterior a su primer frame), expandiendo las zonas a
-# celdas. Claro = lento (v_min), oscuro = rápido (v_max). Encima:
-#   - aspa roja     = celdas castigadas DURANTE esa vuelta (carveos y
-#                     castigos de gigantes; efecto en la fila siguiente)
-#   - círculo gris  = celdas protegidas al EMPEZAR esa vuelta (no subieron
-#                     aunque la vuelta anterior fuera limpia)
-# ===========================================================================
-def grafica_6b_heatmap(c: Carrera, vueltas, perfil_vuelta):
-    v_min = c.params.get("v_min", np.nan)
-    v_max = c.params.get("v_max", np.nan)
-
-    z = np.full((len(vueltas), c.n_celdas), np.nan)
-    for i, v in enumerate(vueltas):
-        z[i, :] = perfil_vuelta[v]
-    fig = go.Figure(
-        go.Heatmap(
-            z=z, x=list(range(c.n_celdas)), y=vueltas,
-            colorscale=ESCALA_PWM, zmin=v_min, zmax=v_max,
-            xgap=1, ygap=1,
-            colorbar=dict(title="PWM"),
-            hovertemplate=("vuelta %{y} · celda %{x}"
-                           "<br>PWM del perfil: %{z}<extra></extra>"),
-        )
-    )
-    # Castigos aplicados durante cada vuelta: los carveos (todas sus celdas)
-    # y los castigos de celdas gigantes
-    cast_x, cast_y, cast_t = [], [], []
-    for k in c.carveos:
-        for i in range(k["ini"], k["fin"] + 1):
-            cast_x.append(i)
-            cast_y.append(k["vuelta"])
-            cast_t.append(f"castigo en v{k['vuelta']}: celda {i} -> pwm {k['pwm']}")
-    for g in c.gigante_castigos:
-        cast_x.append(g["celda"])
-        cast_y.append(g["vuelta"])
-        cast_t.append(
-            f"gigante castigada en v{g['vuelta']}: "
-            f"{g['antes']}→{g['despues']}"
-        )
-    fig.add_trace(
-        go.Scatter(
-            x=cast_x, y=cast_y, mode="markers", name="castigo en esa vuelta",
-            marker=dict(symbol="x-thin", size=6,
-                        line=dict(color=COL_CRITICO, width=1.5)),
-            text=cast_t, hovertemplate="%{text}<extra></extra>",
-        )
-    )
-    # Zonas protegidas al empezar cada vuelta (las líneas PROTEGIDA del
-    # bloque [VUELTA v], que es el que ABRE la vuelta v)
-    prot_x, prot_y, prot_t = [], [], []
-    for p in c.protecciones:
-        for i in range(p["ini"], p["fin"] + 1):
-            prot_x.append(i)
-            prot_y.append(p["vuelta"])
-            prot_t.append(
-                f"v{p['vuelta']}: celda {i} protegida "
-                f"(zona [{p['ini']}-{p['fin']}], último derrape en "
-                f"v{p['ultimo_derrape']})"
-            )
-    fig.add_trace(
-        go.Scatter(
-            x=prot_x, y=prot_y, mode="markers", name="celda protegida (no sube)",
-            marker=dict(symbol="circle-open", size=5, color=COL_TINTA_2),
-            text=prot_t, hovertemplate="%{text}<extra></extra>",
-        )
-    )
-    fig.update_xaxes(title_text="celda de la cadena")
-    fig.update_yaxes(title_text="vuelta",
-                     range=[vueltas[-1] + 0.5, vueltas[0] - 0.5], dtick=2)
-    alto = max(500, 150 + 20 * len(vueltas))
-    return _layout_base(
-        fig,
-        f"6b · Perfil de PWM con el que se corrió cada vuelta "
-        f"(claro={v_min:.0f}, oscuro={v_max:.0f})",
-        alto,
-    )
-# ===========================================================================
-# FIGURA 3b: la distancia de derrape DEL BAG, vuelta a vuelta
-# ===========================================================================
-# Lo que la 3 cuenta desde el log (por cámara y contra la celda), esta lo
-# cuenta desde el BAG y contra el TIEMPO: el dist_derrape que publicó el
-# controlador en /telemetria/<coche>/car_control, muestra a muestra, dentro
-# de una vuelta. Sirve para ver de un vistazo si la distancia sube y baja
-# como debe (plana en las primeras vueltas, con picos según sube el PWM) o
-# si hay picos que no se corresponden con ningún derrape real.
+# El dist_derrape que publicó el controlador, muestra a muestra dentro de una
+# vuelta, con el PWM aplicado en el eje derecho (escalonado: cada orden vale
+# hasta la siguiente). Cada punto lleva el color de la cámara que lo originó y
+# una línea vertical discontinua marca cada cambio de cámara, porque los picos
+# que salen justo ahí son falsos (ver README, "Cómo se lee la sección 3").
 #
-# Cada punto va coloreado según la CÁMARA que envió la posición que originó
-# esa telemetría, y una línea vertical discontinua marca cada cambio de
-# cámara: los picos que aparecen justo en un cambio son sospechosos (la
-# pegatina trasera todavía está fuera de la cadena de la cámara que entra,
-# así que su "distancia perpendicular" es en realidad longitudinal).
-#
-# El eje derecho lleva el PWM que se estaba aplicando (topic /<coche>/pwd),
-# escalonado: la orden vale hasta que llega la siguiente.
-#
-# df: DataFrame con una fila por telemetría dentro de una vuelta y columnas
+# df: una fila por telemetría dentro de una vuelta, con columnas
 #     [vuelta, t_vuelta, dist, derrapando, camara, bx, by, pwm]
 # ===========================================================================
 # Color de cada cámara en esta figura (la primera repite el azul de serie 1;
@@ -381,7 +279,7 @@ def _color_por_camara(camaras):
             for i, cam in enumerate(sorted(camaras))}
 
 
-def grafica_3b_derrape_bag(df, umbral):
+def grafica_3_derrape_bag(df, umbral):
     vueltas = sorted(df["vuelta"].unique())
     # isinstance(str): una telemetría que no se pudo emparejar con ninguna
     # posición se queda sin cámara (None), y esa no es una cámara más
@@ -515,16 +413,16 @@ def grafica_3b_derrape_bag(df, umbral):
     )
     return _layout_base(
         fig,
-        "3b · Distancia de derrape grabada en el bag, vuelta a vuelta "
+        "3 · Distancia de derrape grabada en el bag, vuelta a vuelta "
         "(color = cámara; línea de puntos = cambio de cámara)",
         560,
     )
 
 
 # ===========================================================================
-# FIGURA 3c: resumen por vuelta de la distancia del bag
+# FIGURA 3 (resumen): por vuelta, la distancia del bag
 # ===========================================================================
-# La misma serie de la 3b resumida a un número por vuelta, para ver la
+# La misma serie de la gráfica de arriba resumida a un número por vuelta, para ver la
 # tendencia de toda la carrera de golpe: si las primeras vueltas son planas
 # y los picos aparecen según sube el PWM, o si el máximo está disparado
 # desde la primera vuelta (señal de que la distancia se calcula mal).
@@ -532,7 +430,7 @@ def grafica_3b_derrape_bag(df, umbral):
 # tabla: DataFrame con una fila por vuelta y columnas
 #        [vuelta, dist_max, dist_p95, dist_mediana, n_sobre_umbral, pwm_medio]
 # ===========================================================================
-def grafica_3c_resumen_derrape(tabla, umbral):
+def grafica_3_resumen_derrape(tabla, umbral):
     fig = go.Figure()
     series = [
         ("dist_max", "máximo", COL_CRITICO),
@@ -555,7 +453,7 @@ def grafica_3c_resumen_derrape(tabla, umbral):
                   annotation_text=f"umbral_derrape = {umbral:.0f} px",
                   annotation_font_color=COL_TINTA_2)
     # Por ejes con nombre, no con update_yaxes: si no, el eje del PWM también
-    # se llevaría el título y el rango de la distancia (ver la 3b)
+    # se llevaría el título y el rango de la distancia (igual que arriba)
     fig.update_layout(
         xaxis=dict(title_text="vuelta", dtick=5),
         yaxis=dict(title_text="dist_derrape (px)", rangemode="tozero"),
@@ -566,17 +464,41 @@ def grafica_3c_resumen_derrape(tabla, umbral):
         ),
     )
     return _layout_base(
-        fig, "3c · Resumen por vuelta de la distancia de derrape del bag", 440)
+        fig, "3 · Resumen por vuelta de la distancia de derrape del bag", 440)
 
 
 # ===========================================================================
-# FIGURA 5c: la comparativa derrape <-> tiempo por vuelta
+# FIGURA 5: la tendencia del tiempo por vuelta, al lado de su tabla
+# ===========================================================================
+def grafica_5_tiempos(vueltas, mediana):
+    """vueltas: los mensajes time_per_lap del bag [{numero, tiempo, t}]."""
+    fig = go.Figure(go.Scatter(
+        x=[v["numero"] for v in vueltas], y=[v["tiempo"] for v in vueltas],
+        mode="lines+markers", line=dict(color=COL_SERIE_1, width=2),
+        marker=dict(size=6), hovertemplate="v%{x}: %{y:.3f} s<extra></extra>",
+    ))
+    # La referencia es la MEDIANA: una sola vuelta anómala (una parada de 30 s)
+    # se lleva la media y deja de decir cómo iba el coche de verdad.
+    fig.add_hline(y=mediana, line=dict(color=COL_GRID, width=1, dash="dash"),
+                  annotation_text=f"mediana {mediana:.2f} s",
+                  annotation_font_color=COL_TINTA_2)
+    fig.update_xaxes(title_text="vuelta", dtick=5)
+    # Sin rangemode="tozero": arrancando en 0, un circuito de ~6 s sale como una
+    # línea plana y no se ve que una vuelta suba o baje unas décimas
+    fig.update_yaxes(title_text="tiempo (s)")
+    _layout_base(fig, "5 · Tendencia del tiempo por vuelta", 420)
+    fig.update_layout(margin=dict(l=60, r=20, t=60, b=50))
+    return fig
+
+
+# ===========================================================================
+# FIGURA 5 (cajas): la comparativa derrape <-> tiempo por vuelta
 # ===========================================================================
 # Es la que ilustra la tesis del algoritmo: subir el PWM aparta al coche de la
 # trayectoria (más derrape) y baja el tiempo, hasta que el derrape pasa del
 # umbral y el tiempo EMPEORA (el coche patina, se sale o hay que castigar la
 # zona). Va en orden cronológico (X = vuelta), la distribución del derrape en
-# cajas y el tiempo por encima: es hermana de la 3c y se lee igual.
+# cajas y el tiempo por encima: es hermana del resumen de la 3.
 #
 # Hubo también una 5b (una vuelta = un punto, derrape en X y tiempo en Y, para
 # ver la forma de U): se retiró porque con 40 vueltas la nube de puntos y sus
@@ -586,8 +508,8 @@ def grafica_3c_resumen_derrape(tabla, umbral):
 # tiempos salen del MISMO bag (ventanas de time_per_lap), así que basta cruzar
 # por el número de vuelta y quedarse con las que estén en las dos.
 # ===========================================================================
-def grafica_5c_cajas_derrape(df_tel, tiempos_por_vuelta, umbral):
-    """df_tel: una fila por telemetría dentro de una vuelta (la de la 3b).
+def grafica_5_cajas_derrape(df_tel, tiempos_por_vuelta, umbral):
+    """df_tel: una fila por telemetría dentro de una vuelta (la de la 3).
     Una caja por vuelta con TODAS sus muestras de dist_derrape y, en el eje
     derecho, el tiempo que se tardó en esa vuelta."""
     datos = df_tel[df_tel["vuelta"].isin(tiempos_por_vuelta)]
@@ -616,7 +538,7 @@ def grafica_5c_cajas_derrape(df_tel, tiempos_por_vuelta, umbral):
                   annotation_text=f"umbral_derrape = {umbral:.0f} px",
                   annotation_font_color=COL_TINTA_2)
     # Ejes con nombre, no update_yaxes: si no, el eje del tiempo heredaría el
-    # título y el rango del derrape (mismo motivo que en la 3b y la 3c)
+    # título y el rango del derrape (mismo motivo que en la sección 3)
     fig.update_layout(
         xaxis=dict(title_text="vuelta", dtick=5),
         yaxis=dict(title_text="dist_derrape (px)", rangemode="tozero"),
@@ -627,12 +549,12 @@ def grafica_5c_cajas_derrape(df_tel, tiempos_por_vuelta, umbral):
         ),
     )
     return _layout_base(
-        fig, "5c · Distribución del derrape y tiempo, vuelta a vuelta "
+        fig, "5 · Distribución del derrape y tiempo, vuelta a vuelta "
              "(caja = cuartiles; puntos rojos = valores atípicos)", 460)
 
 
 # ===========================================================================
-# FIGURA 6c: resumen por vuelta (4 paneles)
+# FIGURA 6: resumen por vuelta (4 paneles)
 # ===========================================================================
 #   1. nº de derrapes por vuelta (barras rojas: son el evento "malo")
 #   2. tiempo por vuelta (marcador verde = al cerrarla el perfil subió,
@@ -641,7 +563,7 @@ def grafica_5c_cajas_derrape(df_tel, tiempos_por_vuelta, umbral):
 #      en los frames de la vuelta (donde pasó el coche)
 #   4. velocidad media medida (px/s, filtrando saltos y huecos)
 # ===========================================================================
-def grafica_6c_resumen(tabla: pd.DataFrame):
+def grafica_6_resumen(tabla: pd.DataFrame):
     fig = make_subplots(
         rows=2, cols=2, vertical_spacing=0.16, horizontal_spacing=0.10,
         subplot_titles=[
@@ -695,22 +617,22 @@ def grafica_6c_resumen(tabla: pd.DataFrame):
     for fila, col in [(1, 1), (1, 2), (2, 1), (2, 2)]:
         fig.update_xaxes(title_text="vuelta", dtick=5, row=fila, col=col)
     fig.update_yaxes(rangemode="tozero", row=1, col=1)
-    fig = _layout_base(fig, "6c · Resumen por vuelta", 640)
+    fig = _layout_base(fig, "6 · Resumen por vuelta", 640)
     # La leyenda (solo las dos series de PWM) centrada entre los títulos de
     # los dos paneles de arriba, que están a x~0.22 y x~0.78
     fig.update_layout(legend=dict(x=0.5, xanchor="center"))
     return fig
 
 
-# Un panel de 6c aislado, para poder exportarlo a PDF por separado (pedido:
+# Un panel de la 6 aislado, para poder exportarlo a PDF por separado (pedido:
 # en la memoria interesa poder incluir cada subplot suelto). Mismas trazas
-# que su panel en grafica_6c_resumen, pero como figura independiente.
-PANELES_6C = ("derrapes", "tiempo", "pwm", "velocidad")
+# que su panel en grafica_6_resumen, pero como figura independiente.
+PANELES_6 = ("derrapes", "tiempo", "pwm", "velocidad")
 
 
-def grafica_6c_subplot(tabla: pd.DataFrame, panel: str):
-    if panel not in PANELES_6C:
-        raise ValueError(f"panel debe ser uno de {PANELES_6C}, no {panel!r}")
+def grafica_6_subplot(tabla: pd.DataFrame, panel: str):
+    if panel not in PANELES_6:
+        raise ValueError(f"panel debe ser uno de {PANELES_6}, no {panel!r}")
     fig = go.Figure()
     if panel == "derrapes":
         fig.add_trace(go.Bar(
@@ -745,7 +667,7 @@ def grafica_6c_subplot(tabla: pd.DataFrame, panel: str):
         ))
         titulo = "velocidad media (px/s)"
     fig.update_xaxes(title_text="vuelta", dtick=5)
-    return _layout_base(fig, f"6c · {titulo}", 420)
+    return _layout_base(fig, f"6 · {titulo}", 420)
 
 
 # ===========================================================================

@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """
-Lectura del bag mcap para el dashboard unificado (analisis.py).
+Lectura del bag mcap para el dashboard (analisis.py).
 
-encontrar_bag, cargar_trayectoria_controlador, _decodificadores_mcap y
-emparejar_telemetria están movidos TAL CUAL de generar_graficas.py; leer_bag
-es el mismo patrón ampliado con las imágenes de debug de las cámaras y
-repartir_por_vueltas es nuevo (asigna cada mensaje a su vuelta usando las
-ventanas de tiempo de /telemetria/<coche>/time_per_lap).
+Saca del bag las cuatro series que usan las figuras (posiciones, telemetría,
+tiempos de vuelta y órdenes de PWM) y las funciones que las cruzan entre sí.
 
 Los timestamps "t" son los de GRABACIÓN del bag en nanosegundos: el instante
 en que el grabador recibió cada mensaje. Todos los topics comparten reloj
@@ -14,12 +11,9 @@ en que el grabador recibió cada mensaje. Todos los topics comparten reloj
 """
 
 import bisect
-import json
-import re
 import sys
 from pathlib import Path
 
-import numpy as np
 import yaml
 
 # API oficial de ROS2 para leer bags:
@@ -60,20 +54,6 @@ def encontrar_bag(carpeta: Path) -> Path:
     return metadatas[0].parent
 
 
-def cargar_trayectoria_controlador(carpeta: Path):
-    """Carga cache_trayectoria_controller.json: {camara_id: array (N, 2)}.
-
-    Es la caché que CarControllerNode escribe al terminar la calibración:
-    la ruta "limpia" (nodos separados >= 15 px) que ve cada cámara, en
-    píxeles de esa cámara. Devuelve {} si el fichero no está."""
-    ficheros = sorted(carpeta.rglob("cache_trayectoria_controller.json"))
-    if not ficheros:
-        return {}
-    with open(ficheros[0]) as f:
-        datos = json.load(f)
-    return {cam: np.asarray(puntos, dtype=float) for cam, puntos in datos.items()}
-
-
 # ---------------------------------------------------------------------------
 # Plan B de decodificación para bags grabados con .msg que luego cambiaron
 # ---------------------------------------------------------------------------
@@ -111,7 +91,7 @@ def _decodificadores_mcap(bag_dir: Path):
 # ---------------------------------------------------------------------------
 # Lectura del bag
 # ---------------------------------------------------------------------------
-def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
+def leer_bag(bag_dir: Path, coche: str):
     """Lee del bag todo lo que usa el dashboard para el coche indicado.
 
     Devuelve un dict con:
@@ -124,8 +104,6 @@ def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
                   (la orden de PWM que el controlador mandó al puente; se
                   publica una por posición procesada, así que sirve para
                   saber con qué velocidad iba el coche en cada instante)
-      imagenes    {camara: [(t, bytes jpeg)]}     /camara_XX/camara_debug
-                  (solo si con_imagenes=True: es lo más pesado del bag)
     """
     with open(bag_dir / "metadata.yaml") as f:
         metadata = yaml.safe_load(f)["rosbag2_bagfile_information"]
@@ -142,18 +120,15 @@ def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
     topic_lap = f"/telemetria/{coche}/time_per_lap"
     topic_pwm = f"/{coche}/pwd"
     tipos = {t.name: t.type for t in reader.get_all_topics_and_types()}
-    # Los topics de imagen se descubren por patrón (hay uno por cámara)
-    topics_img = sorted(t for t in tipos if re.fullmatch(r"/camara_[^/]+/camara_debug", t))
 
-    interesantes = ([topic_pos, topic_tel, topic_lap, topic_pwm]
-                    + (topics_img if con_imagenes else []))
-    faltan = [t for t in [topic_pos, topic_tel, topic_lap, topic_pwm] if t not in tipos]
+    interesantes = [topic_pos, topic_tel, topic_lap, topic_pwm]
+    faltan = [t for t in interesantes if t not in tipos]
     if topic_pos in faltan:
         sys.exit(f"ERROR: el bag no contiene {topic_pos} (topics: {sorted(tipos)})")
     if faltan:
         print(f"AVISO: el bag no contiene {faltan}")
-    # Filtro de topics: el reader se salta todo lo demás (incluidos /rosout y
-    # compañía que entran con la grabación --all, y las imágenes si no se piden)
+    # Filtro de topics: el reader se salta todo lo demás, y en particular las
+    # imágenes de debug, que son el grueso del bag y aquí no se usan
     presentes = [t for t in interesantes if t in tipos]
     reader.set_filter(rosbag2_py.StorageFilter(topics=presentes))
 
@@ -161,12 +136,8 @@ def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
     decodificadores = None  # se construyen solo si una deserialización falla
 
     posiciones, telemetria, vueltas, pwm = [], [], [], []
-    imagenes = {}
     while reader.has_next():
         topic, data, t_ns = reader.read_next()
-        # Las imágenes se guardan tal cual: el campo data de CompressedImage
-        # es el JPEG completo y está al final del mensaje serializado; se
-        # deserializa igual (es barato: sensor_msgs sí está instalado)
         msg = None
         if clases[topic] is not None:
             try:
@@ -218,16 +189,12 @@ def leer_bag(bag_dir: Path, coche: str, con_imagenes: bool = False):
             # El carril (msg.carril) no se guarda: ya se filtró por coche al
             # elegir el topic, y el dashboard solo mira un coche cada vez
             pwm.append({"t": t_ns, "pwm": int(msg.pwm)})
-        else:  # imagen de debug: el nombre de cámara es el primer tramo del topic
-            camara = topic.split("/")[1]
-            imagenes.setdefault(camara, []).append((t_ns, bytes(msg.data)))
 
     return {
         "posiciones": posiciones,
         "telemetria": telemetria,
         "vueltas": vueltas,
         "pwm": pwm,
-        "imagenes": imagenes,
     }
 
 

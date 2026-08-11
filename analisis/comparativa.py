@@ -365,7 +365,8 @@ def grafica_cajas(grupos):
     """Una caja por carrera (horizontal, que las etiquetas son largas), un
     panel por coche. La caja son los cuartiles de sus vueltas de la
     contrarreloj: cuanto más estrecha, más regular fue la conducción. Los
-    atípicos van sueltos en rojo, igual que en la figura 5c del dashboard, y
+    atípicos van sueltos en rojo, igual que en las cajas de la sección 5 del
+    dashboard, y
     ahí es donde asoman las salidas de pista (que ya no se excluyen)."""
     coches = list(grupos)
     fig = make_subplots(

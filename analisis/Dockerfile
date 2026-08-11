@@ -3,20 +3,14 @@ FROM ros:humble-ros-base
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Lo mismo que la imagen de la arquitectura (python/Dockerfile) más el plugin
-# mcap de rosbag2 y las librerías del dashboard:
-# - pandas: DataFrames del parser de logs (parseo_log.py)
-# - opencv: montar el vídeo mp4 del visor de imágenes (fase 4)
-# - matplotlib + tk: SOLO para el script antiguo generar_graficas.py; borrar
-#   estas dos líneas cuando se retire
+# mcap de rosbag2 (para leer los bags) y pandas, que es con lo que trabajan el
+# parser de logs y las figuras.
 RUN apt-get update && apt-get install -y \
   ros-humble-rosidl-default-generators \
   ros-humble-rosidl-default-runtime \
   ros-humble-rosbag2-storage-mcap \
   python3-numpy \
   python3-pandas \
-  python3-opencv \
-  python3-matplotlib \
-  python3-tk \
   python3-pip \
   && rm -rf /var/lib/apt/lists/*
 
@@ -32,8 +26,6 @@ RUN apt-get update && apt-get install -y \
 #   es una versión antigua (DeprecationWarning): es inofensivo. Si algún día
 #   plotly deja de admitirla, la alternativa es instalar Chrome en esta
 #   imagen (apt + plotly_get_chrome) y quitar el pin.
-# - tornado: SOLO para el modo --vueltas del script antiguo; borrar al retirarlo
-RUN pip3 install --no-cache-dir mcap mcap-ros2-support plotly \
-  "kaleido==0.2.1" tornado
+RUN pip3 install --no-cache-dir mcap mcap-ros2-support plotly "kaleido==0.2.1"
 
 WORKDIR /ros2_ws
