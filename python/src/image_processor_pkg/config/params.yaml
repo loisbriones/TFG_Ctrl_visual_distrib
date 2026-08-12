@@ -4,7 +4,7 @@
     # Lista de coches del sistema. Genera un detector por coche en la camara,
     # un controlador por coche y las suscripciones del puente Arduino. Cada
     # nombre de esta lista tiene que tener su bloque en 'cars' de abajo.
-    coches: ["car1"]
+    coches: ["car1","car2"]
 
     # Configuracion POR COCHE. La clave (car1, car2, ...) es el identificador
     # del coche y coincide con 'coches' y con el namespace ROS (/car1/...).
@@ -41,10 +41,15 @@
     #     autonomo) se levantan los dos docker-compose a la vez.
     cars:
       car1:
-        stiker_front: "verde"
-        stiker_back: "azul"
+        stiker_front: "amarillo"
+        stiker_back: "violeta"
         carril: "2"
         modo: "automatico"
+      car2:
+        stiker_front: "verde"
+        stiker_back: "azul"
+        carril: "1"
+        modo: "manual"
 
     #Parametros para la camara
     camera:
@@ -79,7 +84,7 @@
       # y el suelo por debajo del cual no baja ninguna zona del perfil
       minimum_speed: 70
       # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
-      maximum_speed: 90
+      maximum_speed: 85 
       # Separacion minima (px) entre nodos de la trayectoria base. Los puntos
       # que la camara envia durante la calibracion llegan mas o menos juntos
       # segun lo rapido que fuese el coche: al quedarnos solo con los que estan
@@ -184,7 +189,7 @@
       # la camara. Con False el sistema queda exactamente como si esto no
       # existiera (ni sondeos, ni suscripciones, ni ficheros). Se deja en True
       # los dias de medicion y en False el resto del tiempo.
-      enabled: True
+      enabled: False 
 
       # Camaras a sondear. Los nombres tienen que ser los mismos node_id con los
       # que se levanta cada CameraNode (los que pasa docker-compose-camera.yml

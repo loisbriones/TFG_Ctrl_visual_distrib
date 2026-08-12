@@ -35,7 +35,7 @@ COLOR_RANGES = {
     # confundir el fondo (7-22 %). El problema era el tono, no la saturacion.
     "verde": [
         (
-            np.array([35, 60, 130], dtype=np.uint8),
+            np.array([42, 60, 130], dtype=np.uint8),
             np.array([70, 255, 255], dtype=np.uint8),
         )
     ],
@@ -47,12 +47,12 @@ COLOR_RANGES = {
     ],
     "amarillo": [
         (
-            np.array([20, 50, 195], dtype=np.uint8),
+            np.array([20, 50, 150], dtype=np.uint8),
             np.array([50, 255, 255], dtype=np.uint8),
         )
     ],
     "cian": [(np.array([78, 65, 120]), np.array([120, 255, 255]))],
-    "violeta": [(np.array([120, 45, 45]), np.array([160, 255, 255]))],
+    "violeta": [(np.array([120, 80, 100]), np.array([175, 255, 255]))],
 }
 
 
