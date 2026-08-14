@@ -11,13 +11,13 @@
 % sin él LaTeX lo lee como un subíndice.
 \newcommand{\video}[2][ver]{\href{https://youtu.be/\detokenize{#2}}{#1}}
 
-\lettrine{E}{n} este capítulo se recogen las pruebas realizadas sobre el sistema ya montado. La primera cuantifica la diferencia de comportamiento entre los dos coches con una misma configuración. La segunda comprueba, con un PWM que sube solo, hasta dónde aguanta el mismo circuito en días distintos. La tercera ajusta el umbral de derrape del algoritmo y mide qué se gana con ello. La cuarta enfrenta al algoritmo con pilotos humanos, en el óvalo y en el circuito en ocho. La quinta le enfrenta a su propio perfil congelado, para ver si repetir la mejor vuelta que llegó a dar sirve de algo. La sexta mide cuánto retardo añade la red y a partir de qué punto llega a notarse. Las dos últimas llevan el sistema a circuitos grandes con varias cámaras y a una carrera con varios coches.
+\lettrine{E}{n} este capítulo se recogen las pruebas realizadas sobre el sistema ya montado. La primera cuantifica la diferencia de comportamiento entre los dos coches con una misma configuración. La segunda comprueba, con un PWM que sube solo, hasta dónde aguanta el mismo circuito en días distintos. La tercera ajusta el umbral de derrape del algoritmo y mide qué se gana con ello. La cuarta enfrenta al algoritmo con pilotos humanos, en el óvalo y en el circuito en ocho. La quinta le enfrenta a su propio perfil congelado, para ver si repetir la mejor vuelta que llegó a dar sirve de algo. La sexta comprueba si es capaz de adaptarse él solo a un cambio en la pista. La séptima enseña el panel en directo con dos coches corriendo a la vez. La octava mide cuánto retardo añade la red y a partir de qué punto llega a notarse. Y la última lleva el sistema a circuitos grandes, cubiertos con varias cámaras repartidas entre varias máquinas.
 
 Todas las gráficas que se muestran proceden de la herramienta de análisis en diferido descrita en la sección~\ref{sec:sistema-visualizacion}.
 
-De cada ejecución de este capítulo se grabó un vídeo con la imagen de las cámaras sincronizada y los datos del control sobrepuestos, y todos están publicados. Las tablas de resultados llevan por eso una columna con el enlace al vídeo de cada fila, de manera que cualquier cifra se puede contrastar viendo lo que hizo el coche en la pista.
+De cada ejecución se grabó un vídeo con la imagen de las cámaras y los datos del control sobrepuestos, y por eso las tablas llevan una columna con el enlace al vídeo de cada fila.
 
-Los pilotos que participaron en las pruebas de conducción manual se identifican como \emph{piloto 1} a \emph{piloto 5}, y la numeración es la misma en todo el capítulo: un mismo número es siempre la misma persona, aunque aparezca en secciones y circuitos distintos.
+Los pilotos que participaron en las pruebas de conducción manual se identifican como \emph{piloto 1} a \emph{piloto 5}, y la numeración es la misma en todo el capítulo. Un mismo número es siempre la misma persona, aunque aparezca en secciones y circuitos distintos.
 
 \section{Prueba comparativa entre coches}
 \label{sec:prueba-comparativa-coches}
@@ -27,7 +27,7 @@ Para que la única variable fuese el coche se fijó todo lo demás. Se escogió 
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=0.9\textwidth]{imaxes/PRUEBAS/CIRCUITOS/ovalo.jpg}
-  \caption{Montaje del circuito en óvalo. La única cámara va sujeta al pórtico que se ve sobre el trazado, y a la derecha queda el ordenador con el nodo de control y el puente Arduino}
+  \caption{Montaje del circuito en óvalo}
   \label{fig:setup-ovalo}
 \end{figure}
 
@@ -73,7 +73,7 @@ Una vez detectado el derrape el algoritmo castiga al coche azul y genera dos zon
     \caption{Coche rojo}
     \label{fig:comparativa-zonas-rojo}
   \end{subfigure}
-  \caption{Partición del circuito en zonas de PWM en la vuelta 22. El coche azul arrastra una zona de derrape ya castigada y el rojo mantiene una única zona libre que sigue subiendo.}
+  \caption{Partición del circuito en zonas de PWM en la vuelta 22.}
   \label{fig:comparativa-zonas}
 \end{figure}
 
@@ -100,12 +100,12 @@ El comportamiento no es puntual, sino que se repite a lo largo de toda la ejecuc
   \label{fig:comparativa-derrapes}
 \end{figure}
 
-Los tiempos de las dos ejecuciones, recogidos en la tabla~\ref{tab:comparativa-coches}, confirman lo que muestran las gráficas. El coche rojo tarda 75,44~s en completar las 50 vueltas frente a los 93,59~s del azul, una diferencia de 18~segundos que supone más de un 19\,\% del tiempo total con el mismo algoritmo y la misma configuración. El origen no está en el control, sino en el propio coche, que pierde adherencia con valores de PWM que el rojo asimila sin problema.
+Los tiempos de las dos ejecuciones, recogidos en la tabla~\ref{tab:comparativa-coches}, confirman lo que muestran las gráficas. El coche rojo tarda 75,44~s en completar las 50 vueltas frente a los 93,59~s del azul, una diferencia de 18~segundos que supone más de un 19\,\% del tiempo total con el mismo algoritmo y la misma configuración. El origen no está en el control, sino en el propio coche, que pierde adherencia con valores de PWM que el rojo soporta sin problema.
 
 \begin{table}[tbp]
   \centering
   \estilotabla[3]
-  \caption{Métricas de tiempo por vuelta de ambos coches con la misma configuración (PWM 70--94, umbral de derrape 12~px).}
+  \caption{Tiempo por vuelta de ambos coches con la misma configuración (PWM 70--94, umbral de derrape 12~px).}
   \label{tab:comparativa-coches}
   \begin{tabular}{lrrrrrc}
     \toprule
@@ -119,12 +119,12 @@ Los tiempos de las dos ejecuciones, recogidos en la tabla~\ref{tab:comparativa-c
   \end{tabular}
 \end{table}
 
-El problema no afecta solo al algoritmo, porque en las pruebas de conducción manual de la sección~\ref{sec:prueba-algo-vs-personas} a las personas también les cuesta más controlar el coche azul, ya que es mucho más sensible a los valores altos de PWM. La consecuencia práctica de todo esto es que no existe una configuración única válida para los dos coches y que los parámetros del algoritmo, en particular el umbral de derrape, deben ajustarse a las características del vehículo, que es lo que se comprueba en la prueba~\ref{sec:prueba-algo-parametros}.
+El problema no afecta solo al algoritmo, porque en las pruebas de conducción manual de la sección~\ref{sec:prueba-algo-vs-personas} a las personas también les cuesta más controlar el coche azul, ya que es mucho más sensible a los valores altos de PWM. La consecuencia de todo esto es que no existe una configuración única válida para los dos coches y que los parámetros del algoritmo, en particular el umbral de derrape, deben ajustarse a las características del vehículo, que es lo que se comprueba en la prueba~\ref{sec:prueba-algo-parametros}.
 
 \section{Prueba PWM incremental}
 \label{sec:prueba_pwm_incremental}
 
-Durante las pruebas unitarias aparecieron problemas en el comportamiento del circuito, los valores y las configuraciones que servían un día para un coche ya no eran valían al día siguiente. El trazado es el óvalo de la figura~\ref{fig:setup-ovalo} con una sola cámara, aunque entre los dos días de esta prueba el circuito se desmontó y se volvió a montar. Igual que en la prueba anterior, todos los nodos se lanzaron en un mismo ordenador para que la red no influyera en el control del coche, y para ver el comportamiento para un PWM se aplico el modo incremental, descrito en la sección~\ref{subsec:modos-operacion}, aumentado el valor cada 10 vueltas. Se realizaron seis ejecuciones que recogidas en la tabla~\ref{tab:incremental-sesiones}, se usaron los dos coches y en dos días distintos.
+Durante las pruebas unitarias aparecieron problemas en el comportamiento del circuito, los valores y las configuraciones que servían un día para un coche ya no valían al día siguiente. Para salir de dudas se realizó una prueba con el mismo \emph{setup} que en la prueba~\ref{sec:prueba-comparativa-coches}, por tanto es el mismo circuito de la figura~\ref{fig:setup-ovalo}. Para ver el comportamiento para un PWM se aplicó el modo incremental, descrito en la sección~\ref{subsec:modos-operacion}, aumentado el valor cada 10 vueltas. Se realizaron seis ejecuciones, recogidas en la tabla~\ref{tab:incremental-sesiones}, se usaron los dos coches y en dos días distintos.
 
 \begin{table}[tbp]
   \centering
@@ -139,28 +139,26 @@ Durante las pruebas unitarias aparecieron problemas en el comportamiento del cir
     \midrule
     Azul & 22/07 & 001 & 243 & 70--93  & 1,697 & 74 & \video{vWmz8njpSms} \\
     Azul & 22/07 & 002 & 236 & 70--92  & 1,702 & 85 & \video{nFKPtPt1Fyo} \\
-    Azul & 03/09 & ---  & 361 & 75--110 & 1,863 & 92 & \video{Nv9B-PkH_S0} \\
+    Azul & 03/08 & ---  & 361 & 75--110 & 1,863 & 92 & \video{Nv9B-PkH_S0} \\
     Rojo & 22/07 & 001 & 277 & 70--95  & 1,581 & 93 & \video{rRfFRlq_6wQ} \\
     Rojo & 22/07 & 002 & 261 & 70--95  & 1,584 & 93 & \video{RSUEXODBiNw} \\
-    Rojo & 03/09 & ---  & 360 & 75--110 & 1,350 & 98 & \video{PgBBuL6WXzg} \\
+    Rojo & 03/08 & ---  & 360 & 75--110 & 1,350 & 98 & \video{PgBBuL6WXzg} \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-Con el coche azul, el 22/07 una vuelta se daba en 1,774~s con un PWM de 75, mientras que el 03/09 ese mismo valor necesitaba 3,095~s y hubo que llegar hasta 110 para acercarse al tiempo que el otro día se conseguía con 74. Con el coche rojo ocurre justo lo contrario, porque el 03/09 fue más rápido que el 22/07 en todos los valores comunes, entre 0,15 y 0,53~s por vuelta. Los números están en la tabla~\ref{tab:incremental-por-pwm}. Destacar que la distancia de derrape se mantiene en valores parecidos entre las sesiones, alrededor de 5~px el azul y de 9~px el rojo. 
+Con el coche azul, el 22/07 una vuelta se daba en 1,774~s con un PWM de 75, mientras que el 03/08 ese mismo valor necesitaba 3,095~s y hubo que llegar hasta 110 para acercarse al tiempo que el otro día se conseguía con 74. Con el coche rojo ocurre justo lo contrario, porque el 03/08 fue más rápido que el 22/07 en todos los valores comunes, entre 0,15 y 0,53~s por vuelta. Los números están en la tabla~\ref{tab:incremental-por-pwm}. Destacar que la distancia de derrape se mantiene en valores parecidos entre las sesiones, alrededor de 5~px el azul y de 9~px el rojo. 
 
 \begin{table}[tbp]
   \centering
   \estilotabla[4]
-  \caption{Tiempo por vuelta ($t$, mediana del escalón) y distancia de derrape ($d$, percentil 95) en los valores de PWM comunes a los dos días. Se usan las sesiones 001 del 22/07.}
+  \caption{Tiempo por vuelta y distancia de derrape ($d$, percentil 95)}
   \label{tab:incremental-por-pwm}
   \begin{tabular}{lrrrrrrrr}
     \toprule
     \rowcolor{ArqAzulClaro}
-    & \multicolumn{2}{c}{Azul 22/07} & \multicolumn{2}{c}{Azul 03/09}
-    & \multicolumn{2}{c}{Rojo 22/07} & \multicolumn{2}{c}{Rojo 03/09} \\
-    % Aquí las filas no son ejecuciones sino escalones de PWM, así que el enlace
-    % al vídeo va en la cabecera de cada grupo de columnas, que sí lo es.
+    & \multicolumn{2}{c}{Azul 22/07 001} & \multicolumn{2}{c}{Azul 03/08}
+    & \multicolumn{2}{c}{Rojo 22/07 001} & \multicolumn{2}{c}{Rojo 03/08} \\
     \rowcolor{ArqAzulClaro}
     & \multicolumn{2}{c}{\video{vWmz8njpSms}} & \multicolumn{2}{c}{\video{Nv9B-PkH_S0}}
     & \multicolumn{2}{c}{\video{rRfFRlq_6wQ}} & \multicolumn{2}{c}{\video{PgBBuL6WXzg}} \\
@@ -177,7 +175,7 @@ Con el coche azul, el 22/07 una vuelta se daba en 1,774~s con un PWM de 75, mien
   \end{tabular}
 \end{table}
 
-Apartir de los resultados obtenidos tambin se aprecia que pasado cierto punto subir el PWM deja de mejorar el tiempo. La figura~\ref{fig:incremental-escalera} lo enseña el coche azul del 22/07 baja de 2,00 a 1,78~s entre los valores 70 y 74, y ahí se queda clavado, de manera que los diecinueve escalones que vienen después, hasta el 93, no tienen gran impacto en el tiempo. El del 03/09 sigue mejorando un poco más, hasta el 92, y a partir de ahí se estanca igual. El problema, por tanto, no es solo que haya que aplicar un PWM mayor, sino que ni aplicándolo se recuperan los tiempos de otros dias. Y al forzar el valor por arriba es cuando el coche acaba saliéndose, ya que el último escalón del 03/09 es el único de toda la prueba en el que el azul llega a descontrolarse, con vueltas de 2,8~s y separaciones de la trayectoria de hasta 37~px.
+A partir de los resultados obtenidos también se aprecia que pasado cierto punto subir el PWM deja de mejorar el tiempo. La figura~\ref{fig:incremental-escalera} lo enseña el coche azul del 22/07 baja de 2,00 a 1,78~s entre los valores 70 y 74, y ahí se queda clavado, de manera que los diecinueve escalones que vienen después, hasta el 93, no tienen gran impacto en el tiempo. El del 03/08 sigue mejorando un poco más, hasta el 92, y a partir de ahí se estanca igual. El problema, por tanto, no es solo que haya que aplicar un PWM mayor, sino que ni aplicándolos se recuperan los tiempos de otros días.
 
 \begin{figure}[tbp]
   \centering
@@ -200,7 +198,7 @@ Apartir de los resultados obtenidos tambin se aprecia que pasado cierto punto su
   \label{fig:incremental-escalera}
 \end{figure}
 
-La causa más probable de estos problemas sea el propio montaje de la pista, que exige un buen contacto entre los carriles y que además se monta con piezas mezcladas de varios modelos de Scalextric, de manera que el comportamiento del coche no siempre es el esperado y resulta difícil predecirlo de un día para otro. Esto obliga a tener cuidado al cargar una política ya fijada, porque puede funcionar un día y dejar de hacerlo en otro. Con el algoritmo el problema se puede sortear, ya que basta con relanzarlo o cambiar sus parámetros en caliente, pero no deja de ser un apaño y es una de las limitaciones que se le detectaron, porque no llega a adaptarse por sí solo al comportamiento del circuito. Un algoritmo suficientemente bueno subiría su propio techo de PWM al ver que el circuito no responde, y eso no se contempló durante el diseño porque no se esperaba este comportamiento, que en los trabajos anteriores no aparece reportado.
+La causa más probable de estos problemas sea el propio montaje de la pista, que exige un buen contacto entre los carriles y que además se monta con piezas mezcladas de varios modelos de Scalextric, de manera que el comportamiento del coche no siempre es el esperado y resulta difícil predecirlo de un día para otro, sumado al desgaste en las escobillas de los coches que también puede afectar al contacto con el carril. Esto obliga a tener cuidado al cargar una política ya fijada, porque puede funcionar un día y dejar de hacerlo en otro. Con el algoritmo el problema se puede sortear, ya que basta con relanzarlo o cambiar sus parámetros en caliente, pero no deja de ser un apaño y es una de las limitaciones que se le detectaron, porque no llega a adaptarse por sí solo al comportamiento del circuito. Un algoritmo suficientemente bueno subiría su propio techo de PWM al ver que el circuito no responde, y eso no se contempló durante el diseño porque no se esperaba este comportamiento, que en los trabajos anteriores no aparece reportado.
 
 \section{Prueba de ajuste de los parámetros del algoritmo}
 \label{sec:prueba-algo-parametros}
@@ -270,7 +268,7 @@ La razón de esos picos se ve en la figura~\ref{fig:parametros-derrapes}. Con el
     \caption{Umbral de derrape 12~px, vuelta 24}
     \label{fig:derrape-explosivo}
   \end{subfigure}
-  \caption{Saltos en la distancia de derrape del coche azul. Las cruces rojas son las muestras que superan el umbral y el fondo gris, el resto de vueltas de la ejecución}
+  \caption{Saltos en la distancia de derrape del coche azul.}
   \label{fig:derrape-vuelta}
 \end{figure}
 
@@ -294,7 +292,7 @@ Las métricas de las tres ejecuciones se recogen en la tabla~\ref{tab:parametros
   \end{tabular}
 \end{table}
 
-ALGO 012 mantiene el umbral permisivo de 12~px pero rebaja el techo de PWM de 94 a 90, y es la peor de las tres en todas las métricas, con 96,41~s de tiempo acumulado y una desviación típica de 0,291~s. Bajar el techo de velocidad penaliza el ritmo sin resolver los derrapes, porque el problema no era ir demasiado deprisa sino reaccionar demasiado tarde, y por eso la mejora viene de afinar el umbral y no de conducir más despacio.
+ALGO 012 mantiene el umbral permisivo de 12~px pero rebaja el techo de PWM de 94 a 90, y es la peor de las tres en todas las métricas, con 96,41~s de tiempo acumulado y una desviación típica de 0,291~s. Bajar el techo de velocidad penaliza el ritmo sin resolver los derrapes, porque el problema no era ir rápido sino reaccionar demasiado tarde, y por eso la mejora viene de reducir el umbral y no ir despacio.
 
 \section{Prueba del algoritmo frente a pilotos humanos}
 \label{sec:prueba-algo-vs-personas}
@@ -308,7 +306,7 @@ La prueba se repitió en dos circuitos. El primero es el óvalo ya empleado en l
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=0.9\textwidth]{imaxes/PRUEBAS/CIRCUITOS/ocho.jpg}
-  \caption{Montaje del circuito en ocho, cubierto por dos cámaras repartidas entre dos máquinas. Se ven los soportes de aluminio desde los que enfocan el trazado}
+  \caption{Montaje del circuito en ocho, cubierto por dos cámaras repartidas entre dos máquinas}
   \label{fig:setup-ocho}
 \end{figure}
 
@@ -383,7 +381,7 @@ Los resultados sobre el circuito en ocho se recogen en las tablas~\ref{tab:vs-pe
   \end{tabular}
 \end{table}
 
-En el coche azul la distancia entre el algoritmo y los pilotos se dispara respecto al óvalo. ALGO 002 completa las 50 vueltas en 202,89~s y el mejor de los dos pilotos necesita 276,72~s, un 36\,\% más, mientras que el segundo se va hasta los 427,23~s, más del doble. Aquí ya no se sostiene el consuelo del óvalo, porque la vuelta rápida también es del algoritmo, y ninguna de las cuatro configuraciones queda por detrás de un piloto, algo que allí sí llegó a pasar con ALGO 012. Entre esas cuatro se repite además el patrón de la sección~\ref{sec:prueba-algo-parametros}: ALGO 003 sube el techo de PWM a 85 sin tocar el umbral y es con diferencia la peor, con 243,92~s, mientras que ALGO 004 mantiene ese techo, baja el umbral a 8~px y vuelve a los 205,00~s, de modo que el techo se puede subir pero solo si el umbral se afina al mismo tiempo.
+En el coche azul la distancia entre el algoritmo y los pilotos se dispara respecto al óvalo. ALGO 002 completa las 50 vueltas en 202,89~s y el mejor de los dos pilotos necesita 276,72~s, un 36\,\% más, mientras que el segundo se va hasta los 427,23~s, más del doble. Aquí ya no se sostiene el consuelo del óvalo, porque la vuelta rápida también es del algoritmo, y ninguna de las cuatro configuraciones queda por detrás de un piloto, algo que allí sí llegó a pasar con ALGO 012. Entre esas cuatro se repite además el patrón de la sección~\ref{sec:prueba-algo-parametros}: ALGO 003 sube el techo de PWM a 85 sin tocar el umbral y es con diferencia la peor, con 243,92~s, mientras que ALGO 004 mantiene ese techo, baja el umbral a 8~px y vuelve a los 205,00~s.
 
 \begin{table}[tbp]
   \centering
@@ -409,27 +407,29 @@ En el coche azul la distancia entre el algoritmo y los pilotos se dispara respec
   \end{tabular}
 \end{table}
 
-Con el coche rojo el resultado es mucho más ajustado, y es el que mejor ilustra la diferencia entre las dos formas de conducir. ALGO 001 gana la contrarreloj con 138,23~s y el mejor intento manual se queda a 3,01~s. El piloto 3 repitió la prueba cuatro veces y sus vueltas rápidas mejoraron en cada intento, de 2,522 a 2,387~s, hasta quedar por debajo de la mejor vuelta del algoritmo; en dos de ellos incluso su mediana, 2,656 y 2,567~s, baja de los 2,713~s de ALGO 001, así que su vuelta típica llega a ser más rápida que la del sistema. Lo que no mejora es el acumulado, porque sus cuatro contrarrelojes, 159,73, 141,24, 162,10 y 154,87~s, no dibujan ninguna tendencia.
+Con el coche rojo el resultado es mucho más ajustado. ALGO 001 gana la contrarreloj con 138,23~s y el mejor intento manual se queda a 3,01~s. El piloto 3 repitió la prueba cuatro veces y sus vueltas rápidas mejoraron en cada intento, de 2,522 a 2,387~s, hasta quedar por debajo de la mejor vuelta del algoritmo. En dos intentos incluso consiguió una mejor mediana: 2,656 y 2,567~s, frente a los 2,713~s de ALGO 001. Lo que no mejora es el acumulado, porque sus cuatro contrarrelojes, 159,73, 141,24, 162,10 y 154,87~s.
 
-La explicación está en las vueltas que la mediana no ve. Buscar la vuelta rápida saca el coche de la pista, y cada salida obliga a recogerlo, colocarlo y arrancar otra vez desde parado, de manera que un puñado de vueltas así borra todo lo ganado en las demás: la media ya se le da la vuelta al piloto, 2,825 y 3,097~s frente a los 2,765~s del algoritmo, y su desviación típica no baja de 0,548~s frente a los 0,152~s de ALGO 001. Si hubiese podido repetir su mejor vuelta las cincuenta veces habría cerrado en 119,35~s, casi 19~segundos por debajo del algoritmo, así que el margen existe; lo que no existe es la forma de sostenerlo. Los pilotos 4 y 1 son el mismo caso llevado al extremo, con mejores vueltas perfectamente competitivas, 2,523 y 3,015~s, y contrarrelojes de 182,11 y 306,88~s. Entre las configuraciones automáticas conviene señalar que ALGO 002 y ALGO 003 solo se diferencian en el suelo del rango, 60 frente a 65, y esos cinco puntos cuestan más de 10~segundos, 152,13 frente a 141,81~s: el suelo es el valor al que puede llegar el castigo, así que ajustar el rango no es solo cuestión de cuánto se deja correr al coche sino de cuánto se le permite frenar.
+La explicación está en las vueltas que la mediana no ve. Buscar la vuelta rápida saca el coche de la pista, y cada salida obliga a recogerlo, colocarlo y arrancar otra vez desde parado, de manera que un puñado de vueltas así borra todo lo ganado en las demás, se puede ver como su desviación típica no baja de 0,548~s frente a los 0,152~s de ALGO 001. Si hubiese podido repetir su mejor vuelta las cincuenta veces habría cerrado en 119,35~s, casi 19~segundos por debajo del algoritmo, así que el margen existe; lo que no existe es la forma de sostenerlo. 
+
+También conviene señalar que ALGO 002 y ALGO 003 solo se diferencian en el suelo del rango, 60 frente a 65, y esos cinco puntos cuestan más de 10~segundos, 152,13 frente a 141,81~s. Es el valor con el que empiezan por tanto empezar en un valor más alto hace que puedas ir más rápido desde el principio.
 
 La comparación entre los dos coches vuelve a aparecer aquí y con más fuerza que en el óvalo. ALGO 001 se ejecutó con exactamente la misma configuración, con el rango de 60 a 75 y el umbral en 10~px, sobre los dos vehículos, y el resultado es de 210,22~s en el azul frente a 138,23~s en el rojo, casi 72~segundos y un 52\,\% más, cuando en el óvalo la misma comparación se quedaba en un 19\,\%. Un trazado más largo y con más curvas multiplica el efecto de la diferencia de adherencia descrita en la sección~\ref{sec:prueba-comparativa-coches}, y lo hace por igual para las dos partes, porque a los pilotos el coche azul también les cuesta mucho más que el rojo.
 
-La conclusión de estas pruebas es que la ventaja del algoritmo no está en la velocidad punta sino en la capacidad de sostenerla. Un piloto humano iguala e incluso supera al sistema en una vuelta suelta, porque arriesga donde el algoritmo se limita a lo que ha aprendido, pero no consigue repetir ese riesgo cincuenta veces seguidas y en una carrera lo que cuenta es el acumulado. Cuanto más exigente es el trazado mayor es esa ventaja, porque la dificultad se le acumula al piloto vuelta tras vuelta mientras que al algoritmo solo le supone más zonas que ajustar. Esa regularidad es consecuencia directa de la política de castigo por zonas descrita en la sección~\ref{subsec:algoritmo-aprendizaje}, que sacrifica velocidad puntual en los tramos conflictivos a cambio de no perder vueltas enteras.
+La conclusión de estas pruebas es que la ventaja del algoritmo no está en la velocidad punta sino en la capacidad de sostenerla. Un piloto humano iguala e incluso supera al sistema en una vuelta suelta, porque arriesga donde el algoritmo se limita a lo que ha aprendido, pero no consigue repetir ese riesgo cincuenta veces seguidas y en una carrera lo que cuenta es el acumulado. 
 
 \section{Prueba de la política óptima}
 \label{sec:prueba-politica-optima}
 
-En esta prueba se enfrenta al algoritmo con una \emph{política óptima}, es decir, con un perfil ya fijado que asigna un valor de PWM a cada celda de la trayectoria base y que el controlador se limita a aplicar sin aprender nada, tal y como se describe en la sección~\ref{subsec:modos-operacion}. La motivación sale de las gráficas de tiempo de las pruebas anteriores, en las que a veces parece que el coche encuentra un buen ritmo y después vuelve a perderlo: si esa vuelta buena se pudiera congelar y repetir, los tiempos deberían mantenerse. Como el comportamiento del circuito cambia de un día para otro, según se vio en la sección~\ref{sec:prueba_pwm_incremental}, todo se hizo el mismo día sobre el mismo montaje, el óvalo de la figura~\ref{fig:setup-ovalo} con una sola cámara, sin tocar la configuración y sin mover ni la pista ni la cámara, de modo que el contacto entre los carriles fuese el mismo en las cuatro ejecuciones. La primera es una ejecución de referencia con el algoritmo, con el coche azul, un rango de PWM de 65 a 88 y un umbral de derrape de 11~px, y de ella sale la política que después se repite tres veces.
+En esta prueba se enfrenta al algoritmo con una \emph{política óptima}, es decir, con un perfil ya fijado que asigna un valor de PWM a cada celda de la trayectoria base y que el controlador se limita a aplicar sin aprender nada, tal y como se describe en la sección~\ref{subsec:modos-operacion}. La motivación sale de las gráficas de tiempo de las pruebas anteriores, en las que a veces parece que el coche encuentra un buen ritmo y después vuelve a perderlo, si esa vuelta buena se pudiera congelar y repetir, los tiempos deberían mantenerse. Como el comportamiento del circuito cambia de un día para otro, según se vio en la sección~\ref{sec:prueba_pwm_incremental}, todo se hizo el mismo día sobre el mismo montaje, el óvalo de la figura~\ref{fig:setup-ovalo} con una sola cámara, sin tocar la configuración y sin mover ni la pista ni la cámara, de modo que el contacto entre los carriles fuese el mismo en las cuatro ejecuciones. La primera es una ejecución de referencia con el algoritmo, con el coche azul, un rango de PWM de 65 a 88 y un umbral de derrape de 11~px, y de ella sale la política que después se repite tres veces.
 
-La mejor vuelta de esa ejecución de referencia es la 17, con 1,681~s, y resulta ser también la vuelta en la que el coche derrapa, ya que su distancia máxima llega a 12,4~px con el umbral en 11. Tiene sentido, porque el algoritmo va subiendo la tensión poco a poco y esa es justo la primera vuelta en la que se pasa, de manera que el mejor tiempo se paga con la pérdida de adherencia que lo delata. Al cerrarse ese derrape el algoritmo castiga las celdas 44 a 57, y el perfil que queda inmediatamente después es el que se guardó como política: tres zonas sobre las 84 celdas de la trayectoria, las dos libres a PWM 83 y la de derrape a 79. El fichero completo está en el código~\ref{lst:politica-json}.
+La mejor vuelta de esa ejecución de referencia es la 17, con 1,681~s, y resulta ser también la vuelta en la que el coche derrapa, ya que su distancia máxima llega a 12,4~px con el umbral en 11. Al cerrarse ese derrape el algoritmo castiga las celdas 44 a 57, y el perfil que queda inmediatamente después es el que se guardó como política: dos zonas sobre la trayectoria, la libre a 83 de PWM y la de derrape a 79. El fichero completo está en el código~\ref{lst:politica-json}.
 
-Los resultados se recogen en la tabla~\ref{tab:politica-tiempos} y a primera vista la política gana, porque completa las 50 vueltas entre 90,42 y 91,71~s frente a los 98,29~s del algoritmo, unos siete segundos menos. Pero ninguna de las tres repeticiones iguala la mejor vuelta del algoritmo, 1,681~s frente a 1,719, 1,760 y 1,766~s, y las medianas son prácticamente la misma en las cuatro, entre 1,797 y 1,814~s. La figura~\ref{fig:politica-tiempos} enseña de dónde sale entonces la diferencia: el algoritmo arranca en su tensión mínima y necesita catorce vueltas para ponerse al ritmo que la política lleva desde la primera, de modo que solo en las diez vueltas iniciales pierde 26,01~s frente a los 18,40~s de la política. Toda la ventaja está ahí.
+Los resultados se recogen en la tabla~\ref{tab:politica-tiempos} y a primera vista la política gana, porque completa las 50 vueltas entre 90,42 y 91,71~s frente a los 98,29~s del algoritmo, unos siete segundos menos. Pero ninguna de las tres repeticiones iguala la mejor vuelta del algoritmo, 1,681~s frente a 1,719, 1,760 y 1,766~s, y las medianas son prácticamente la misma en las cuatro, entre 1,797 y 1,814~s. La figura~\ref{fig:politica-tiempos} se puede ver como el algoritmo arranca en su tensión mínima y necesita catorce vueltas para ponerse al ritmo que la política lleva desde la primera, de modo que solo en las diez vueltas iniciales pierde 26,01~s frente a los 18,40~s de la política. Toda la ventaja está ahí.
 
 \begin{table}[tbp]
   \centering
   \estilotabla[3]
-  \caption{Métricas de las 50 vueltas de la ejecución de referencia con el algoritmo y de las tres repeticiones de la política congelada (coche azul, PWM 65--88, umbral de derrape 11~px).}
+  \caption{Métricas de tiempo de las ejecuciones con política óptima.}
   \label{tab:politica-tiempos}
   \begin{tabular}{lrrrrrc}
     \toprule
@@ -448,16 +448,16 @@ Los resultados se recogen en la tabla~\ref{tab:politica-tiempos} y a primera vis
 \begin{figure}[tbp]
   \centering
   \includegraphics[trim={0 0 0 22},clip,width=\textwidth]{imaxes/PRUEBAS/POLITICA_OPTIMA/tiempos_politica.pdf}
-  \caption{Tiempo por vuelta de las cuatro ejecuciones. Al algoritmo le cuesta catorce vueltas alcanzar el ritmo que la política ya lleva desde la primera}
+  \caption{Tiempo por vuelta de las cuatro ejecuciones.}
   \label{fig:politica-tiempos}
 \end{figure}
 
-Si se descuentan esas vueltas de arranque la ventaja desaparece. La tabla~\ref{tab:politica-estable} recoge las mismas métricas a partir de la vuelta 21, que es cuando el tiempo del algoritmo deja de bajar, y las cuatro ejecuciones caben en 0,83~s sobre 30 vueltas, menos de tres centésimas por vuelta. Tampoco resulta la política más fiable, porque dos de las tres repeticiones derrapan bastante más que el algoritmo, con 82 y 96 muestras por encima del umbral frente a las 16 de la ejecución de referencia y con picos de 22,5 y 26,1~px que se traducen en vueltas sueltas de 2,468 y 2,366~s. Y eso que las tres se hicieron seguidas, en un cuarto de hora y sin tocar nada: el perfil congelado no puede echarse atrás cuando la pista cambia bajo él, mientras que el algoritmo baja la tensión de la zona en cuanto detecta el derrape.
+Si se descuentan esas vueltas de arranque la ventaja desaparece. La tabla~\ref{tab:politica-estable} recoge las mismas métricas a partir de la vuelta 21, que es cuando el tiempo del algoritmo deja de bajar. Tampoco resulta la política más fiable, porque dos de las tres repeticiones derrapan bastante más que el algoritmo. Es un resultado anómalo y no esperado, que se ve como picos que producen vueltas sueltas en las que el tiempo se dispara.
 
 \begin{table}[tbp]
   \centering
   \estilotabla[3]
-  \caption{Las mismas métricas contando solo desde la vuelta 21, con el algoritmo ya estabilizado.}
+  \caption{Métricas te tiempo contando solo desde la vuelta 21}
   \label{tab:politica-estable}
   \begin{tabular}{lrrrrrc}
     \toprule
@@ -473,30 +473,63 @@ Si se descuentan esas vueltas de arranque la ventaja desaparece. La tabla~\ref{t
   \end{tabular}
 \end{table}
 
-La conclusión es que aplicar una política fija sí permite empezar con buenos tiempos desde la primera vuelta, mientras que el algoritmo necesita unas cuantas iteraciones para llegar ahí, pero no da ninguna ventaja de ritmo y se paga con la adaptabilidad, ya que si el circuito cambia el algoritmo se adapta solo y la política hay que rehacerla. Guardarla tiene sentido para repetir carreras sobre un circuito que no se va a desmontar, y de hecho lo que esta prueba señala como mejorable del algoritmo no es su ritmo, que ya es el bueno, sino la rampa con la que arranca: partir de un perfil guardado o subir a escalones más grandes en las primeras vueltas le ahorraría los siete segundos que aquí pierde.
+La conclusión es que aplicar una política fija sí permite empezar con buenos tiempos desde la primera vuelta, mientras que el algoritmo necesita unas cuantas iteraciones para llegar ahí, pero no da ninguna ventaja de ritmo y se paga con la adaptabilidad, ya que si el circuito cambia el algoritmo se adapta solo y la política hay que rehacerla. Guardarla tiene sentido para repetir carreras sobre un circuito que no se va a desmontar, y de hecho lo que esta prueba señala como mejorable del algoritmo es la rampa con la que arranca. Se puede modificar desde los parametros pero al ser un valor fijo siempre no es bueno cambiarlo para valores altos porque si estamos muy abajo va a funcionar bien pero si estamos en valores cercanos al óptimo nos vamos a pasar. Otra opción sería partir de un perfil guardado o subir a escalones más grandes en las primeras vueltas y después reducir el valor de mejora.
+
+\section{Prueba de adaptación al circuito}
+\label{sec:prueba-adaptacion-circuito}
+
+Esta prueba comprueba si el algoritmo es capaz de adaptarse él solo a las modificaciones que se hacen sobre el circuito. Para ello se pusieron peraltes en las curvas del circuito en ocho de la figura~\ref{fig:setup-ocho}, que hacen que la pista agarre más, y se comparó con la misma ejecución sin ellos. Las dos son del mismo día, sobre el mismo circuito y con la misma configuración, y entre una y otra no se tocó ningún parámetro del algoritmo ni se volvieron a colocar las cámaras.
+
+% htbp y no el tbp del resto del capítulo: la sección es corta y con tbp la
+% tabla se iba a la cabecera de la página anterior, debajo del título de otra
+% sección. Con la h delante se queda pegada al párrafo que la presenta.
+\begin{table}[htbp]
+  \centering
+  \estilotabla[3]
+  \caption{Las dos ejecuciones del circuito en ocho, con y sin peraltes (PWM 60--85, umbral de derrape 12~px, dos cámaras).}
+  \label{tab:peraltes}
+  \begin{tabular}{lrrrc}
+    \toprule
+    \rowcolor{ArqAzulClaro}
+    Ejecución & Contrarreloj & Mejor & Mediana & Vídeo \\
+              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & \\
+    \midrule
+    Sin peraltes & 141,36 & 2,665 & 2,832 & \video{NWzAsmDpL68} \\
+    Con peraltes & 136,53 & 2,571 & 2,728 & \video{rNFMp_xqiEE} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Como se ve en la tabla~\ref{tab:peraltes}, con peraltes el coche da las 50 vueltas casi cinco segundos antes, en torno a un 3~\% menos, y mejora tanto la vuelta rápida como la mediana. A nadie le hizo falta avisar al algoritmo de que la pista había cambiado, ya que él solo fue subiendo la tensión hasta donde el nuevo trazado se lo permitió.
+
+\section{Prueba nodo visualización y múltiples coches}
+\label{sec:prueba-nodo-visualizacion-multiples-coches}
+
+En el \video[vídeo de la demostración]{vWByFHHQ3yI} se ven dos coches corriendo a la vez dentro del sistema, con el panel de la sección~\ref{subsec:visualizacion-directo} siguiendo a los dos, y se pasa también a la página que recoge las imágenes que envían las cámaras.
+
+Los dos coches los seguía una misma cámara ejecutándose sobre una Raspberry Pi 5, que sostuvo el procesado de ambos sin perder cadencia. No se probó con más porque el circuito solo tiene dos carriles.
+
 
 \section{Pruebas de red}
 \label{sec:pruebas-red}
 
-El objetivo de esta prueba es comprobar cuanto retardo añade la red al lazo de control y a partir de qué punto llega a notarse en la pista. Se hizo sobre el óvalo de la figura~\ref{fig:setup-ovalo} con una sola cámara, que es el trazado del que más datos se tienen y ser más sencillo de trabajar.
+El objetivo de esta prueba es comprobar cuánto retardo añade la red al lazo de control y a partir de qué punto llega a notarse en la pista. Se hizo sobre el óvalo de la figura~\ref{fig:setup-ovalo} con una sola cámara, que es el trazado del que más datos se tienen y ser más sencillo de trabajar.
 
 Todas las ejecuciones se hicieron con el coche azul, en el mismo carril, con la cámara sin mover y con la misma configuración: rango de PWM de 65 a 90 y umbral de derrape de 10~px. De cada escenario se hicieron tres repeticiones de 50 vueltas, 18 ejecuciones en total.
 
 El retardo no se puede medir restando la marca de tiempo que la cámara pone en el mensaje menos el instante en que el controlador lo recibe, porque son dos relojes de dos máquinas distintas lo que puede ocasionar que haya desfase entre ellas. Por eso se añadió un nodo que manda a la cámara paquetes del tamaño de un mensaje de posición y cronometra lo que tardan en volver. Al ser un viaje de ida y vuelta las dos marcas las toma el mismo reloj y el desfase desaparece al restar, que es el motivo por el que el RFC~2681 define una métrica de ida y vuelta~\cite{rfc2681}. La cámara devuelve también lo que ha tardado ella en contestar, y ese tiempo se descuenta. De forma que el retardo podemos estimar como la mitad del tiempo que tardamos en hacer el viaje de ida y vuelta.
 
-En los tres escenarios el nodo puente se ejecuta en la misma máquina que los controladores. Es una decisión de despliegue y no una limitación, esa máquina ya tiene que ser potente porque lleva un controlador por coche, y teniendo ese equipo lo razonable es enchufarle el Arduino y no añadir un salto de red entre decidir la tensión y aplicarla. La arquitectura permite separarlos, pero ese caso no se ha probado.
+En los tres escenarios el nodo de potencia se ejecuta en la misma máquina que los controladores. Es una decisión de despliegue y no una limitación, esa máquina ya tiene que ser potente porque lleva un controlador por coche, y teniendo ese equipo lo razonable es enchufarle el Arduino y no añadir un salto de red entre decidir la tensión y aplicarla. La arquitectura permite separarlos, aunque ese caso no se ha probado.
 
-Los tres escenarios se diferencian solo en dónde corre el nodo cámara. En el primero, A1, los tres nodos están en el mismo ordenador y no hay red de por medio. En el segundo, A2, la cámara corre en la Raspberry Pi y conectado por cable al router al igual que el ordenador, y en el tercero, A3, la misma cámara conectaod por WIFI al router igual que el ordenador. Lo que viaja por ese enlace es la posición del coche, que es lo que el controlador necesita para aplicar el algoritmo.
+Los tres escenarios se diferencian solo en dónde corre el nodo cámara. En el primero, A1, los tres nodos están en el mismo ordenador y no hay red de por medio. En el segundo, A2, la cámara corre en la Raspberry Pi y conectada por cable al router al igual que el ordenador, y en el tercero, A3, la misma cámara conectada por wifi al router igual que el ordenador. Lo que viaja por ese enlace es la posición del coche, que es lo que el controlador necesita para aplicar el algoritmo.
 
-La tabla~\ref{tab:red-rtt} recoge lo que mide el nodo de sondeo, el nodo que se creo y que envía mensajes para medir el tiempo de ida y vuelta. El peor escenario es el WiFi y aun así se queda en 7,27~ms de mediana, y en ninguno de los tres se perdió un solo paquete de los más de mil seiscientos que se enviaron. Que A1 no salga a cero, e incluso quede por encima del cable, puede ser algo no tan raro ya que esa máquina lleva encima además el nodo cámara, y pasar un mensaje entre dos procesos tampoco es gratis.
+La tabla~\ref{tab:red-rtt} recoge lo que mide el nodo de sondeo, el nodo que se creó y que envía mensajes para medir el tiempo de ida y vuelta. El peor escenario es el WiFi y aun así se queda en 7,27~ms de mediana, y en ninguno de los tres se perdió un solo paquete de los más de mil seiscientos que se enviaron. Que A1 no salga a cero, e incluso quede por encima del cable, puede ser algo no tan raro, ya que estamos ejecutando todos los nodos dentro de la misma máquina y tiene que serializar y deserializar los mensajes, es decir, pasar los mensajes entre los procesos no es gratis. El \emph{middleware} evita la pila de red usando memoria compartida entre procesos del mismo equipo, pero no la serialización, que solo se ahorra con la comunicación intra-proceso de ROS2 y únicamente cuando los nodos se cargan dentro de un mismo proceso~\cite{ros2intraprocess}, algo que aquí no ocurre porque cada nodo se despliega por separado.
 
 \begin{table}[tbp]
   \centering
   \estilotabla[3]
   \caption{Tiempo de ida y vuelta por escenario, con las tres repeticiones juntas.}
   \label{tab:red-rtt}
-  % Cada fila resume las TRES repeticiones del escenario, así que la celda del
-  % vídeo lleva los tres enlaces numerados en vez de un único «ver».
   \begin{tabular}{lrrrrrc}
     \toprule
     \rowcolor{ArqAzulClaro}
@@ -510,25 +543,25 @@ La tabla~\ref{tab:red-rtt} recoge lo que mide el nodo de sondeo, el nodo que se 
   \end{tabular}
 \end{table}
 
-La figura~\ref{fig:red-cdf} enseña la medida completa. Las tres curvas suben de golpe y se plantan antes de los 20~ms. La del WiFi va desplazada unos milisegundos a la derecha de las otras dos, y esa es toda la diferencia entre las tres.
+La figura~\ref{fig:red-cdf} enseña como se distribuye el tiempo acumulado de ida y vuelta. Se puede ver como más o menos las tres curvas suben de golpe por lo que la mayoría de mensajes la latencia es inferior a los 20~ms. Destacar que la de WiFi va desplazada unos milisegundos a la derecha de las otras dos, y esa es toda la diferencia entre las tres.
 
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=\linewidth]{imaxes/PRUEBAS/RED/cdf_rtt.pdf}
-  \caption{Distribución acumulada del tiempo de ida y vuelta. Fuera del eje queda un único sondeo de A1 de 54~ms.}
+  \caption{Distribución acumulada del tiempo de ida y vuelta.}
   \label{fig:red-cdf}
 \end{figure}
 
-Esos milisegundos hay que verlos al lado del resto del lazo, y eso es lo que hace la figura~\ref{fig:red-presupuesto}, que muestra como se reparte la latencia entre los tres pasos que van desde que se captura el fotograma hasta que el algoritmo devuelve el valor que hay que aplicar de tensión. El de la red es el más pequeño de los tres con diferencia, incluso por WiFi no llega a una quinta parte del total, que se queda en 22~ms. Y ese total cabe dentro de los 33~ms que pasan entre dos fotogramas.
+Esos milisegundos hay que verlos al lado del resto del control, y eso es lo que hace la figura~\ref{fig:red-presupuesto}, que muestra como se reparte la latencia entre los tres pasos que van desde que se captura el fotograma hasta que el algoritmo devuelve el valor que hay que aplicar de tensión. El tiempo que supone la red es el más pequeño de los tres con diferencia, incluso por WiFi no llega a una quinta parte del total, se queda en 22~ms. Y ese total cabe dentro de los 33~ms que pasan entre dos fotogramas.
 
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=\linewidth]{imaxes/PRUEBAS/RED/presupuesto_latencia.pdf}
-  \caption{Reparto de la latencia del lazo entre sus tres pasos. El tramo de red es la mitad del tiempo de ida y vuelta.}
+  \caption{Reparto de la latencia del lazo entre sus tres pasos.}
   \label{fig:red-presupuesto}
 \end{figure}
 
-Sobre la pista no se traduce en nada, y eso lo dice la tabla~\ref{tab:red-tiempos-a}. Los tres escenarios completan las 50 vueltas en un tiempo parecido y sus mejores vueltas se quedan en cuatro centésimas unas de otras, con el WiFi como el más rápido de los tres aun siendo el que más retardo tiene. Las tres repeticiones de A2 dieron 97,35, 100,63 y 104,51~s, así que dos ejecuciones del mismo escenario se separan más que los escenarios entre sí. Lo que se ve ahí es la variabilidad del coche y del circuito que ya describe la sección~\ref{sec:prueba_pwm_incremental}.
+Sobre la pista no se traduce en nada, y eso lo dice la tabla~\ref{tab:red-tiempos-a}. Los tres escenarios completan las 50 vueltas en un tiempo parecido y sus mejores vueltas se quedan en cuatro centésimas unas de otras, con el WiFi como el más rápido de los tres aun siendo el que más retardo tiene. Las tres repeticiones de A2 dieron 97,35, 100,63 y 104,51~s, con lo que hay diferencias entre dos ejecuciones del mismo escenario. Lo que se ve ahí es la variabilidad del coche y del circuito que ya describe la sección~\ref{sec:prueba_pwm_incremental}.
 
 \begin{table}[tbp]
   \centering
@@ -550,12 +583,12 @@ Sobre la pista no se traduce en nada, y eso lo dice la tabla~\ref{tab:red-tiempo
 
 Que la red no se note cuando es buena no dice hasta dónde aguanta el control cuando deja de serlo. Para verlo se repitió el escenario del WiFi añadiendo retardo a mano con \texttt{tc netem}~\cite{netem}, una herramienta del \emph{kernel} de Linux que retiene los paquetes el tiempo que se le indique. La regla se pone en la Raspberry Pi con \texttt{sudo tc qdisc add dev wlan1 root netem delay 25ms}, se pasa de un punto al siguiente cambiando \texttt{add} por \texttt{change}, y al terminar se quita con ese mismo comando y \texttt{del}. Se probaron 25, 50 y 100~ms, con tres repeticiones cada uno. No se subió más porque con más de 100~ms entre dos máquinas de la misma sala el problema ya no es el control.
 
-Como la regla está en la salida de la Raspberry Pi, el retardo lo sufre el sentido cámara~$\rightarrow$~PC, que es justamente por donde viajan las posiciones, y por eso aparece una sola vez en el tiempo de ida y vuelta de la tabla~\ref{tab:red-tiempos-b}. Con 100~ms cada posición que recibe el controlador dice dónde estaba el coche hace una décima de segundo. Con el retardo puesto aparecen además mensajes perdidos, trece de unos cinco mil, pero concentrados en dos repeticiones sueltas y sin relación con el retardo aplicado.
+Como la regla está en la salida de la Raspberry Pi, el retardo lo sufre el sentido cámara~$\rightarrow$~PC, que es justamente por donde viajan las posiciones, y por eso aparece una sola vez en el tiempo de ida y vuelta de la tabla~\ref{tab:red-tiempos-b}. Con el retardo puesto aparecen además mensajes perdidos, trece de unos cinco mil, pero concentrados en dos repeticiones sueltas y sin relación con el retardo aplicado.
 
 \begin{table}[tbp]
   \centering
   \estilotabla[3]
-  \caption{Retardo medido y tiempos de las 50 vueltas según el retardo inyectado. El punto de 0~ms es A3 sin tocar.}
+  \caption{Retardo medido y tiempos de las 50 vueltas según el retardo inyectado.}
   \label{tab:red-tiempos-b}
   \begin{tabular}{lrrrrrrc}
     \toprule
@@ -578,15 +611,14 @@ La conclusión es que la red no es lo que limita el control. Por cable o por WiF
 
 \section{Pruebas en Circuitos Grandes}
 \label{sec:pruebas-circuitos-grande}
+El objetivo es ver la arquitectura en funcionamiento en un escenario más realista, con circuitos grandes en los que hay que emplear varias cámaras a la fuerza. Para ello se montaron dos circuitos, uno un poco más grande que el otro. Los dos se cubrieron con cuatro cámaras: dos de ellas en sendas Raspberry Pi 5 conectadas por WiFi, y las otras dos en el propio ordenador, donde también se ejecutan el controlador del coche y el nodo de potencia que habla con el Arduino.
 
-El resto del capítulo trabaja sobre trazados pequeños, que caben enteros en una cámara o en dos. Esta prueba lleva el sistema a circuitos grandes, del tamaño con el que se juega de verdad, para comprobar que la arquitectura sigue funcionando cuando hace falta repartir el trabajo entre varias máquinas, que es para lo que se diseñó. Se montaron dos trazados, y el segundo es mayor que el primero. Los dos se cubrieron con cuatro cámaras: dos de ellas en sendas Raspberry Pi 5 conectadas por WiFi, y las otras dos en el propio ordenador, donde también se ejecutan el controlador del coche y el nodo puente que habla con el Arduino.
-
-En cada circuito se hicieron ejecuciones con el algoritmo y ejecuciones de conducción manual, de 50 vueltas todas ellas, de manera que aquí se comprueban dos cosas a la vez: que el sistema escala a un trazado grande repartido entre varias máquinas, y que sobre él el algoritmo sigue por delante de una persona.
+En cada circuito se hicieron ejecuciones con el algoritmo y ejecuciones de conducción manual, de 50 vueltas todas ellas.
 
 \subsection{Primer circuito}
 \label{subsec:circuito-grande-1}
 
-El trazado y el reparto de las cuatro cámaras se ven en la figura~\ref{fig:setup-grande-1}. Sobre este montaje se hicieron dos ejecuciones automáticas seguidas, una con cada coche, con un rango de PWM de 65 a 85. Entre una y otra no se movió ninguna cámara ni se cambió nada más que el umbral de derrape, 12~px en el azul y 13~px en el rojo. Al día siguiente, con el circuito y las cámaras sin tocar, el piloto 1 dio sus 50 vueltas con cada coche.
+El trazado y el reparto de las cuatro cámaras se ven en la figura~\ref{fig:setup-grande-1}. Sobre este montaje se hicieron dos ejecuciones automáticas seguidas, una con cada coche, con un rango de PWM de 65 a 85. Entre una y otra no se movió ninguna cámara ni se cambió nada más que el umbral de derrape, 12~px en el azul y 13~px en el rojo.
 
 \begin{figure}[tbp]
   \centering
@@ -603,27 +635,27 @@ El trazado y el reparto de las cuatro cámaras se ven en la figura~\ref{fig:setu
     \caption{Vista desde el extremo opuesto}
     \label{fig:setup-grande-1-b}
   \end{subfigure}
-  \caption{Montaje del primer circuito grande, cubierto por cuatro cámaras repartidas entre tres máquinas. Se ven los soportes de aluminio y los trípodes desde los que enfocan el trazado}
+  \caption{Montaje del primer circuito grande usando cuatro cámaras}
   \label{fig:setup-grande-1}
 \end{figure}
 
-Lo primero que hay que decir es que las dos ejecuciones automáticas terminaron sus 50 vueltas sin que nadie tuviera que intervenir, con las cuatro cámaras repartidas entre tres máquinas y sin más configuración que añadirlas a la lista de cámaras. La figura~\ref{fig:circuito-grande-tiempos} recoge el tiempo de cada vuelta. Las dos curvas hacen lo mismo que en el resto de las pruebas, bajan durante las primeras vueltas mientras el algoritmo sube el perfil y después se estabilizan, solo que el azul parte de una primera vuelta de 6,05~s y necesita diecisiete para alcanzar su tiempo de crucero, mientras que el rojo arranca en 4,51~s y llega en doce.
+La figura~\ref{fig:circuito-grande-tiempos} recoge el tiempo de cada vuelta. Se recoge el comportamiento esperado, el coche azul tarda más que el rojo en conseguir su mejor tiempo y además va mucho más lento.
 
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=\linewidth]{imaxes/PRUEBAS/CIRCUITO_GRANDE/tiempos_vuelta.pdf}
-  \caption{Tiempo por vuelta de las dos ejecuciones automáticas sobre el primer circuito grande.}
+  \caption{Tiempo por vuelta de los dos coches con algoritmo en el primer circuito grande.}
   \label{fig:circuito-grande-tiempos}
 \end{figure}
 
-Los tiempos de la tabla~\ref{tab:circuito-grande-tiempos} son los esperados. El coche rojo completa las 50 vueltas en 188,85~s frente a los 212,48~s del azul, casi 24~segundos de diferencia, y además es mucho más regular, con una $\sigma$ de 0,257~s frente a 0,540~s. Es el mismo resultado que ya daba la sección~\ref{sec:prueba-comparativa-coches} sobre el óvalo y con una sola cámara, así que cambiar de trazado y repartir el circuito entre cuatro cámaras no altera el orden entre los coches: lo que separa a uno del otro sigue siendo el coche.
+Los tiempos de la tabla~\ref{tab:circuito-grande-tiempos} son los esperados. El coche rojo completa las 50 vueltas en 188,85~s frente a los 212,48~s del azul, casi 24~segundos de diferencia, y además es mucho más regular. Es el mismo resultado que ya daba la sección~\ref{sec:prueba-comparativa-coches}.
 
 Frente al piloto la distancia es mayor que en cualquiera de los trazados pequeños. El algoritmo le saca 85~s con el coche rojo y 105~s con el azul, un 45 y un 49\,\% más de tiempo acumulado, y la desviación típica del piloto pasa de los 2,6~s en las dos ejecuciones frente a los 0,26 y 0,54~s del algoritmo.
 
 \begin{table}[tbp]
   \centering
   \estilotabla[3]
-  \caption{Tiempos de las 50 vueltas sobre el primer circuito grande. Las ejecuciones automáticas van con PWM 65--85.}
+  \caption{Tiempos de las 50 vueltas sobre el primer circuito grande.}
   \label{tab:circuito-grande-tiempos}
   \begin{tabular}{llrrrrrc}
     \toprule
@@ -631,24 +663,21 @@ Frente al piloto la distancia es mayor que en cualquiera de los trazados pequeñ
     Ejecución & Coche & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
               \rowcolor{ArqAzulClaro} & & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    % PENDIENTE-VIDEO: CIRCUITO_FINAL_ROJO_001
-    Algoritmo         & Rojo & 188,85 & 3,449 & 3,715 & 3,777 & 0,257 & \\
-    % PENDIENTE-VIDEO: CIRCUITO_FINAL_AZUL_001
-    Algoritmo         & Azul & 212,48 & 3,805 & 3,992 & 4,250 & 0,540 & \\
-    % PENDIENTE-VIDEO: CIRCUITO_FINAL_ROJO_MANUAL_001
-    Manual (piloto 1) & Rojo & 274,18 & 3,148 & 4,535 & 5,484 & 2,754 & \\
-    % PENDIENTE-VIDEO: CIRCUITO_FINAL_AZUL_MANUAL_001
-    Manual (piloto 1) & Azul & 317,03 & 4,434 & 5,321 & 6,341 & 2,627 & \\
+    Algoritmo         & Rojo & 188,85 & 3,449 & 3,715 & 3,777 & 0,257 & \video{3MymwPGK0ao} \\
+    Algoritmo         & Azul & 212,48 & 3,805 & 3,992 & 4,250 & 0,540 & \video{fBH7Vd4AcBQ} \\
+    Manual (piloto 1) & Rojo & 274,18 & 3,148 & 4,535 & 5,484 & 2,754 & \video{PjKeM8seG_A} \\
+    Manual (piloto 1) & Azul & 317,03 & 4,434 & 5,321 & 6,341 & 2,627 & \video{FhUWXbAo-QY} \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-Durante las dos ejecuciones automáticas siguió corriendo el nodo de sondeo de la sección~\ref{sec:pruebas-red}, midiendo el tiempo de ida y vuelta hasta cada una de las dos Raspberry. La tabla~\ref{tab:circuito-grande-red} recoge esas medidas. Las medianas se quedan entre 6,90 y 7,88~ms, prácticamente las mismas que allí se midieron por WiFi (7,27~ms), y de los 4.306 sondeos enviados solo se perdió uno. Lo que sí sube aquí es la cola de la distribución, con percentiles 99 que llegan a los 135~ms y algún pico suelto por encima de los 190. Es razonable, porque ahora hay cuatro cámaras publicando su imagen de depuración y la sesión entera grabándose en disco, una carga que ninguna de las ejecuciones de la sección anterior tenía encima. Con los datos que se tienen no se puede repartir la culpa entre el enlace WiFi y la máquina, pero sí se ve que los picos son sueltos y que la mediana no se mueve.
+Durante las dos ejecuciones automáticas siguió corriendo el nodo de sondeo de la sección~\ref{sec:pruebas-red}, midiendo el tiempo de ida y vuelta hasta cada una de las dos Raspberry. La tabla~\ref{tab:circuito-grande-red} recoge esas medidas. Las medianas se quedan entre 6,90 y 7,88~ms, prácticamente las mismas que allí se midieron por WiFi (7,27~ms), y de los 4.306 sondeos enviados solo se perdió uno. Lo que sí sube aquí son los percentiles 99 que llegan a los 135~ms y algún pico suelto por encima de los 190. Puede ser razonable al tener más nodos enviando información, lo que hace que se choquen entre ellos.
 
 \begin{table}[tbp]
+
   \centering
   \estilotabla[3]
-  \caption{Tiempo de ida y vuelta hasta cada una de las dos Raspberry Pi durante las dos ejecuciones automáticas del primer circuito.}
+  \caption{Tiempo de ida y vuelta hasta cada una de las Raspberry Pi durante primer circuito grande.}
   \label{tab:circuito-grande-red}
   \begin{tabular}{llrrrrr}
     \toprule
@@ -664,12 +693,12 @@ Durante las dos ejecuciones automáticas siguió corriendo el nodo de sondeo de 
   \end{tabular}
 \end{table}
 
-Aun con esos picos, en la pista no se notó nada, y encaja con lo que ya decía la sección~\ref{sec:pruebas-red}: allí hubo que inyectar 100~ms de retardo a mano, más de diez veces el que se mide aquí, para empezar a ver una diferencia en los tiempos, y ni siquiera entonces el coche perdía el control.
+Aun con esos picos, en la pista no se notó nada, y encaja con lo que ya decía la sección~\ref{sec:pruebas-red}. 
 
 \subsection{Segundo circuito}
 \label{subsec:circuito-grande-2}
 
-El segundo trazado, que aparece en la figura~\ref{fig:setup-grande-2}, es más largo que el primero, y se montó el mismo día por la tarde con el mismo reparto de cámaras y máquinas. La diferencia se nota en la calibración: la trayectoria base pasa de 144 a 177 nodos sumando las cuatro cámaras, y a cada una de ellas le toca una porción mayor del trazado. Aquí las ejecuciones automáticas no comparten configuración, porque el circuito se estrenó ese mismo día y hubo que buscar el rango de PWM de cada coche por separado: 65 a 78 en el azul y 70 a 90 en el rojo, las dos con el umbral de derrape en 10~px. Por eso esta tabla no compara los dos coches entre sí, cosa que ya hace la del primer circuito; lo que compara es cada coche con las personas que lo condujeron.
+El segundo circuito, que aparece en la figura~\ref{fig:setup-grande-2}, es más largo que el primero. Se utilizaron también 4 cámaras y la distribución de los nodos fue la misma que en la prueba que se describe en la sección \ref{subsec:circuito-grande-1}. En esta prueba los coches usaron configuraciones distintas, porque no había forma de encontrar que permitieran controlar los dos a la vez. El coche azul usó un rango de PWM de 65 a 78 y el rojo de 70 a 90, los dos con el umbral de derrape en 10~px.
 
 \begin{figure}[tbp]
   \centering
@@ -686,11 +715,11 @@ El segundo trazado, que aparece en la figura~\ref{fig:setup-grande-2}, es más l
     \caption{Vista desde el extremo opuesto}
     \label{fig:setup-grande-2-b}
   \end{subfigure}
-  \caption{Montaje del segundo circuito grande, más largo que el primero y con el mismo reparto de cuatro cámaras entre tres máquinas}
+  \caption{Montaje del segundo circuito grande con cuatro cámaras}
   \label{fig:setup-grande-2}
 \end{figure}
 
-La figura~\ref{fig:circuito-grande-2-tiempos} muestra el tiempo por vuelta de las dos ejecuciones automáticas y se lee igual que la del primer circuito, con la bajada inicial mientras el perfil sube y la estabilización después.
+La figura~\ref{fig:circuito-grande-2-tiempos} muestra el tiempo por vuelta de las dos ejecuciones aplicando el algoritmo y se ve el mismo comportamiento que en el primer circuito, con la bajada inicial mientras el perfil sube y la estabilización después.
 
 \begin{figure}[tbp]
   \centering
@@ -699,12 +728,12 @@ La figura~\ref{fig:circuito-grande-2-tiempos} muestra el tiempo por vuelta de la
   \label{fig:circuito-grande-2-tiempos}
 \end{figure}
 
-Los resultados están en la tabla~\ref{tab:circuito-grande-2-tiempos} y el algoritmo gana las dos comparaciones con holgura. Con el coche rojo cierra en 217,56~s frente a los 358,27~s del piloto 1, un 65\,\% más para la persona, y con el azul en 322,41~s frente a los 458,51 y 536,30~s de los pilotos 1 y 5. Aquí, además, ni siquiera queda el consuelo de la vuelta rápida: la mejor vuelta es del algoritmo en los dos coches, 4,129~s frente a 4,355~s en el rojo y 5,636~s frente a 6,076~s en el azul. La diferencia de fondo es la de siempre y se ve en la última columna, porque la desviación típica del algoritmo se queda en 0,238 y 0,939~s mientras que la de los pilotos no baja de 2,7~s.
+Los resultados están en la tabla~\ref{tab:circuito-grande-2-tiempos} y el algoritmo gana las dos comparaciones con holgura. Con el coche rojo cierra en 217,56~s frente a los 358,27~s del piloto 1 y con el azul en 322,41~s frente a los 458,51 y 536,30~s de los pilotos 1 y 5. Además, ni siquiera queda el consuelo de la vuelta rápida, ya que, la mejor vuelta es del algoritmo en los dos coches, 4,129~s frente a 4,355~s en el rojo y 5,636~s frente a 6,076~s en el azul. La diferencia de fondo es la de siempre y se ve en la última columna, porque la desviación típica del algoritmo se queda en 0,238 y 0,939~s mientras que la de los pilotos no baja de 2,7~s.
 
 \begin{table}[tbp]
   \centering
   \estilotabla[3]
-  \caption{Tiempos de las 50 vueltas sobre el segundo circuito grande. Las ejecuciones automáticas van con PWM 65--78 en el azul y 70--90 en el rojo, y umbral de derrape de 10~px las dos.}
+  \caption{Tiempos de las 50 vueltas sobre el segundo circuito grande.}
   \label{tab:circuito-grande-2-tiempos}
   \begin{tabular}{llrrrrrc}
     \toprule
@@ -712,21 +741,16 @@ Los resultados están en la tabla~\ref{tab:circuito-grande-2-tiempos} y el algor
     Ejecución & Coche & Contrarreloj & Mejor & Mediana & Media & $\sigma$ & Vídeo \\
               \rowcolor{ArqAzulClaro} & & (s) & (s) & (s) & (s) & (s) & \\
     \midrule
-    % PENDIENTE-VIDEO: CIRCUITO_FINAL_ROJO_003
-    Algoritmo         & Rojo & 217,56 & 4,129 & 4,250 & 4,351 & 0,238 & \\
-    % PENDIENTE-VIDEO: CIRCUITO_FINAL_AZUL_002 (el de BAGS_GUARDAR, PWM 65-78)
-    Algoritmo         & Azul & 322,41 & 5,636 & 6,281 & 6,448 & 0,939 & \\
-    % PENDIENTE-VIDEO: CIRCUITO_FINAL_ROJO_MANUAL_002_LOIS
-    Manual (piloto 1) & Rojo & 358,27 & 4,355 & 5,684 & 7,165 & 3,009 & \\
-    % PENDIENTE-VIDEO: CIRCUITO_FINAL_AZUL_MANUAL_002_LOIS
-    Manual (piloto 1) & Azul & 458,51 & 6,076 & 7,907 & 9,170 & 2,720 & \\
-    % PENDIENTE-VIDEO: CIRCUITO_FINAL_AZUL_MANUAL_002_MANU
-    Manual (piloto 5) & Azul & 536,30 & 6,093 & 8,007 & 10,726 & 6,556 & \\
+    Algoritmo         & Rojo & 217,56 & 4,129 & 4,250 & 4,351 & 0,238 & \video{3IMwZePjE8U} \\
+    Algoritmo         & Azul & 322,41 & 5,636 & 6,281 & 6,448 & 0,939 & \video{dEHTCA-wxhM} \\
+    Manual (piloto 1) & Rojo & 358,27 & 4,355 & 5,684 & 7,165 & 3,009 & \video{LK8xacrRCj8} \\
+    Manual (piloto 1) & Azul & 458,51 & 6,076 & 7,907 & 9,170 & 2,720 & \video{Mpp97Rg9dcM} \\
+    Manual (piloto 5) & Azul & 536,30 & 6,093 & 8,007 & 10,726 & 6,556 & \video{6LbhZiSIM8I} \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-El sondeo de red se mantuvo también en estas dos ejecuciones y sus medidas están en la tabla~\ref{tab:circuito-grande-2-red}. Salen prácticamente iguales que las del primer circuito, con medianas entre 6,70 y 7,86~ms y la misma cola de percentiles 99 por encima de los 100~ms, y de los 5.826 sondeos enviados se perdieron cuatro. Que un trazado mayor no mueva estas cifras tiene sentido, porque lo que viaja por el enlace es una posición por fotograma y eso no depende de lo largo que sea el circuito.
+El sondeo de red se mantuvo también en estas dos ejecuciones y sus medidas están en la tabla~\ref{tab:circuito-grande-2-red}. Salen prácticamente iguales que las del primer circuito, con medianas entre 6,70 y 7,86~ms y con los percentiles 99 por encima de los 100~ms, y de los 5.826 sondeos enviados se perdieron cuatro mensajes.
 
 \begin{table}[tbp]
   \centering
@@ -747,41 +771,4 @@ El sondeo de red se mantuvo también en estas dos ejecuciones y sus medidas est�
   \end{tabular}
 \end{table}
 
-En resumen, el sistema se comportó como estaba pensado en los dos circuitos. Cuatro cámaras repartidas entre tres máquinas cubren un circuito grande, cada una aprende su porción del trazado, el controlador va conmutando entre ellas según por dónde pase el coche y el algoritmo ajusta el perfil de la misma forma que con una sola cámara. Escalar el montaje no exigió tocar ningún parámetro del algoritmo ni ninguna otra parte del sistema, y la red no fue un problema en ninguna de las cuatro ejecuciones automáticas.
-
-Frente a los pilotos el algoritmo gana las cinco comparaciones, y por márgenes mayores que en el óvalo y el circuito en ocho de la sección~\ref{sec:prueba-algo-vs-personas}: allí la distancia iba del 2 al 36\,\% según el coche y el trazado, y aquí del 42 al 65\,\%. El motivo es el que ya se explicó en esa sección y no hace falta repetirlo, solo que aquí se ve más: cuanto más largo es el trazado, más sitios hay donde perder el coche y más vueltas cuesta cada error, mientras que el algoritmo se limita a repetir el mismo tiempo cincuenta veces.
-
-\section{Prueba nodo visualización y multiples coches}
-\label{sec:prueba-nodo-visualizacion-multiples-coches}
-
-Esta es una pequeña prueba para ver como se comporta la arquitectura con varios coches y como funciona además el nodo de visualización que tenemos creado para controlarlo
-
-\section{Prueba de adaptación al circuito}
-\label{sec:prueba-adaptacion-circuito}
-
-Esta prueba comprueba si el algoritmo es capaz de adaptarse él solo a las modificaciones que se hacen sobre el circuito. Para ello se pusieron peraltes en las curvas del circuito en ocho de la figura~\ref{fig:setup-ocho}, que hacen que la pista agarre más, y se comparó con la misma ejecución sin ellos. Las dos son del mismo día, sobre el mismo circuito y con la misma configuración, y entre una y otra no se tocó ningún parámetro del algoritmo ni se volvieron a colocar las cámaras.
-
-% htbp y no el tbp del resto del capítulo: la sección es corta y con tbp la
-% tabla se iba a la cabecera de la página anterior, debajo del título de otra
-% sección. Con la h delante se queda pegada al párrafo que la presenta.
-\begin{table}[htbp]
-  \centering
-  \estilotabla[3]
-  \caption{Las dos ejecuciones del circuito en ocho, con y sin peraltes (PWM 60--85, umbral de derrape 12~px, dos cámaras).}
-  \label{tab:peraltes}
-  \begin{tabular}{lrrrc}
-    \toprule
-    \rowcolor{ArqAzulClaro}
-    Ejecución & Contrarreloj & Mejor & Mediana & Vídeo \\
-              \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & \\
-    \midrule
-    % PENDIENTE-VIDEO: PRUEBA_CIRCUITO_OCHO_002
-    Sin peraltes & 141,36 & 2,665 & 2,832 & \\
-    % PENDIENTE-VIDEO: PRUEBA_CIRCUITO_OCHO_002_peraltes
-    Con peraltes & 136,53 & 2,571 & 2,728 & \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-Como se ve en la tabla~\ref{tab:peraltes}, con peraltes el coche da las 50 vueltas casi cinco segundos antes, en torno a un 3~\% menos, y mejora tanto la vuelta rápida como la mediana. A nadie le hizo falta avisar al algoritmo de que la pista había cambiado, ya que él solo fue subiendo la tensión hasta donde el nuevo trazado se lo permitió.
-
+En resumen, el sistema se comportó como estaba pensado en los dos circuitos. Cuatro cámaras repartidas entre tres máquinas cubren un circuito grande, cada una aprende su porción del trazado, el controlador va conmutando entre ellas según por dónde pase el coche y el algoritmo ajusta el perfil de la misma forma que con una sola cámara. Además la red tampoco supuso problemas como habíamos visto en las pruebas de red. Además también el comportamiento del coche con el algoritmo es mejor frente a las personas con las que se comparó.

@@ -1,51 +1,89 @@
 \chapter{Ejecución del sistema}
 \label{chap:execucion}
 
-\lettrine{E}{n} este anexo se describen los pasos necesarios para desplegar y ejecutar el
-sistema completo: el software requerido en cada máquina, la preparación del hardware y los
-comandos de lanzamiento de cada uno de los roles (nodos cámara y nodo cerebro).
+\lettrine{E}{n} este anexo se describen los pasos necesarios para poner en marcha el sistema completo, desde el software que hace falta en cada máquina hasta los comandos con los que se levanta cada nodo. Los ficheros que aquí se mencionan se recogen íntegros en el anexo~\ref{chap:listados}.
 
 \section{Software requerido}
 \label{sec:software-requerido}
 
-% TODO: Enumerar: sistema Linux con Docker y docker-compose instalados en cada máquina
-% de la red (no es necesario instalar ROS2 en el anfitrión: va dentro de la imagen),
-% git para clonar el repositorio, y acceso a la misma red local en todas las máquinas.
+Cada máquina que participe en el sistema necesita un sistema operativo Linux con Docker y Docker Compose instalados, y git para clonar el repositorio~\cite{repogithub}. No hace falta instalar ROS2 ni ninguna de las librerías de visión, ya que van dentro de la imagen que construye el propio Docker la primera vez que se levanta un contenedor.
 
-\section{Preparación del hardware}
+Todas las máquinas tienen que estar en la misma red local y compartir el mismo \texttt{ROS\_DOMAIN\_ID}, que es lo que permite a los nodos descubrirse entre ellos sin ningún proceso central (sección~\ref{sec:dds-qos}). Esa red debe además dejar pasar el tráfico multicast, porque es por donde viajan los anuncios del descubrimiento.
+
+\section{Preparación del montaje}
 \label{sec:preparacion-hardware}
 
-% TODO: Describir:
-%  - Montaje del circuito y colocación de las cámaras cubriendo todo el trazado.
-%  - Pegatinas de colores en los coches (delantera y trasera) y marca de línea de
-%    meta de color naranja visible por una de las cámaras.
-%  - Carga del firmware en el Arduino y conexión del L293D a los carriles.
-%  - Conexión del Arduino por USB a la máquina cerebro (/dev/ttyACM0).
+Antes de arrancar nada hay que dejar preparada la parte física.
 
-\section{Instrucciones de ejecución}
-\label{sec:instrucions-execucion}
-
-% TODO: Documentar los comandos reales:
-%
-% En cada máquina con cámara (ajustando NODE_ID y CAMERA_DEV):
-%
-%   cd python
-%   NODE_ID=camara_01 CAMERA_DEV=0 docker compose -f docker-compose-camera.yml up
-%
-% En la máquina cerebro (conectada al Arduino):
-%
-%   cd python
-%   docker compose -f docker-compose-brain.yml up
-%
-% Explicar el flujo tras el arranque: los carriles se alimentan a la velocidad de
-% calibración, el coche da la vuelta de calibración, al cruzar la meta el sistema pasa
-% automáticamente a modo carrera. Para recalibrar: publicar True en /modo_calibracion
-% o borrar los ficheros de caché (cache_trayectoria_*.json).
+\begin{itemize}
+    \item Montar el circuito y repartir las cámaras de forma que entre todas cubran el trazado completo, cada una enfocando su tramo desde arriba.
+    \item Pegar en cada coche sus dos etiquetas de color, una delante y otra detrás, con la precaución de que las delanteras sean de colores distintos entre coches.
+    \item Marcar la línea de meta con una etiqueta alargada que cruce la pista, de un color reservado y visible por alguna de las cámaras.
+    \item Cargar el firmware en la placa Arduino con su \gls{ide} y cablear el módulo L293D a los carriles, teniendo en cuenta la conexión del pin M+ a la tierra del circuito que se describe en la sección~\ref{sec:sistema-actuacion}.
+    \item Conectar la placa por \gls{usb} a la máquina que vaya a ejecutar el nodo de potencia, donde aparece como \texttt{/dev/ttyACM0}.
+\end{itemize}
 
 \section{Configuración}
 \label{sec:configuracion-anexo}
 
-% TODO: Referenciar python/src/image_processor_pkg/config/params.yaml y comentar los
-% parámetros que el usuario puede querer ajustar: lista de coches, colores de las
-% pegatinas y de la meta, resolución de cámara (camera.mode), velocidades mínima y
-% máxima del controlador, velocidad de calibración y puerto del Arduino.
+Toda la configuración vive en el fichero \texttt{config/params.yaml}, que comparten los tres tipos de nodo y que se recoge completo en los códigos~\ref{lst:params-yaml} y~\ref{lst:params-yaml-2}. Lo que hay que revisar antes de cada sesión es el bloque de los coches, que es el que fija la escala del sistema.
+
+\begin{lstlisting}[style=codigo, language=yamlsimple, caption={Bloque del fichero de parámetros que define los coches}, label={lst:anexo-coches}]
+coches: ["car1","car2"]
+
+cars:
+  car1:
+    stiker_front: "amarillo"
+    stiker_back: "violeta"
+    carril: "2"
+    modo: "automatico"
+  car2:
+    stiker_front: "verde"
+    stiker_back: "azul"
+    carril: "1"
+    modo: "manual"
+\end{lstlisting}
+
+La lista \texttt{coches} determina cuántos detectores crea cada cámara, cuántos nodos de control se levantan y a qué \emph{topics} se suscribe el nodo de potencia, de modo que añadir un coche al sistema es añadir un nombre a esa lista. Cada nombre necesita después su propio bloque dentro de \texttt{cars}, donde se indican los colores de sus dos pegatinas, el carril del Arduino al que está conectado y el modo con el que se decide su PWM, que puede ser \texttt{manual}, \texttt{incremental}, \texttt{automatico} o \texttt{politica} (sección~\ref{subsec:modos-operacion}).
+
+Fuera de ese bloque, los valores que más se tocan de una sesión a otra son el rango de PWM del algoritmo, con \texttt{minimum\_speed} y \texttt{maximum\_speed}, y el umbral con el que se dan por buenos los derrapes, \texttt{umbral\_derrape}, ya que ambos dependen del coche y del estado del circuito, como se ve en el capítulo~\ref{cap:pruebas}. También conviene comprobar el color de la línea de meta y la resolución de captura de las cámaras.
+
+\section{Puesta en marcha}
+\label{sec:instrucciones-execucion}
+
+Cada rol del sistema se levanta con un único comando desde el directorio \texttt{python} del repositorio. Conviene arrancar primero las cámaras, para que la línea de meta ya esté publicada cuando entren los nodos de control.
+
+En cada máquina con cámara se lanza un contenedor por cada una, indicando con \texttt{NODE\_ID} el nombre con el que esa cámara se identifica en la red y con \texttt{CAMERA\_DEV} el dispositivo de vídeo que tiene que abrir.
+
+\begin{lstlisting}[style=codigo, language=bash, caption={Arranque de un nodo de captura}, label={lst:cmd-camara}]
+NODE_ID=camara_01 CAMERA_DEV=0 docker compose -f docker-compose-camera.yml up
+\end{lstlisting}
+
+En la máquina que tiene el Arduino conectado se levanta el cerebro, que arranca un nodo de control por cada coche que no sea manual, el nodo de potencia y el nodo de sondeo de red.
+
+\begin{lstlisting}[style=codigo, language=bash, caption={Arranque de los nodos de control y del nodo de potencia}, label={lst:cmd-brain}]
+docker compose -f docker-compose-brain.yml up
+\end{lstlisting}
+
+Para una carrera conducida por personas se usa el lanzamiento manual, que levanta los mismos nodos de control pero sin el de potencia, de manera que arranca aunque el Arduino no esté conectado.
+
+\begin{lstlisting}[style=codigo, language=bash, caption={Arranque en modo manual}, label={lst:cmd-manual}]
+docker compose -f docker-compose-manual.yml up
+\end{lstlisting}
+
+Una carrera mixta, con un coche autónomo y otro conducido, se consigue levantando a la vez los dos anteriores, ya que cada lanzamiento coge del mismo fichero de parámetros el subconjunto de coches que le corresponde.
+
+Por último, el panel de la carrera en directo se arranca con un guion que levanta su contenedor y abre el navegador en el puerto 8990, donde sirve el panel de datos y el mosaico de las cámaras (sección~\ref{subsec:visualizacion-directo}).
+
+\begin{lstlisting}[style=codigo, language=bash, caption={Arranque del panel en directo}, label={lst:cmd-visu}]
+./arrancar_visualizacion.sh
+\end{lstlisting}
+
+\section{Ciclo de una sesión}
+\label{sec:ciclo-sesion}
+
+Con los contenedores en marcha el sistema entra en calibración por sí solo. El nodo de potencia alimenta cada carril autónomo a una tensión fija y baja, con lo que el coche empieza a rodar despacio mientras las cámaras van guardando las posiciones por las que pasa. Los carriles de los coches manuales no se alimentan, así que su vuelta de calibración hay que conducirla a mano y sin parar.
+
+Cada coche cierra su calibración al completar una vuelta desde que cruza la meta por primera vez, y a partir de ese momento pasa a carrera con su contador de vueltas a cero. Como la calibración es por coche, uno puede estar corriendo mientras otro sigue calibrando.
+
+Si se mueve una cámara o se cambia el trazado hay que repetir la calibración, para lo que basta con publicar \texttt{True} en el \emph{topic} \texttt{/carX/modo\_calibracion} del coche afectado. La otra opción es borrar los ficheros de caché \texttt{cache\_trayectoria\_*.json}, que son los que guardan la trayectoria aprendida y los que hacen que un arranque posterior se salte la calibración.

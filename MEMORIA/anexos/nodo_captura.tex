@@ -1,7 +1,7 @@
 \chapter{Detalle del nodo de captura y detección}
 \label{chap:anexo-captura}
 
-\lettrine{E}{n} este anexo se detalla el procesamiento de imagen del nodo de captura, resumido en la sección~\ref{sec:nodo-camara}. El nodo se divide en dos componentes: el nodo de ROS~2, que gestiona la comunicación y los modos de funcionamiento, y un objeto que encapsula las operaciones de visión artificial con las que se obtiene el centroide de cada pegatina. Logrando desacoplar el procesamiento de imagen de la comunicación.
+\lettrine{E}{n} este anexo se detalla el procesamiento de imagen del nodo de captura, resumido en la sección~\ref{sec:nodo-camara}. El nodo se divide en dos componentes: el nodo de ROS2, que gestiona la comunicación y los modos de funcionamiento, y un objeto que encapsula las operaciones de visión artificial con las que se obtiene el centroide de cada pegatina. Logrando desacoplar el procesamiento de imagen de la comunicación.
 
 \section{Detección de las pegatinas por color}
 \label{subsec:deteccion-etiquetas}
@@ -10,30 +10,31 @@ La detección hereda el procedimiento del trabajo de Mario López~\cite{tfgmario
 
 Se extraen entonces los contornos externos y se toma el de mayor área, descartándolo si no supera un área mínima configurable. De este proceso se obtiene el rectángulo delimitador y el centroide de la pegatina, el significado para cada pegatina se describió en la sección~\ref{sec:arquitectura}. La figura~\ref{fig:deteccion-color} recorre estas etapas sobre un fotograma real.
 
+% Las subfiguras se dimensionan por altura y no por ancho: las imagenes tienen
+% proporciones distintas y con un ancho comun quedaban descuadradas de alto.
 \begin{figure}[tbp]
     \centering
-    \begin{subfigure}[b]{0.48\textwidth}
+    \begin{subfigure}[b]{0.32\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/det_color_a_original.png}
-        \caption{Fotograma capturado por la cámara}
+        \includegraphics[height=3.2cm]{imaxes/IMPLEMENTACION/det_color_a_original.png}
+        \caption{Fotograma capturado}
         \label{fig:deteccion-color-a}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[b]{0.48\textwidth}
+    \begin{subfigure}[b]{0.32\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/det_color_b_mascara.png}
-        \caption{Máscara del color de la pegatina verde delantera del coche azul}
+        \includegraphics[height=3.2cm]{imaxes/IMPLEMENTACION/det_color_b_mascara.png}
+        \caption{Máscara del color}
         \label{fig:deteccion-color-b}
     \end{subfigure}
-
-    \vspace{0.7em}
-    \begin{subfigure}[b]{0.34\textwidth}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/det_color_c_resultado.png}
-        \caption{Rectángulo y centroide detectados después de realizar las operaciones pertinentes}
+        \includegraphics[height=3.2cm]{imaxes/IMPLEMENTACION/det_color_c_resultado.png}
+        \caption{Rectángulo y centroide}
         \label{fig:deteccion-color-c}
     \end{subfigure}
-    \caption{Ejemplo del proceso de detección que realiza el nodo camara para detectar una de las pegatinas del coche}
+    \caption{Proceso de detección de una pegatina}
     \label{fig:deteccion-color}
 \end{figure}
 
@@ -44,31 +45,31 @@ El nodo implementa los dos modos descritos en la sección~\ref{sec:arquitectura}
 
 En calibración, cada detección de la pegatina delantera se añade a la lista que reconstruye la trayectoria del coche. Basta con la delantera, que es la que da una trayectoria limpia~\cite{tfgadrian}. Esto es porque la trasera puede quedar oculta a ratos y la ruta base debe registrarse sin interrupciones. Al mantener una trayectoria por coche, la cámara puede filtrar por carril en carrera y dos coches pueden compartir el color de la pegatina trasera. Durante todo este proceso se busca sobre el fotograma completo como el que se puede ver \ref{fig:deteccion-color-a}, es por ello que las pegatinas delanteras sí que tienen que ser de diferente color.
 
-La calibración termina por coche, no para todo el sistema. El nodo se suscribe al \emph{topic} de calibración de cada coche configurado y, al recibir el aviso de que uno ha completado su vuelta, genera su máscara con los puntos acumulados. Desde ese momento la búsqueda de ese coche queda restringida a una franja alrededor del recorrido conocido, como recoge la figura~\ref{fig:mascara-trayectoria}.
+La calibración termina por coche, no para todo el sistema. El nodo se suscribe al \emph{topic} de calibración de cada coche configurado y, al recibir el aviso de que uno ha completado su vuelta, genera su máscara con los puntos acumulados. Desde ese momento la búsqueda de ese coche queda restringida a una franja alrededor del recorrido conocido, como recoge la figura~\ref{fig:mascara-trayectoria}. Esa franja deja fuera el carril contrario, con lo que el coche que circula por él deja de ser un falso positivo.
 
 \begin{figure}[tbp]
     \centering
     \begin{subfigure}[b]{0.32\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/mascara_a_puntos.png}
-        \caption{Posiciones acumuladas durante la vuelta de calibración}
+        \includegraphics[height=3.2cm]{imaxes/IMPLEMENTACION/mascara_a_puntos.png}
+        \caption{Posiciones acumuladas}
         \label{fig:mascara-trayectoria-a}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.32\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/mascara_b_mascara.png}
-        \caption{Máscara generada a partir de la posición que sigue el coche}
+        \includegraphics[height=3.2cm]{imaxes/IMPLEMENTACION/mascara_b_mascara.png}
+        \caption{Máscara generada}
         \label{fig:mascara-trayectoria-b}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.32\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/mascara_c_filtrado.png}
-        \caption{Fotograma filtrado después de aplicar la mascara generada durante la calibración}
+        \includegraphics[height=3.2cm]{imaxes/IMPLEMENTACION/mascara_c_filtrado.png}
+        \caption{Fotograma filtrado}
         \label{fig:mascara-trayectoria-c}
     \end{subfigure}
-    \caption{Ejemplo de proceso de generación de la máscara de trayectoria para un coche. Deja fuera el carril contrario, con lo que el coche que circula por él deja de ser un falso positivo posible.}
+    \caption{Generación de la máscara de trayectoria}
     \label{fig:mascara-trayectoria}
 \end{figure}
 
@@ -77,39 +78,41 @@ La calibración termina por coche, no para todo el sistema. El nodo se suscribe 
 
 En carrera la búsqueda se restringe a una región de interés de $150 \times 150$ píxeles centrada en la posición predicha para el coche. La predicción es la extrapolación lineal que introdujo Mario López~\cite{tfgmario}. Conocidas las dos últimas posiciones, el centro de la región es la actual más el vector de movimiento del último fotograma.
 
-Sobre ella se aplica además la máscara de trayectoria, de modo que solo sobreviven los píxeles que pertenecen a la vez a la región y a las proximidades del carril; la intersección de ambos filtros procede también de los trabajos previos~\cite{tfgmario,tfgadrian}. La detección de las pegatinas (\ref{subsec:deteccion-etiquetas}) se realiza sobre esa imagen reducida, se puede ver un ejemplo en \ref{fig:roi-filtrado}. El problema que presenta hacerlo de esta manera es que sus coordenadas son relativas a la región y hay que trasladarlas al sistema de referencia de la cámara antes de publicarlas.
+Sobre ella se aplica además la máscara de trayectoria, de modo que solo sobreviven los píxeles que pertenecen a la vez a la región y a las proximidades del carril; la intersección de ambos filtros procede también de los trabajos previos~\cite{tfgmario,tfgadrian}. La detección de las pegatinas (\ref{subsec:deteccion-etiquetas}) se realiza sobre esa imagen reducida, se puede ver un ejemplo en \ref{fig:roi-filtrado}, donde las flechas encadenadas marcan el desplazamiento entre los dos últimos fotogramas y la cruz la posición predicha, que en ese caso queda a 1,6~px de la real. El problema que presenta hacerlo de esta manera es que sus coordenadas son relativas a la región y hay que trasladarlas al sistema de referencia de la cámara antes de publicarlas.
 
 \begin{figure}[tbp]
     \centering
-    \begin{subfigure}[b]{0.55\textwidth}
+    \begin{subfigure}[b]{0.48\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/roi_a_recuadro.png}
-        \caption{Región de interés marcada sobre todo el fotograma}
+        % Recortada por los lados hasta dejarla cuadrada, para que ocupe lo
+        % mismo que las otras tres. Lo que se quita es suelo, no pista.
+        \includegraphics[trim={120 0 40 0},clip,height=4.2cm]{imaxes/IMPLEMENTACION/roi_a_recuadro.png}
+        \caption{Región sobre el fotograma}
         \label{fig:roi-filtrado-a}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[b]{0.38\textwidth}
+    \begin{subfigure}[b]{0.48\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/roi_b_extrapolacion.png}
+        \includegraphics[height=4.2cm]{imaxes/IMPLEMENTACION/roi_b_extrapolacion.png}
         \caption{Extrapolación de la posición}
         \label{fig:roi-filtrado-b}
     \end{subfigure}
 
     \vspace{0.7em}
-    \begin{subfigure}[b]{0.32\textwidth}
+    \begin{subfigure}[b]{0.48\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/roi_c_recorte.png}
+        \includegraphics[height=4.2cm]{imaxes/IMPLEMENTACION/roi_c_recorte.png}
         \caption{Recorte de la región}
         \label{fig:roi-filtrado-c}
     \end{subfigure}
-    \hspace{0.04\textwidth}
-    \begin{subfigure}[b]{0.32\textwidth}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/roi_d_filtrado.png}
-        \caption{Región tras la intersección entre la mascara y el ROI}
+        \includegraphics[height=4.2cm]{imaxes/IMPLEMENTACION/roi_d_filtrado.png}
+        \caption{Región tras la intersección}
         \label{fig:roi-filtrado-d}
     \end{subfigure}
-    \caption{Obtención del ROI a partir del desplazamiento entre los dos últimos fotogramas (las flechas encadenadas). La cruz es la posición predicha, a 1,6~px de la real, y el último panel es lo único que llega al detector de color}
+    \caption{Obtención de la región de interés}
     \label{fig:roi-filtrado}
 \end{figure}
 
@@ -133,25 +136,25 @@ El procedimiento empleado para la detección de la línea de meta es el de Adri�
     \centering
     \begin{subfigure}[b]{0.32\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/meta_a_mascara.png}
-        \caption{Máscara del color de la meta}
+        \includegraphics[height=3.2cm]{imaxes/IMPLEMENTACION/meta_a_mascara.png}
+        \caption{Máscara del color}
         \label{fig:deteccion-meta-a}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.32\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/meta_b_cierre.png}
+        \includegraphics[height=3.2cm]{imaxes/IMPLEMENTACION/meta_b_cierre.png}
         \caption{Tras el cierre morfológico}
         \label{fig:deteccion-meta-b}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.32\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/meta_c_segmento.png}
+        \includegraphics[height=3.2cm]{imaxes/IMPLEMENTACION/meta_c_segmento.png}
         \caption{Rectángulo y segmento}
         \label{fig:deteccion-meta-c}
     \end{subfigure}
-    \caption{Detección de la línea de meta en la cámara~2. Los raíles parten la etiqueta en tres trozos que el cierre morfológico vuelve a unir, y el rectángulo de área mínima que la envuelve da el segmento de meta}
+    \caption{Detección de la línea de meta}
     \label{fig:deteccion-meta}
 \end{figure}
 

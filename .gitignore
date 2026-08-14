@@ -266,9 +266,12 @@ python/src/image_processor_pkg/politica_*.json
 # resultado. Si alguno merece entregarse DENTRO del repo, `git add -f`, igual
 # que las politica_*.json de arriba.
 #
-# Los HTML de analisis de las pruebas (unos 600 MB, uno por ejecucion). Los saca
-# analisis/generar_htmls.py, que esta versionado.
-RESULTADOS_PRUEBAS/
+# RESULTADOS_PRUEBAS/ es la excepcion y NO se ignora: son los HTML de analisis
+# de las pruebas de la memoria (unos 560 MB, uno por ejecucion) y se publican a
+# proposito, para que quien entre al repositorio pueda abrirlos sin ir a buscar
+# los bags. Su indice es el README de esa carpeta, con el enlace de YouTube de
+# cada ejecucion al lado. Los saca analisis/generar_htmls.py; volver a lanzarlo
+# con --rehacer y commitear deja OTRA copia entera en el historial.
 
 # Los mp4 de las pruebas (unos 7 GB). Su sitio es YouTube, que es desde donde
 # los referencia la memoria: aqui solo se versionaria la herramienta que los
@@ -287,3 +290,12 @@ analisis_incremental/
 # tampoco se versionan. Lo que se conserva en el repo es la tabla, que ya esta
 # en MEMORIA/contido/pruebas.tex.
 analisis_peraltes/
+
+# Codigo muerto que se queda en local. subscriber.py era la herramienta antigua
+# de medicion de latencias: importa el mensaje ObjectLocation, que ya no existe
+# en msg/, asi que revienta al arrancar. Lo que mide hoy la red es NetProbeNode.
+python/src/image_processor_pkg/image_processor_pkg/subscriber.py
+
+# Script suelto para tantear a ojo rangos HSV con la webcam. No forma parte de
+# la arquitectura, no lo lanza ningun launch y nada del repo lo referencia.
+python/procesar_imagen.py

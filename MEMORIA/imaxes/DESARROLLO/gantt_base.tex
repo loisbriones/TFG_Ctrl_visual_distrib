@@ -1,0 +1,59 @@
+% Diagrama de Gantt de la planificacion base del proyecto.
+% Semana 1 = semana del lunes 16/02/2026, semana 19 = semana del 22/06/2026,
+% con la entrega prevista el viernes 26/06/2026.
+% Se compila aparte con pdflatex y se incluye en la memoria como PDF:
+%     pdflatex gantt_base.tex
+\documentclass[border=3pt]{standalone}
+
+\usepackage{libertine}          % la tipografia de la memoria
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{xcolor}
+\usepackage{pgfgantt}
+
+% Paleta de estilo_tfg.sty, la misma de los esquemas de la arquitectura
+\definecolor{ArqAzul}{RGB}{47, 84, 128}
+\definecolor{ArqAzulClaro}{RGB}{224, 234, 244}
+
+\begin{document}
+\begin{ganttchart}[
+    x unit=0.52cm,                  % ancho de cada semana
+    y unit title=0.62cm,
+    y unit chart=0.60cm,
+    hgrid=false,
+    vgrid={*1{draw=black!35, dotted}},
+    title height=1,
+    title/.append style={fill=none, draw=black},
+    title label font=\footnotesize,
+    include title in canvas=false,
+    bar/.append style={fill=ArqAzulClaro, draw=ArqAzul, line width=0.5pt},
+    bar height=0.6,
+    bar label font=\footnotesize,
+    canvas/.append style={fill=none, draw=black, line width=0.5pt}
+  ]{1}{19}
+
+  % Cabecera: meses sobre los numeros de semana. Los grupos son las semanas
+  % cuyo lunes cae en cada mes (feb 2, mar 5, abr 4, may 4, jun 4).
+  \gantttitle{Febrero}{2}
+  \gantttitle{Marzo}{5}
+  \gantttitle{Abril}{4}
+  \gantttitle{Mayo}{4}
+  \gantttitle{Junio}{4} \\
+  \gantttitlelist{1,...,19}{1} \\
+
+  \ganttbar{It1: Análisis inicial}{1}{2} \\
+  \ganttbar{It2: Arquitectura distribuida}{3}{4} \\
+  \ganttbar{It3: Detección y seguimiento}{5}{6} \\
+  \ganttbar{It4: Integración con la red}{7}{8} \\
+  \ganttbar{It5: Pruebas de hardware}{9}{9} \\
+  \ganttbar{It6: ROI y readquisición}{10}{11} \\
+  \ganttbar{It7: Análisis y telemetría}{12}{12} \\
+  \ganttbar{It8: Nodo controlador}{13}{14} \\
+  \ganttbar{It9: Revisión del Arduino}{15}{15} \\
+  \ganttbar{It10: Nodo puente}{16}{16} \\
+  \ganttbar{It11: Algoritmo y pruebas finales}{17}{18} \\
+  \ganttbar{It12: Documentación y defensa}{18}{19}
+
+\end{ganttchart}
+\end{document}

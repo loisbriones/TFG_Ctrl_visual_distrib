@@ -1,0 +1,83 @@
+% Diagrama de Gantt de la planificacion real, con los retrasos acumulados.
+% Misma escala y mismo origen que gantt_base.tex, semana 1 = semana del 16/02/2026.
+% La semana 26 es la del 10/08/2026, la de la entrega. Cada fila lleva dos barras,
+% la gris de abajo es lo planificado y la azul de arriba lo que se tardo de verdad.
+% Se compila aparte con pdflatex y se incluye en la memoria como PDF:
+%     pdflatex gantt_retrasos.tex
+\documentclass[border=3pt]{standalone}
+
+\usepackage{libertine}          % la tipografia de la memoria
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{xcolor}
+\usepackage{pgfgantt}
+
+% Paleta de estilo_tfg.sty, la misma de los esquemas de la arquitectura
+\definecolor{ArqAzul}{RGB}{47, 84, 128}
+\definecolor{ArqAzulClaro}{RGB}{224, 234, 244}
+\definecolor{ArqGris}{RGB}{90, 95, 100}
+\definecolor{ArqGrisClaro}{RGB}{235, 236, 238}
+
+% Barra fina de la planificacion base, debajo de la real
+\newcommand{\barrabase}[2]{%
+  \ganttbar[bar height=0.24, bar top shift=0.52,
+            bar/.append style={fill=ArqGrisClaro, draw=ArqGris}]{}{#1}{#2}}
+
+\begin{document}
+\begin{tabular}{@{}c@{}}
+\begin{ganttchart}[
+    x unit=0.52cm,                  % ancho de cada semana, el mismo del Gantt base
+    y unit title=0.62cm,
+    y unit chart=0.66cm,
+    hgrid=false,
+    vgrid={*1{draw=black!35, dotted}},
+    title height=1,
+    title/.append style={fill=none, draw=black},
+    title label font=\footnotesize,
+    include title in canvas=false,
+    bar/.append style={fill=ArqAzulClaro, draw=ArqAzul, line width=0.5pt},
+    bar height=0.42,
+    bar top shift=0.06,
+    bar label font=\footnotesize,
+    canvas/.append style={fill=none, draw=black, line width=0.5pt}
+  ]{1}{26}
+
+  % Cabecera: meses sobre los numeros de semana. Los grupos son las semanas
+  % cuyo lunes cae en cada mes (feb 2, mar 5, abr 4, may 4, jun 5, jul 4, ago 2).
+  \gantttitle{Febrero}{2}
+  \gantttitle{Marzo}{5}
+  \gantttitle{Abril}{4}
+  \gantttitle{Mayo}{4}
+  \gantttitle{Junio}{5}
+  \gantttitle{Julio}{4}
+  \gantttitle{Agosto}{2} \\
+  \gantttitlelist{1,...,26}{1} \\
+
+  \ganttbar{It1: Análisis inicial}{1}{2}            \barrabase{1}{2}  \\
+  \ganttbar{It2: Arquitectura distribuida}{3}{4}    \barrabase{3}{4}  \\
+  \ganttbar{It3: Detección y seguimiento}{5}{7}     \barrabase{5}{6}  \\
+  \ganttbar{It4: Integración con la red}{8}{12}     \barrabase{7}{8}  \\
+  \ganttbar{It5: Pruebas de hardware}{13}{14}       \barrabase{9}{9}  \\
+  \ganttbar{It6: ROI y readquisición}{15}{16}       \barrabase{10}{11}\\
+  \ganttbar{It7: Análisis y telemetría}{17}{17}     \barrabase{12}{12}\\
+  \ganttbar{It8: Nodo controlador}{18}{19}          \barrabase{13}{14}\\
+  \ganttbar{It9: Revisión del Arduino}{20}{20}      \barrabase{15}{15}\\
+  \ganttbar{It10: Nodo puente}{21}{21}              \barrabase{16}{16}\\
+  \ganttbar{It11: Algoritmo y pruebas finales}{22}{25} \barrabase{17}{18}\\
+  \ganttbar{It12: Documentación y defensa}{23}{26}  \barrabase{18}{19}
+
+  % Entrega prevista al cierre de la semana 19, el 26/06/2026
+  \ganttvrule[vrule/.style={draw=ArqGris, dashed, line width=0.7pt},
+              vrule label font=\footnotesize\color{ArqGris}]{Entrega prevista}{19}
+
+\end{ganttchart} \\[2mm]
+% Leyenda de las dos barras
+\begin{tikzpicture}[baseline]
+  \draw[fill=ArqGrisClaro, draw=ArqGris, line width=0.5pt] (0,0) rectangle (0.7,0.16);
+  \node[anchor=west, font=\footnotesize] at (0.9,0.08) {Planificado};
+  \draw[fill=ArqAzulClaro, draw=ArqAzul, line width=0.5pt] (4.0,-0.04) rectangle (4.7,0.24);
+  \node[anchor=west, font=\footnotesize] at (4.9,0.08) {Real};
+\end{tikzpicture}
+\end{tabular}
+\end{document}

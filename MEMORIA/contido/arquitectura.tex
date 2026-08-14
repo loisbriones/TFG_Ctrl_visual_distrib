@@ -6,9 +6,9 @@
 \section{Arquitectura general del sistema}
 \label{sec:arquitectura}
 
-En esta sección se describen las dos fases por las que pasa el sistema. Primero la fase de operación, que es el funcionamiento normal y en el que transcurre la mayor parte del tiempo. Después la fase de calibración, por la que hay que pasar antes para inicializarlo correctamente. Y por último, los distintos modos de control que se pueden aplicar sobre el coche.
+En esta sección se describen las dos fases por las que pasa el sistema. Primero la fase de operación, que es el funcionamiento normal y en el que transcurre la mayor parte del tiempo. Después la fase de calibración, por la que hay que pasar antes para inicializar el sistema correctamente. Y por último, los distintos modos de control que se pueden aplicar sobre el coche.
 
-\subsection{Fase operacion}
+\subsection{Fase de operación}
 \label{subsec:fase-operacion}
 
 \begin{figure}[tbp]
@@ -26,12 +26,12 @@ Fuera del lazo de control queda un último nodo, que escucha todo lo que circula
 
 Cabe destacar que la arquitectura no obliga a repartir los nodos por la red, por tanto cualquier combinación de ellos puede convivir en la misma máquina, hasta el punto de poder ejecutar el sistema completo en una sola.
 
-Cada uno de los nodos descritos anteriormente tiene su equivalente dentro de ROS~2. Hay que destacar que lo único que implica es que en vez de mensajes tenemos que trabajar con \emph{topics}, como se explica en la sección~\ref{subsec:mensajes-propios}. También es necesario que cada instancia arranque dentro de su propio espacio de nombres (sección~\ref{sec:ros2-namespaces}), lo que liga sus \emph{topics} al coche o a la cámara que le corresponde y evita que las instancias de un mismo nodo se pisen entre sí.
+Cada uno de los nodos descritos anteriormente tiene su equivalente dentro de ROS2. Hay que destacar que lo único que implica es que en vez de mensajes tenemos que trabajar con \emph{topics}, como se explica en la sección~\ref{subsec:mensajes-propios}. También es necesario que cada instancia arranque dentro de su propio espacio de nombres (sección~\ref{sec:ros2-namespaces}), lo que liga sus \emph{topics} al coche o a la cámara que le corresponde y evita que las instancias de un mismo nodo se pisen entre sí.
 
 \begin{figure}[tbp]
     \centering
     \includegraphics[width=1\textwidth]{imaxes/ARQUITECTURA/Arquitectura_General_Sistema.pdf}
-    \caption{Arquitectura general del control visual distribuido, con los tres tipos de nodo y los mensajes que intercambian}
+    \caption{Arquitectura general del sistema}
     \label{fig:arquitectura-general}
 \end{figure}
 
@@ -85,7 +85,7 @@ La política hay que determinarla a mano, indicando para cada punto el valor de 
         \caption{Resultado tras aplicarla}
         \label{fig:fotograma-mascara-aplicada}
     \end{subfigure}
-    \caption{Máscara de trayectoria del nodo cámara: deja visible solo la franja del recorrido del coche y descarta todo lo demás}
+    \caption{Aplicación de la trayectoria base en el nodo cámara}
     \label{fig:ejemplo-trayectoria-base-nodo-camara}
 \end{figure}
 
@@ -101,7 +101,7 @@ En esta sección se explica el modelo de datos del sistema y la garantía de ent
 \begin{table}[tbp]
 	\centering
 	\estilotabla
-	\caption{Mensajes que intercambian los nodos del sistema.}
+	\caption{Mensajes que intercambian los nodos del sistema}
 	\label{tab:mensajes}
 	\begin{tabular}{p{2.7cm} p{2.5cm} p{2.7cm} p{2.3cm} p{2.4cm}}
 		\toprule
@@ -128,7 +128,7 @@ Definir el modelo de datos consiste en decidir qué mensajes se intercambian, en
 \begin{itemize}
 	\item \textbf{Posición del coche.} Es el mensaje principal del sistema. Cada nodo cámara envía uno por cada coche que reconoce en cada fotograma. Contiene la información que permite determinar la posición del coche e identifica al emisor, porque cada nodo cámara cubre un tramo distinto del circuito y el receptor necesita saber de cuál procede el dato.
 
-	\item \textbf{Línea de meta.} Contiene el segmento que define la meta y el nodo cámara que la observa. Solo un nodo la ve, pero todos los nodos de control la necesitan para contar vueltas, y solo deben comprobar el cruce cuando las posiciones son del nodo que la detecto.
+	\item \textbf{Línea de meta.} Contiene el segmento que define la meta y el nodo cámara que la observa. Solo un nodo la ve, pero todos los nodos de control la necesitan para contar vueltas, y solo deben comprobar el cruce cuando las posiciones son del nodo que la detectó.
 
 	\item \textbf{Consigna de potencia.} Es la salida del nodo de control. Contiene el valor que hay que aplicar y el identificador del carril sobre el que aplicarlo. Cada nodo de control envía el suyo, de forma que hay uno por cada carril que tiene el circuito.
 
@@ -151,7 +151,7 @@ Los mensajes que siguen van dirigidos al nodo de \emph{logs}, que se limita a es
 \begin{table}[tbp]
 	\centering
 	\estilotabla
-	\caption{Resumen de los \emph{topics} del sistema, el tipo de mensaje que transportan y los nodos implicados en cada comunicación.}
+	\caption{Resumen de los \emph{topics} del sistema}
 	\label{tab:topics-ros2}
 	\begin{tabular}{p{3.5cm} p{3.3cm} p{3.0cm} p{3.2cm}}
 		\toprule
@@ -160,7 +160,7 @@ Los mensajes que siguen van dirigidos al nodo de \emph{logs}, que se limita a es
 		\midrule
 		\texttt{/carN/position} & \texttt{CarLocation} & Nodos cámara & Nodo de control $N$ \\
 		\texttt{/finish\_\allowbreak line\_position} & \texttt{FinishLine} & Cámara que la observa & Nodos de control \\
-		\texttt{/carN/pwd} & \texttt{SpeedCarril} & Nodo de control $N$ & Nodo puente \\
+		\texttt{/carN/pwd} & \texttt{SpeedCarril} & Nodo de control $N$ & Nodo de potencia \\
 		\texttt{/carN/\allowbreak modo\_calibracion} & \texttt{Bool} & Nodo de control $N$ & Cámaras, control y puente \\
 		\texttt{/telemetria/carN/\allowbreak car\_control} & \texttt{CarControl\allowbreak Telemetry} & Nodo de control $N$ & Visualización \\
 		\texttt{/telemetria/carN/\allowbreak time\_per\_lap} & \texttt{TimePerLap} & Nodo de control $N$ & Visualización \\
@@ -169,9 +169,9 @@ Los mensajes que siguen van dirigidos al nodo de \emph{logs}, que se limita a es
 	\end{tabular}
 \end{table}
 
-Los tipos que ROS~2 trae por defecto no bastan para modelar la información de la tabla~\ref{tab:mensajes}, de modo que fue necesario crear mensajes propios (sección~\ref{sec:ros2-interfaces}). Al bajar al detalle, cada uno incorpora identificadores de origen, marcas de tiempo y contadores de fotograma, que permiten medir latencias durante el análisis. El código~\ref{lst:msg-carlocation} recoge la definición de \texttt{CarLocation}, la \emph{posición del coche}, y sirve de ejemplo del formato que siguen todos los demás. Los dos primeros campos identifican el origen del dato, y \texttt{front} y \texttt{back} son las dos pegatinas detectadas, cada una con su centroide y su color, acompañadas de los rectángulos que las encierran. \texttt{stamp} es la marca de tiempo de captura del fotograma y \texttt{proc\_time}, es el tiempo de procesado. \texttt{n\_frame} es el contador de fotogramas de esa cámara. 
+Los tipos que ROS2 trae por defecto no bastan para modelar la información de la tabla~\ref{tab:mensajes}, de modo que fue necesario crear mensajes propios (sección~\ref{sec:ros2-interfaces}). Al bajar al detalle, cada uno incorpora identificadores de origen, marcas de tiempo y contadores de fotograma, que permiten medir latencias durante el análisis. El código~\ref{lst:msg-carlocation} recoge la definición de \texttt{CarLocation}, la \emph{posición del coche}, y sirve de ejemplo del formato que siguen todos los demás. Los dos primeros campos identifican el origen del dato, y \texttt{front} y \texttt{back} son las dos pegatinas detectadas, cada una con su centroide y su color, acompañadas de los rectángulos que las encierran. \texttt{stamp} es la marca de tiempo de captura del fotograma y \texttt{proc\_time}, es el tiempo de procesado. \texttt{n\_frame} es el contador de fotogramas de esa cámara y \texttt{age\_at\_publish} es el tiempo que transcurre desde que la cámara captura el fotograma hasta que el nodo lo publica en la red, de modo que cubre todo el camino dentro del nodo cámara y no solo la detección que mide \texttt{proc\_time}.
 
-\begin{lstlisting}[float=tbp, caption={Definición del mensaje \texttt{CarLocation} (\texttt{msg/CarLocation.msg}).}, label={lst:msg-carlocation}]
+\begin{lstlisting}[style=codigo, float=tbp, language=rosmsg, caption={Definición del mensaje \texttt{CarLocation}}, label={lst:msg-carlocation}]
 string camara_id
 string coche
 Stiker front
@@ -181,11 +181,12 @@ float64 proc_time
 BoundingRect bounding_rect_stiker_front
 BoundingRect bounding_rect_stiker_back
 uint32 n_frame
+float64 age_at_publish
 \end{lstlisting}
 
-Los mensajes \texttt{FinishLine}, \texttt{SpeedCarril} y \texttt{TimePerLap} implementan la \emph{línea de meta}, la \emph{consigna de potencia} y el \emph{tiempo de vuelta} siguiendo ese mismo formato, y se apoyan en cuatro tipos auxiliares que modelan un punto en coordenadas de imagen, una pegatina, el rectángulo delimitador de una detección y un segmento. Sus definiciones completas se recogen en el código~\ref{lst:msgs-informacion}. A ellos se suma \texttt{CarControlTelemetry}, que no tiene equivalente en la tabla~\ref{tab:mensajes} porque nace durante la implementación. Se publica en cada iteración y recoge datos internos del lazo de control, como la distancia de derrape estimada o el tiempo transcurrido desde que llega la posición hasta que se publica el PWM, con los que después se analiza el comportamiento del algoritmo.
+Los mensajes \texttt{FinishLine}, \texttt{SpeedCarril} y \texttt{TimePerLap} implementan la \emph{línea de meta}, la \emph{consigna de potencia} y el \emph{tiempo de vuelta} siguiendo ese mismo formato, y se apoyan en cuatro tipos auxiliares que modelan un punto en coordenadas de imagen, una pegatina, el rectángulo delimitador de una detección y un segmento. Sus definiciones completas se recogen en el código~\ref{lst:msgs-informacion}. A ellos se suma \texttt{CarControlTelemetry}, que no tiene equivalente en la tabla~\ref{tab:mensajes} porque nace durante la implementación. Se publica en cada iteración y recoge datos internos del lazo de control, como la distancia de derrape estimada o el tiempo transcurrido desde que llega la posición hasta que se publica el PWM, con los que después se analiza el comportamiento del algoritmo. A ellos se suman \texttt{NetProbe} y \texttt{NetProbeEcho}, el par de mensajes con el que el nodo de sondeo mide el retardo de la red en la sección~\ref{sec:pruebas-red}. Se añadieron únicamente para poder tomar esa medida, de modo que tampoco figuran en la tabla~\ref{tab:mensajes}, ya que no forman parte de la arquitectura ni el sistema los necesita para funcionar.
 
-Los dos mensajes restantes no necesitan un tipo propio y se resuelven con tipos estándar de ROS~2: el \emph{cambio de modo} es un \texttt{std\_msgs/Bool} en el \emph{topic} de calibración de cada coche, y la \emph{vista de la cámara}, un \texttt{sensor\_msgs/CompressedImage} en los \emph{topics} de depuración, sobre los que cada cámara publica el fotograma procesado con las detecciones superpuestas.
+Los dos mensajes restantes no necesitan un tipo propio y se resuelven con tipos estándar de ROS2: el \emph{cambio de modo} es un \texttt{std\_msgs/Bool} en el \emph{topic} de calibración de cada coche, y la \emph{vista de la cámara}, un \texttt{sensor\_msgs/CompressedImage} en los \emph{topics} de depuración, sobre los que cada cámara publica el fotograma procesado con las detecciones superpuestas.
 
 \subsection{Garantías de entrega}
 \label{subsec:garantia-entrega}
@@ -194,7 +195,7 @@ En los mensajes en los que prima la actualidad solo interesa el dato más recien
 
 En el resto ocurre lo contrario, perder un solo mensaje afecta al funcionamiento del sistema, mientras que recibirlo con retraso no supone problema. Un nodo de control que no reciba la \emph{línea de meta} no podrá contar vueltas ni dar por terminada la calibración. 
 
-Para lograr tener las garantías de entrega en los mensajes de ROS~2 se utilizan políticas de calidad de servicio (sección~\ref{sec:dds-qos}). Los mensajes en los que prima la actualidad, emplean el perfil predefinido para datos de sensores, de fiabilidad \emph{best effort}. En cambio para los que necesitan entrega garantizada se usa el perfil opuesto, fiabilidad garantizada y durabilidad \emph{transient local} con profundidad uno, con lo que un nodo de control que arranque más tarde que las cámaras la recibe igualmente sin necesidad de republicarla.
+Para lograr tener las garantías de entrega en los mensajes de ROS2 se utilizan políticas de calidad de servicio (sección~\ref{sec:dds-qos}). Los mensajes en los que prima la actualidad, emplean el perfil predefinido para datos de sensores, de fiabilidad \emph{best effort}. En cambio para los que necesitan entrega garantizada se usa el perfil opuesto, fiabilidad garantizada y durabilidad \emph{transient local} con profundidad uno, con lo que un nodo de control que arranque más tarde que las cámaras la recibe igualmente sin necesidad de republicarla.
 
 \section{Algoritmo de control}
 \label{sec:algoritmo-arquitectura}
@@ -204,7 +205,7 @@ El algoritmo es el componente que decide, en cada instante y para cada punto del
 \begin{figure}[tbp]
     \centering
     \includegraphics[width=\textwidth]{imaxes/ARQUITECTURA/diseno_algoritmo.pdf}
-    \caption{Ciclo del algoritmo. En una vuelta limpia sube el PWM de todo el trazado; cuando se detecta un derrape se abre una zona que se extiende hacia atrás desde el punto en el que se detectó, para anticiparse a la curva; y al cerrar la vuelta esa zona baja su PWM mientras las que no derraparon siguen subiendo}
+    \caption{Ejemplo de funcionamiento del algoritmo}
     \label{fig:arq-algo}
 \end{figure}
  

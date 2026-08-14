@@ -1,24 +1,20 @@
 \chapter{Códigos de referencia}
 \label{chap:listados}
 
-\lettrine{E}{n} este anexo se recogen íntegras las definiciones de los mensajes propios del sistema (sección~\ref{subsec:mensajes-propios}) y los ficheros que definen su configuración y despliegue (sección~\ref{sec:configuracion_despliegue}), junto con la política que se emplea en la prueba de la sección~\ref{sec:prueba-politica-optima}. El único que aparece en el cuerpo de la memoria es el mensaje \texttt{CarLocation} (código~\ref{lst:msg-carlocation}), que sirve de ejemplo del formato de los demás.
+\lettrine{E}{n} este anexo se recogen íntegras las definiciones de los mensajes propios del sistema (sección~\ref{subsec:mensajes-propios}) y los ficheros que definen su configuración y despliegue (sección~\ref{sec:configuracion_despliegue}), junto con la política que se emplea en la prueba de la sección~\ref{sec:prueba-politica-optima}. El único que aparece en el cuerpo de la memoria es el mensaje \texttt{CarLocation} (código~\ref{lst:msg-carlocation}), que sirve de ejemplo del formato de los demás. Todos los ficheros se muestran sin sus comentarios, que pueden consultarse en el repositorio del proyecto~\cite{repogithub}.
 
 \section{Definición de los mensajes}
 \label{sec:anexo-mensajes}
 
-\begin{lstlisting}[caption={Mensajes que transportan la información del sistema.}, label={lst:msgs-informacion}]
+\begin{lstlisting}[style=codigo, language=rosmsg, caption={Mensajes que transportan la información del sistema}, label={lst:msgs-informacion}]
 # ===== FinishLine.msg =====
-# Identificar que camara vio la linea de meta
 string camara_id
 
 LineSegment finish_line
 
 # ===== SpeedCarril.msg =====
 int32 pwm
-# ri -> Forma de referirnos al carril
 string carril
-# Marca temporal para controlar cada cuanto
-# nos llegan los mensajes del robot
 builtin_interfaces/Time stamp
 
 # ===== TimePerLap.msg =====
@@ -29,17 +25,13 @@ int32 lap_number
 # ===== CarControlTelemetry.msg =====
 float64 dist_derrape
 bool estado_derrapando
-# Tiempo que pasa desde que recibimos la informacion
-# del coche hasta que enviamos el pwm a RaceController
 float64 pipeline_time
-# Momento exacto en el que llego el paquete de la
-# camara al CarController
 builtin_interfaces/Time receive_msg_stamp
-# Para saber si estamos detectando correctamente el coche
 int32 roi_size
 \end{lstlisting}
 
-\begin{lstlisting}[caption={Mensajes auxiliares, empleados como piezas de construcción de los anteriores.}, label={lst:msgs-auxiliares}]
+\newpage
+\begin{lstlisting}[style=codigo, language=rosmsg, caption={Mensajes auxiliares, empleados como piezas de construcción de los anteriores}, label={lst:msgs-auxiliares}]
 # ===== Point2D.msg =====
 float64 x
 float64 y
@@ -59,179 +51,108 @@ Point2D start
 Point2D end
 \end{lstlisting}
 
+\begin{lstlisting}[style=codigo, language=rosmsg, caption={Mensajes del sondeo de red}, label={lst:msgs-red}]
+# ===== NetProbe.msg =====
+uint32 seq
+
+string origen
+string destino
+
+builtin_interfaces/Time t_send
+
+uint8[] padding
+
+# ===== NetProbeEcho.msg =====
+uint32 seq
+string origen
+string destino
+
+builtin_interfaces/Time t_send
+
+uint64 proc_ns
+
+uint8[] padding
+\end{lstlisting}
+
 \section{Fichero de parámetros}
 \label{sec:anexo-params}
 
-\begin{lstlisting}[caption={Fichero de parámetros común del sistema (\texttt{config/params.yaml}).}, label={lst:params-yaml}]
+\begin{lstlisting}[style=codigo, language=yamlsimple, caption={Parámetros de los coches y de las cámaras (\texttt{config/params.yaml})}, label={lst:params-yaml}]
 /**:
   ros__parameters:
     modo_calibracion: True
-    # Lista de coches del sistema. Genera un detector por coche en la camara,
-    # un controlador por coche y las suscripciones del puente Arduino. Cada
-    # nombre de esta lista tiene que tener su bloque en 'cars' de abajo.
-    coches: ["car1"]
+    coches: ["car1","car2"]
 
-    # Configuracion POR COCHE. La clave (car1, car2, ...) es el identificador
-    # del coche y coincide con 'coches' y con el namespace ROS (/car1/...).
-    # Aqui vive TODO lo que distingue a un coche de otro:
-    #   - stiker_front/back: colores de sus dos pegatinas. La camara construye
-    #     un ColorDetector por coche con estos colores, y por eso dos coches
-    #     con colores distintos se pueden seguir a la vez sin confundirse.
-    #   - carril: carril fisico del Arduino al que esta conectado este coche
-    #     ("r1"/"1" o "r2"/"2"; el puente parsea ambas formas). Sustituye al
-    #     antiguo reparto por orden de la lista en el launch: aqui se pone el
-    #     carril REAL del montaje, no el que toque por posicion.
-    #   - modo: como se decide el PWM que se aplica al coche. Son los cuatro
-    #     modos de operacion de la memoria, y en TODOS el algoritmo corre
-    #     entero: lo que deja escrito en derrapesLog_*.txt es de donde sale
-    #     despues el analisis de la sesion.
-    #       manual      -> NO se publica PWM: conduce una persona con el mando
-    #                      fisico y el Arduino queda fuera del circuito. El
-    #                      algoritmo apunta en su log lo que HABRIA hecho, para
-    #                      contrastarlo luego con lo que hizo la persona.
-    #       incremental -> se parte de minimum_speed y se sube un escalon cada
-    #                      'vueltas_incremento' vueltas, igual en todo el
-    #                      circuito. Es el modo tonto para tantear un trazado
-    #                      nuevo y ver por donde empieza a irse el coche. El
-    #                      algoritmo corre igual que en manual (no decide nada).
-    #       automatico  -> el PWM lo decide el algoritmo, celda a celda, con su
-    #                      aprendizaje por zonas. Es el modo normal.
-    #       politica    -> se le carga un perfil YA FIJADO desde un JSON y se
-    #                      limita a aplicarlo: el algoritmo detecta derrapes y
-    #                      los registra, pero no puede mover ni un PWM. Sirve
-    #                      para repetir una politica concreta y comparar.
-    #     Los tres ultimos necesitan el Arduino, asi que van por BrainLaunch;
-    #     los manuales por ManualLaunch (sin puente). Cada launch filtra
-    #     'coches' por este valor, asi que para un mixto (uno manual + uno
-    #     autonomo) se levantan los dos docker-compose a la vez.
     cars:
       car1:
-        stiker_front: "verde"
-        stiker_back: "azul"
+        stiker_front: "amarillo"
+        stiker_back: "violeta"
         carril: "2"
         modo: "automatico"
+      car2:
+        stiker_front: "verde"
+        stiker_back: "azul"
+        carril: "1"
+        modo: "manual"
 
-    #Parametros para la camara
     camera:
-      # Controlar el tamano de la foto que sacamos
-      # CAMERA_MODES = {
-      #     0: (160, 120),
-      #     1: (320, 240),
-      #     2: (640, 480),
-      #     3: (800, 600),
-      #     4: (1280, 720),
-      # }
       mode: 2
       device: '0'
-      # Tamano del kernel que vamos a usar para generar la mascara 
-      mascara_kernel_size: 25 
-      # Parametro que controla si estamos en modo debug o no, en caso de estar en bug se envia la imagen de lo que ve la camara
-      debug: True 
+      mascara_kernel_size: 25
+      debug: True
 
-      # Parametros para el modulo de deteccion
-      # (los colores de las pegatinas NO van aqui: son por coche, en 'cars')
       detection:
-        # Color de la linea del meta del circuito
         finish_line_color: "naranja"
-        # Tamano del kernel que usamos para la operacion de deteccion
         kernel_size: 5
-        # Area minima que tiene que tener el stiker detectado para considerarlo valido
-        min_area: 40 
-      
-    # Parametros para el controlador
+        min_area: 40
+\end{lstlisting}
+
+\begin{lstlisting}[style=codigo, language=yamlsimple, caption={Parámetros del control, del algoritmo y del Arduino (\texttt{config/params.yaml})}, label={lst:params-yaml-2}]
+/**:
+  ros__parameters:
     controller:
-      # Velocidad minima a la que podemos ir. Es con la que arranca la carrera
-      # y el suelo por debajo del cual no baja ninguna zona del perfil
-      minimum_speed: 65
-      # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
-      maximum_speed: 80 
-      # Separacion minima (px) entre nodos de la trayectoria base. Los puntos
-      # que la camara envia durante la calibracion llegan mas o menos juntos
-      # segun lo rapido que fuese el coche: al quedarnos solo con los que estan
-      # a mas de esta distancia del ultimo aceptado, la ruta queda adelgazada
+      minimum_speed: 75
+      maximum_speed: 85
       distancia_nodos_trayectoria: 15.0
-      # Tolerancia (px) del cruce de meta. El instante del cruce se interpola
-      # sobre la RECTA que contiene el segmento de meta, pero la meta es un
-      # SEGMENTO: como el circuito es cerrado esa recta vuelve a cortar la
-      # pista en otro punto, donde el signo cambia igual. Los cambios de signo
-      # que caigan a mas de esta distancia del segmento pintado se descartan
       umbral_meta: 30.0
-      # Segundos sin fotogramas validos para dar por perdida a la camara activa
-      # y conmutar a otra que si este entregando (~10 fotogramas a 30 Hz). La
-      # regla es pegajosa a proposito: con dos camaras solapadas publicando
-      # posiciones intercaladas, sin esto el orden de camaras aprendido seria
-      # un ir y venir en vez del orden real de paso
       timeout_camara_activa: 0.3
-      # Vueltas que aguanta el modo INCREMENTAL antes de subir el PWM un
-      # escalon (de incremento_vuelta, el mismo que usa el algoritmo). Solo lo
-      # mira ese modo; los otros tres lo ignoran. No va en 'algoritmo' porque
-      # no es un parametro del algoritmo: el escalon lo cuenta el controlador
       vueltas_incremento: 10
 
-      # Parametros del ALGORITMO DE VELOCIDAD (EstrategiaPerfil). El algoritmo
-      # no es un nodo ROS: los lee el controlador y se los pasa al crear una
-      # instancia por camara. Estan en px, en celdas o en unidades de PWM
-      # segun el caso, y se indica en cada uno
       algoritmo:
-        # -- Deteccion de derrape y localizacion --
-        # Distancia perpendicular (px) de la pegatina TRASERA a la trayectoria
-        # a partir de la cual se considera que el coche derrapa. Ajustado en
-        # pista: con 15 px el derrape se confirmaba tan tarde que el coche ya
-        # se habia salido
         umbral_derrape: 10.0
-        # Si la pegatina DELANTERA aparece a mas de esta distancia (px) de la
-        # ruta, la deteccion es falsa y se descarta el fotograma entero: el
-        # controlador mantiene entonces la velocidad anterior
         max_dist_ruta: 80.0
-        # Zona muerta, en CELDAS, junto a los extremos de la cadena abierta y
-        # junto a las celdas gigantes. Al entrar o salir del encuadre la pose
-        # del coche no es fiable y daria derrapes falsos
         margen_extremo_celdas: 2
 
-        # -- Construccion de la cadena de celdas --
-        # Separacion entre celdas (px medidos sobre la trayectoria). Las celdas
-        # se generan interpolando, asi que este valor manda sobre lo juntos o
-        # separados que llegasen los puntos de calibracion
         paso_celda: 15.0
-        # Salto entre puntos consecutivos (px) a partir del cual se considera
-        # un hueco tapado y se crea una celda gigante en vez de interpolar. En
-        # los logs de pista los huecos por salida de encuadre miden 189-489 px
-        # y los cortes falsos 60-133 px: 150 separa bien ambos mundos
         umbral_celda_gigante: 150.0
-        # Distancia maxima (px) entre el ultimo y el primer punto para dar por
-        # hecho que el final de la trayectoria conecta con su inicio. Es lo que
-        # decide si la cadena es CERRADA (la camara ve el circuito completo) o
-        # ABIERTA (ve solo una porcion)
         umbral_cierre: 60.0
 
-        # -- Perfil de zonas y ciclo de aprendizaje --
-        # Cuanto sube el PWM de cada zona no protegida al completarse una
-        # vuelta limpia (unidades de PWM)
         incremento_vuelta: 1.0
-        # Cuanto baja el PWM de una zona cuando se registra un derrape en ella
-        # (unidades de PWM)
         reduccion_derrape: 2.0
-        # Retroceso (px) al CREAR una zona de derrape: el exceso de velocidad
-        # se gesta antes de manifestarse, asi que hay que frenar bastante antes
-        # del punto donde se perdio la adherencia
         retroceso_creacion: 150.0
-        # Retroceso (px) al FUSIONAR un derrape con una zona ya existente, que
-        # ya aplico el suyo al crearse. Si cada reincidencia retrocediera la
-        # distancia completa, el circuito entero acabaria protegido y el perfil
-        # no volveria a subir en ningun tramo
         retroceso_fusion: 60.0
-        # Holgura (en celdas) para considerar que un derrape "toca" una zona
-        # existente y hay que fusionar en vez de crear una nueva
         margen_fusion_celdas: 1
-        # Vueltas que una zona permanece protegida (sin poder subir) despues de
-        # registrar un derrape
         vueltas_proteccion: 2
 
-    # Parametros para el Arduino
     arduino:
       port: "/dev/ttyACM0"
       baudrate: 115200
-      calibration_speed: 60 
+      calibration_speed: 75
+
+    net_probe:
+      enabled: True
+
+      camaras: ["camara_01"]
+
+      frecuencia_hz: 5.0
+
+      padding_bytes: 128
+
+      umbral_perdida_ms: 500.0
+
+      etiqueta: "2_COCHES_CIRCUITO_FINAL"
+
+      directorio_csv: "/ros2_ws/src/image_processor_pkg/logs_red"
 \end{lstlisting}
 
 \section{Fichero de política}
@@ -239,7 +160,7 @@ Point2D end
 
 La política que se emplea en la prueba de la sección~\ref{sec:prueba-politica-optima}, tal y como quedó guardada. Es el perfil que el algoritmo tenía justo después de su mejor vuelta, con la zona de derrape de las celdas 44 a 57 ya castigada, y es el que los tres intentos con el modo política repiten congelado.
 
-\begin{lstlisting}[caption={Política aplicada en la prueba de la política óptima (\texttt{politica\_CarController\_politica\_car1\_camara\_02.json}).}, label={lst:politica-json}]
+\begin{lstlisting}[style=codigo, language=jsonsimple, caption={Política aplicada en la prueba de la política óptima (\texttt{politica\_CarController\_politica\_car1\_camara\_02.json}).}, label={lst:politica-json}]
 {
   "_ayuda": "Plantilla de politica. Copiar a
              politica_<nodo>_<camara>.json (sin _PLANTILLA), editar
@@ -280,21 +201,28 @@ La política que se emplea en la prueba de la sección~\ref{sec:prueba-politica-
 \section{Ficheros de lanzamiento}
 \label{sec:anexo-launch}
 
-\begin{lstlisting}[language=Python, caption={Lanzamiento del nodo de captura (\texttt{launch/CameraLaunch.py}). Se omiten las importaciones y los comentarios del fichero.}, label={lst:camera-launch}]
+\begin{lstlisting}[style=codigo, language=Python, caption={Lanzamiento del nodo de captura (\texttt{launch/CameraLaunch.py})}, label={lst:camera-launch}]
 def generate_launch_description():
+
     params_file = PathJoinSubstitution([
-        FindPackageShare('image_processor_pkg'), 'config', 'params.yaml'
+        FindPackageShare('image_processor_pkg'),
+        'config',
+        'params.yaml'
     ])
+
     node_id = DeclareLaunchArgument(
         'node_id',
         default_value='camera_00',
-        description='Nombre con el que se identifica al nodo en la red ROS2'
+        description='Nombre con el que se va a identificar al nodo dentro de la red de ROS2'
+
     )
+
     camera_name = DeclareLaunchArgument(
         'camera_name',
         default_value='0',
-        description='ID numerico (0) o ruta entera de la camara (/dev/video0)'
+        description='ID numerico que tiene la ruta (0) o ruta entera de la camara (/dev/video0)'
     )
+
     return LaunchDescription([
         camera_name,
         node_id,
@@ -313,19 +241,12 @@ def generate_launch_description():
     ])
 \end{lstlisting}
 
-\begin{lstlisting}[language=Python, caption={Lanzamiento de los controladores y del nodo de actuación (\texttt{launch/BrainLaunch.py}).}, label={lst:brain-launch}]
-from launch import LaunchDescription
-from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
-import yaml
-import os
-
-
+\newpage
+\begin{lstlisting}[style=codigo, language=Python, caption={Lanzamiento de los controladores y del nodo de potencia (\texttt{launch/BrainLaunch.py})}, label={lst:brain-launch}]
 def generate_launch_description():
     pkg_share = get_package_share_directory("image_processor_pkg")
     params_file = os.path.join(pkg_share, "config", "params.yaml")
 
-    # 1. Cargamos la lista de coches y su configuracion por coche desde el YAML
     with open(params_file, "r") as f:
         config = yaml.safe_load(f)
         params = config["/**"]["ros__parameters"]
@@ -334,13 +255,6 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    # 2. Un controlador por cada coche que NO sea manual, es decir los de los
-    #    modos incremental, automatico y politica (cars.<coche>.modo). Los tres
-    #    publican PWM y necesitan el Arduino, por eso van juntos aqui; los
-    #    manuales los arranca ManualLaunch, que no lanza el puente ni monta el
-    #    dispositivo. Para una carrera mixta (uno manual + uno de los otros) se
-    #    levantan los dos docker-compose a la vez y cada launch coge su
-    #    subconjunto del mismo params.yaml.
     hay_autonomo = False
     for car_name in coches:
         cfg = cars[car_name]
@@ -349,60 +263,33 @@ def generate_launch_description():
             continue
         hay_autonomo = True
 
-        ld.add_action(
-            Node(
-                package="image_processor_pkg",
-                executable="CarControllerNode.py",
-                # Nombre UNICO por coche Y POR MODO: EstrategiaPerfil nombra sus
-                # logs con el nombre del nodo (derrapesLog_<nodo>_<camara>.txt) y
-                # los abre en "w", asi que sin el modo en el nombre una sesion
-                # incremental pisaria los logs de una automatica del mismo coche.
-                name=f"CarController_{modo}_{car_name}",
-                namespace=car_name,
-                parameters=[
-                    params_file,
-                    {
-                        "car_name": car_name,
-                        # Carril fisico del coche (cars.<coche>.carril), no por
-                        # orden de la lista: el controlador lo mete en el mensaje
-                        # SpeedCarril y el arduino_bridge lo usa para el carril.
-                        "carril_asignado": str(cfg["carril"]),
-                        "modo": modo,
-                    },
-                ],
-                respawn=True,
-                respawn_delay=2.0,
-            )
-        )
+        ld.add_action(Node(
+            package="image_processor_pkg", executable="CarControllerNode.py",
+            name=f"CarController_{modo}_{car_name}", namespace=car_name,
+            parameters=[params_file, {"car_name": car_name,
+                                      "carril_asignado": str(cfg["carril"]),
+                                      "modo": modo}],
+            respawn=True, respawn_delay=2.0))
 
-    # 3. El arduino_bridge solo se lanza si hay algun coche que mande PWM. Si
-    #    todos los coches son manuales, no aporta nada y no se arranca.
     if hay_autonomo:
-        ld.add_action(
-            Node(
-                package="image_processor_pkg",
-                executable="RaceControllerNode.py",
-                name="arduino_bridge",
-                parameters=[params_file],
-            )
-        )
+        ld.add_action(Node(
+            package="image_processor_pkg", executable="RaceControllerNode.py",
+            name="arduino_bridge", parameters=[params_file]))
+
+    ld.add_action(Node(
+        package="image_processor_pkg", executable="NetProbeNode.py",
+        name="net_probe", parameters=[params_file],
+        respawn=True, respawn_delay=2.0))
 
     return ld
 \end{lstlisting}
 
-\begin{lstlisting}[language=Python, caption={Lanzamiento en modo manual, sin nodo de actuación (\texttt{launch/ManualLaunch.py}). Se omite la cabecera de documentación del fichero.}, label={lst:manual-launch}]
-from launch import LaunchDescription
-from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
-import yaml
-import os
-
-
+\newpage
+\begin{lstlisting}[style=codigo, language=Python, caption={Lanzamiento en modo manual, sin nodo de potencia (\texttt{launch/ManualLaunch.py})}, label={lst:manual-launch}]
 def generate_launch_description():
     pkg_share = get_package_share_directory("image_processor_pkg")
     params_file = os.path.join(pkg_share, "config", "params.yaml")
 
-    # 1. Cargamos la lista de coches y su configuracion por coche desde el YAML
     with open(params_file, "r") as f:
         config = yaml.safe_load(f)
         params = config["/**"]["ros__parameters"]
@@ -411,12 +298,6 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    # 2. Un controlador por coche con cars.<coche>.modo: "manual", igual que en
-    #    BrainLaunch pero en manual. Los otros tres modos (incremental,
-    #    automatico y politica) publican PWM y necesitan el Arduino, asi que los
-    #    arranca BrainLaunch. carril_asignado se mantiene aunque en manual no se
-    #    use (publicar_velocidad sale antes): asi el nodo es el mismo en los
-    #    cuatro modos y el mensaje SpeedCarril sigue llevandolo.
     for car_name in coches:
         cfg = cars[car_name]
         if cfg.get("modo", "automatico") != "manual":
@@ -441,15 +322,52 @@ def generate_launch_description():
             )
         )
 
-    # 3. Aqui NO va el arduino_bridge: ver el punto 1 de la cabecera.
-
     return ld
+\end{lstlisting}
+
+\begin{lstlisting}[style=codigo, language=Python, caption={Lanzamiento del panel en directo (\texttt{launch/VisualizacionLaunch.py})}, label={lst:visu-launch}]
+def generate_launch_description():
+    pkg_share = get_package_share_directory("image_processor_pkg")
+    params_file = os.path.join(pkg_share, "config", "params.yaml")
+
+    return LaunchDescription(
+        [
+            Node(
+                package="image_processor_pkg",
+                executable="VisualizacionNode.py",
+                name="visualizacion",
+                parameters=[params_file],
+                respawn=True,
+                respawn_delay=2.0,
+                output="screen",
+            )
+        ]
+    )
 \end{lstlisting}
 
 \section{Ficheros de despliegue en contenedores}
 \label{sec:anexo-compose}
 
-\begin{lstlisting}[caption={Despliegue del nodo de captura, en cada máquina con cámara (\texttt{docker-compose-camera.yml}).}, label={lst:compose-camera}]
+\begin{lstlisting}[style=codigo, language=yamlsimple, caption={Imagen común de todos los nodos (\texttt{Dockerfile})}, label={lst:dockerfile}]
+FROM ros:humble-ros-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+  ros-humble-rosidl-default-generators \
+  ros-humble-rosidl-default-runtime \
+  python3-opencv \
+  python3-numpy \
+  python3-serial \
+  tzdata \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /ros2_ws
+
+RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+\end{lstlisting}
+
+\begin{lstlisting}[style=codigo, language=yamlsimple, caption={Despliegue del nodo de captura, en cada máquina con cámara (\texttt{docker-compose-camera.yml})}, label={lst:compose-camera}]
 services:
   emisor:
     build: .
@@ -466,14 +384,11 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
     command: >
-      bash -c "source /opt/ros/humble/setup.bash &&
-               colcon build --symlink-install &&
-               source install/setup.bash &&
-               ros2 launch image_processor_pkg CameraLaunch.py
-                    camera_name:=${CAMERA_DEV} node_id:=${NODE_ID}"
+      bash -c "source /opt/ros/humble/setup.bash && colcon build --symlink-install &&
+               source install/setup.bash && ros2 launch image_processor_pkg CameraLaunch.py camera_name:=${CAMERA_DEV} node_id:=${NODE_ID}"
 \end{lstlisting}
 
-\begin{lstlisting}[caption={Despliegue de los controladores y del nodo de actuación en la máquina conectada al Arduino (\texttt{docker-compose-brain.yml}).}, label={lst:compose-brain}]
+\begin{lstlisting}[style=codigo, language=yamlsimple, caption={Despliegue de los controladores y del nodo de potencia en la máquina conectada al Arduino (\texttt{docker-compose-brain.yml})}, label={lst:compose-brain}]
 services:
   cerebro:
     build: .
@@ -486,38 +401,16 @@ services:
     environment:
       - ROS_DOMAIN_ID=42
       - ROS_LOCALHOST_ONLY=0
-      # Sin esto el contenedor va en UTC (ros:humble viene asi) y las marcas
-      # de hora de los logs del algoritmo (derrapesLog_*.txt) salen
-      # desfasadas respecto al reloj del PC y respecto al analisis, que corre
-      # fuera del contenedor. Los stamps de los mensajes NO se ven afectados:
-      # son epochs y las restas entre ellos dan igual el huso
       - TZ=Europe/Madrid
     volumes:
-      # La zona horaria del host, ya compilada: glibc la lee aunque la imagen
-      # no tuviese tzdata. Va junto a TZ porque cada mecanismo cubre un hueco
-      # del otro (ver comentario de arriba)
       - /etc/localtime:/etc/localtime:ro
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
     command: >
-      bash -c "source /opt/ros/humble/setup.bash &&
-               colcon build --symlink-install &&
-               source install/setup.bash &&
-               ros2 launch image_processor_pkg BrainLaunch.py"
+      bash -c "source /opt/ros/humble/setup.bash && colcon build --symlink-install &&
+               source install/setup.bash && ros2 launch image_processor_pkg BrainLaunch.py"
 \end{lstlisting}
 
-\begin{lstlisting}[caption={Despliegue en modo manual: sin acceso al Arduino y sin nodo de actuación (\texttt{docker-compose-manual.yml}).}, label={lst:compose-manual}]
-# Despliegue del cerebro para una CARRERA MANUAL (la conduce una persona con
-# el mando fisico del Scalextric). Es docker-compose-brain.yml con dos
-# diferencias:
-#
-#   1. Sin el bloque `devices`: aqui el Arduino no se usa (queda fuera del
-#      circuito), asi que el contenedor arranca aunque no este ni conectado.
-#   2. Lanza ManualLaunch.py, que arranca los mismos controladores pero SIN
-#      el arduino_bridge y con modo="manual". Los otros tres modos
-#      (incremental, automatico y politica) si publican PWM y necesitan el
-#      Arduino, asi que van por docker-compose-brain.yml.
-#
-# Uso:  docker compose -f docker-compose-manual.yml up
+\begin{lstlisting}[style=codigo, language=yamlsimple, caption={Despliegue en modo manual, sin acceso al Arduino y sin nodo de potencia (\texttt{docker-compose-manual.yml})}, label={lst:compose-manual}]
 services:
   cerebro:
     build: .
@@ -528,23 +421,29 @@ services:
     environment:
       - ROS_DOMAIN_ID=42
       - ROS_LOCALHOST_ONLY=0
-      # Sin esto el contenedor va en UTC (ros:humble viene asi) y las marcas
-      # de hora de los logs del algoritmo (derrapesLog_*.txt) salen
-      # desfasadas respecto al reloj del PC y respecto al analisis, que corre
-      # fuera del contenedor. Los stamps de los mensajes NO se ven afectados:
-      # son epochs y las restas entre ellos dan igual el huso
       - TZ=Europe/Madrid
     volumes:
-      # La zona horaria del host, ya compilada: glibc la lee aunque la imagen
-      # no tuviese tzdata. Va junto a TZ porque cada mecanismo cubre un hueco
-      # del otro (ver comentario de arriba)
       - /etc/localtime:/etc/localtime:ro
-      # Monta el paquete desde el host: sin esto los derrapesLog_*.txt que
-      # escribe el algoritmo (en src/image_processor_pkg/logs_carrera) se
-      # perderian al parar el contenedor, y son justo lo que hay que pasarle
-      # al analisis para ver que habria hecho el algoritmo
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
     command: >
       bash -c "source /opt/ros/humble/setup.bash && colcon build --symlink-install &&
                source install/setup.bash && ros2 launch image_processor_pkg ManualLaunch.py"
+\end{lstlisting}
+
+\begin{lstlisting}[style=codigo, language=yamlsimple, caption={Despliegue del panel en directo (\texttt{docker-compose-visualizacion.yml})}, label={lst:compose-visu}]
+services:
+  visualizacion:
+    build: .
+    network_mode: "host"
+    ipc: "host"
+    environment:
+      - ROS_DOMAIN_ID=42
+      - ROS_LOCALHOST_ONLY=0
+      - TZ=Europe/Madrid
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash && colcon build --symlink-install &&
+               source install/setup.bash && ros2 launch image_processor_pkg VisualizacionLaunch.py"
 \end{lstlisting}

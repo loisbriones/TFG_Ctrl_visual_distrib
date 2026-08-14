@@ -252,6 +252,42 @@
   xleftmargin=0.05\textwidth         % identación extra desde a marxe esquerda
 }
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% linguaxes engadidas para os listados desta memoria                          %
+% Non modifican o \lstset anterior: so definen linguaxes novas para que os     %
+% ficheiros .msg, .yaml e .json aproveiten as cores xa configuradas arriba.    %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Definicións de mensaxes de ROS2 (ficheiros .msg)
+\lstdefinelanguage{rosmsg}{
+  morecomment=[l]{\#},
+  morekeywords={bool,int8,uint8,int16,uint16,int32,uint32,int64,uint64,
+                float32,float64,string,builtin_interfaces,Time,
+                Point2D,Stiker,BoundingRect,LineSegment},
+  sensitive=true
+}
+
+% Ficheiros YAML (parámetros e Docker Compose)
+\lstdefinelanguage{yamlsimple}{
+  morecomment=[l]{\#},
+  morekeywords={True,False,true,false,null},
+  sensitive=true
+}
+
+% Estilo dos listados de código: mantén todo o do \lstset anterior e só
+% desactiva o interliñado de 1,5 do documento dentro do bloque de código, para
+% que cada listado colla nunha soa páxina.
+\lstdefinestyle{codigo}{
+  basicstyle=\ttfamily\footnotesize\setstretch{1}
+}
+
+% Ficheiros JSON
+\lstdefinelanguage{jsonsimple}{
+  morestring=[b]",
+  morekeywords={true,false,null},
+  sensitive=true
+}
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % opcións relación de acrónimos e glosario %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
