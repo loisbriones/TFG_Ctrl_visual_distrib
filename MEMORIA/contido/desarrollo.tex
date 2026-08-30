@@ -1,7 +1,10 @@
 \chapter{Desarrollo del proyecto}
 \label{chap:desarrollo}
 
-\lettrine{E}{n} este capítulo se describe el proceso de desarrollo del proyecto. Se parte de la especificación de requisitos y de los actores del sistema, se presenta la metodología de trabajo empleada y la planificación seguida, y se detalla la gestión de los archivos del proyecto. Finalmente, se enumeran los recursos hardware, software y humanos utilizados y se realiza una estimación de los costes del trabajo.
+\lettrine{E}{n} este capítulo se describe el proceso de desarrollo del proyecto. Se parte de la especificación de requisitos, %y de los actores del sistema, 
+se presenta la metodología de trabajo empleada y la planificación seguida.
+%, y se detalla la gestión de los archivos del proyecto. 
+Finalmente, se enumeran los recursos hardware, software y humanos utilizados y se realiza una estimación de los costes del trabajo.
 
 \section{Requisitos}
 \label{sec:requisitos}
@@ -19,7 +22,7 @@ Los requisitos funcionales declaran el comportamiento y las acciones que debe of
     
     \item \textbf{Control adaptativo de la velocidad.} El sistema debe aplicar un algoritmo que ajuste dinámicamente la velocidad de cada coche en función de su posición y de las características del circuito, buscando recorrer cada tramo a la máxima velocidad posible sin comprometer la estabilidad (sin salirse ni derrapar en las curvas).
      
-    \item \textbf{Visualización y telemetría en tiempo real.} El sistema debe mostrar en tiempo real información de interés para el usuario, como las imágenes procesadas, la posición, la trayectoria seguida y los tiempos por vuelta. Recopilando además la telemetría temporal de cada etapa del procesamiento para su posterior analisis.
+    \item \textbf{Visualización y telemetría en tiempo real.} El sistema debe mostrar en tiempo real información de interés para el usuario, como las imágenes procesadas, la posición, la trayectoria seguida y los tiempos por vuelta. Recopilando además la telemetría temporal de cada etapa del procesamiento para su posterior análisis.
     
     \item \textbf{Detección del paso por meta y cálculo de tiempos.} El sistema debe detectar el paso de cada coche por la línea de meta y, a partir de ella, registrar y calcular el número de vueltas completadas así como el tiempo por vuelta.
     
@@ -35,33 +38,45 @@ Los requisitos no funcionales definen las condiciones bajo las que debe operar e
 
 \item \textbf{Escalabilidad.} La arquitectura debe permitir aumentar el número de cámaras, raíles y coches, así como cubrir circuitos de mayor tamaño y complejidad, añadiendo nuevos nodos a la red sin necesidad de rediseñar el sistema.
 
-\item \textbf{Robustez y tolerancia a perturbaciones.} El sistema debe mantener un funcionamiento estable ante fallos temporales, oclusiones o perturbaciones, como cambios en la orientación de las cámaras, recuperándose de forma automática siempre que sea posible.
+\item \textbf{Robustez y tolerancia a perturbaciones.} El sistema debe mantener un funcionamiento estable ante fallos temporales, oclusiones o perturbaciones, p.e. cambio de orientación de las cámaras, recuperándose de forma automática siempre que sea posible.
 
 \item \textbf{Sencillez en el despliegue} El despliegue del sistema debe ser reproducible empaquetando cada nodo y sus dependencias mediante contenedores, de modo que pueda instalarse y ejecutarse de forma consistente en distintas máquinas.
 \end{enumerate}
 
-\section{Actores}
-\label{sec:actores}
+%\section{Actores}
+%\label{sec:actores}
+%
+%El único actor que interviene es el \textbf{usuario final}, y su trabajo es previo a la carrera, ya que el sistema opera de forma autónoma una vez puesto en marcha. A diferencia de los trabajos anteriores, en los que se manejaba todo desde una aplicación de escritorio, aquí lo que decide el usuario es el despliegue, esto es, cuántos nodos cámara hacen falta para cubrir el circuito y en qué máquina se ejecuta cada nodo. Con eso decidido, ajusta el fichero de parámetros (los colores de las pegatinas de cada coche y de la línea de meta, los coches que participan o la resolución de las cámaras) y arranca un contenedor en cada equipo, tras lo cual los nodos se descubren entre ellos, calibran y empiezan a correr sin más intervención. Durante la carrera solo decide cuándo detenerla, aunque si lo desea puede seguirla desde el nodo de visualización, cambiar parámetros en caliente y, si guardó la información, analizar la sesión en diferido.
 
-El único actor que interviene es el \textbf{usuario final}, y su trabajo es previo a la carrera, ya que el sistema opera de forma autónoma una vez puesto en marcha. A diferencia de los trabajos anteriores, en los que se manejaba todo desde una aplicación de escritorio, aquí lo que decide el usuario es el despliegue, esto es, cuántos nodos cámara hacen falta para cubrir el circuito y en qué máquina se ejecuta cada nodo. Con eso decidido, ajusta el fichero de parámetros (los colores de las pegatinas de cada coche y de la línea de meta, los coches que participan o la resolución de las cámaras) y arranca un contenedor en cada equipo, tras lo cual los nodos se descubren entre ellos, calibran y empiezan a correr sin más intervención. Durante la carrera solo decide cuándo detenerla, aunque si lo desea puede seguirla desde el nodo de visualización, cambiar parámetros en caliente y, si guardó la información, analizar la sesión en diferido.
-
-\section{Descripción del sistema}
-\label{sec:descricion-sistema}
-
-El sistema desarrollado es una plataforma distribuida para el control visual de coches de tipo Scalextric. A diferencia de la solución monolítica heredada, en la que todas las cámaras se conectaban físicamente a un mismo equipo, aquí la funcionalidad se reparte entre varios nodos que cooperan a través de una red local, cableada o inalámbrica, sobre ROS2 y su capa de mensajería publicador/suscriptor.
-
-Son tres tipos de nodos. El \emph{nodo cámara}, uno por cada cámara física, captura los fotogramas, localiza en ellos las pegatinas de los coches y la línea de meta, y publica en la red la posición de cada vehículo. El \emph{nodo de control}, uno por cada carril por el que pueda circular un coche, recibe esas posiciones y decide en cada momento qué valor de PWM hay que aplicar al carril. Y el \emph{nodo de potencia} recoge esos valores de la red y los traslada por el puerto serie a la placa Arduino que alimenta los carriles.
-
-La parte hardware está constituida por la placa Elegoo Uno R3 y el módulo controlador L293D, que reciben los comandos del nodo de potencia y regulan la tensión de cada carril mediante señales PWM, controlando así la velocidad de los coches. El conjunto de nodos se distribuye entre los distintos equipos de cómputo disponibles, y se despliega de forma reproducible mediante contenedores Docker, lo que elimina la necesidad de instalar ROS2 o sus dependencias en cada máquina.
+%\section{Descripción del sistema}
+%\label{sec:descricion-sistema}
+%
+%El sistema desarrollado es una plataforma distribuida para el control visual de coches de tipo Scalextric. A diferencia de la solución monolítica heredada, en la que todas las cámaras se conectaban físicamente a un mismo equipo, aquí la funcionalidad se reparte entre varios nodos que cooperan a través de una red local, cableada o inalámbrica, sobre ROS2 y su capa de mensajería publicador/suscriptor.
+%
+%Son tres tipos de nodos. El \emph{nodo cámara}, uno por cada cámara física, captura los fotogramas, localiza en ellos las pegatinas de los coches y la línea de meta, y publica en la red la posición de cada vehículo. El \emph{nodo de control}, uno por cada carril por el que pueda circular un coche, recibe esas posiciones y decide en cada momento qué valor de PWM hay que aplicar al carril. Y el \emph{nodo de potencia} recoge esos valores de la red y los traslada por el puerto serie a la placa Arduino que alimenta los carriles.
+%
+%La parte hardware está constituida por la placa Elegoo Uno R3 y el módulo controlador L293D, que reciben los comandos del nodo de potencia y regulan la tensión de cada carril mediante señales PWM, controlando así la velocidad de los coches. El conjunto de nodos se distribuye entre los distintos equipos de cómputo disponibles, y se despliega de forma reproducible mediante contenedores Docker, lo que elimina la necesidad de instalar ROS2 o sus dependencias en cada máquina.
 
 \section{Metodología de desarrollo}
 \label{sec:metodoloxia}
 
-Buena parte del sistema depende de cómo se comporta un coche sobre la pista, y eso no se puede prever. Esa fue la razón de no planificar el trabajo de una sola vez y de repartirlo en entregas pequeñas que se llevaban a la pista en cuanto estaban listas. El punto de partida fue estudiar los TFG anteriores, localizar en ellos lo que había que mejorar y elegir las tecnologías con las que hacerlo. A partir de ahí se diseñó la arquitectura y se fue construyendo pieza a pieza, probando cada una sobre el circuito, y el trabajo se cerró con la memoria y la preparación de la defensa.
+%Buena parte del sistema depende de cómo se comporta un coche sobre la pista, y eso no se puede prever. Esa fue la razón de no planificar el trabajo de una sola vez y de repartirlo en entregas pequeñas que se llevaban a la pista en cuanto estaban listas.
+El punto de partida fue estudiar los TFG anteriores, %localizar en ellos lo que había que mejorar 
+identificar mejoras y elegir las tecnologías para hacerlas. 
+A partir de ahí se diseñó la arquitectura y se fue construyendo pieza a pieza, probando cada una sobre el circuito, y el trabajo se cerró con la memoria y la preparación de la defensa.
 
-El desarrollo se organizó en iteraciones cortas, cada una orientada a incorporar una capacidad concreta al sistema. Una iteración no se daba por cerrada hasta validar su resultado sobre el hardware, de modo que las pruebas de cada etapa condicionaban el diseño de la siguiente.
+El desarrollo se organizó en iteraciones cortas, cada una orientada a incorporar una capacidad concreta al sistema. La mayoría se validaban sobre el hardware antes de darlas por cerradas, de modo que las pruebas de cada etapa condicionaban el diseño de la siguiente.
+%Una iteración no se daba por cerrada hasta validar su resultado sobre el hardware, de modo que las pruebas de cada etapa condicionaban el diseño de la siguiente.
 
-Esta forma de trabajar sigue la filosofía de las metodologías ágiles, con entregas pequeñas y un replanteamiento continuo a la vista de lo aprendido en cada prueba, pero no se adoptó ningún marco concreto como Scrum, Kanban o programación extrema. Sus roles y ceremonias están pensados para coordinar a un equipo y, en un proyecto de una sola persona y de unos meses de duración, añaden más carga de la que aportan. El seguimiento se resolvió con reuniones periódicas con los tutores, en las que se revisaba la iteración en curso y se acordaban los objetivos de la siguiente. El código se llevó con Git desde el principio (sección~\ref{sec:xestion-arquivos}), etiquetando el mensaje de cada \textit{commit} según la funcionalidad que se estaba diseñando, de manera que el propio historial permite reconstruir por dónde fue avanzando el trabajo.
+Esta forma de trabajar sigue la filosofía de las metodologías ágiles, con entregas pequeñas y un replanteamiento continuo a la vista de lo aprendido en cada prueba, pero no se adoptó ningún marco concreto como Scrum o Kanban. %, Kanban o programación extrema. Sus roles y eventos están pensados para coordinar a un equipo y, en un proyecto de una sola persona y de unos meses de duración, añaden más carga de la que aportan. El seguimiento se resolvió con reuniones periódicas con los tutores, en las que se revisaba la iteración en curso y se acordaban los objetivos de la siguiente. El código se llevó con Git desde el principio (sección~\ref{sec:xestion-arquivos}), etiquetando el mensaje de cada \textit{commit} según la funcionalidad que se estaba diseñando, de manera que el propio historial permite reconstruir por dónde fue avanzando el trabajo.
+
+\subsection{Gestión de archivos}
+\label{sec:xestion-arquivos}
+
+Con el fin de garantizar la trazabilidad y la reproducibilidad del trabajo, todos los archivos generados durante el desarrollo del proyecto se han organizado y publicado en un repositorio de acceso público alojado en GitHub~\cite{repogithub}. Dicho repositorio reúne el código fuente de los nodos ROS2 escritos en Python, las definiciones de los mensajes personalizados intercambiados entre nodos, el firmware de Arduino encargado de generar las señales PWM, así como los ficheros de configuración del sistema (el fichero de parámetros en YAML y los ficheros de Docker Compose empleados en el despliegue).
+
+Para ilustrar el funcionamiento del sistema se han grabado y publicado vídeos de las distintas pruebas realizadas, capturados a partir de las grabaciones (sección~\ref{sec:ros2-rosbag}) y accesibles desde el canal de YouTube asociado al proyecto~\cite{canalyoutube}. Este material aporta evidencia visual de los resultados alcanzados.
+
 
 \section{Planificación e iteraciones}
 \label{sec:planificacion-iteraciones}
@@ -76,13 +91,13 @@ De acuerdo con la metodología ágil e incremental descrita en la sección anter
 
     \item \textbf{Iteración 3. Detección de etiquetas y seguimiento de objetos.} Una vez decidido el diseño, se comenzó por el nodo cámara con un programa sencillo capaz de leer los fotogramas de una cámara y detectar las dos pegatinas de color del coche mediante filtros de color, obteniendo su posición dentro de la imagen. Esta iteración sienta la base del sistema de captura y detección sobre la que se construye el resto del sistema.
 
-    \item \textbf{Iteración 4. Integración con la red.} Integración de ese primer nodo con la capa de comunicación de ROS2, con el fin de probar el envío de mensajes y imágenes a través de la red. El objetivo era validar que la información detectada podía publicarse y recibirse correctamente entre máquinas distintas, comprobando el funcionamiento real del paradigma publicador/suscriptor sobre el que se apoya toda la arquitectura. Para comprobarlo se escribió un primer nodo muy sencillo, que se limitaba a suscribirse al tópico y guardar lo que le iba llegando.
+    \item \textbf{Iteración 4. Integración con la red.} Integración de ese primer nodo con la capa de comunicación de ROS2, con el fin de probar el envío de mensajes e imágenes a través de la red. El objetivo era validar que la información detectada podía publicarse y recibirse correctamente entre máquinas distintas, comprobando el funcionamiento real del paradigma publicador/suscriptor sobre el que se apoya toda la arquitectura. Para comprobarlo se escribió un primer nodo muy sencillo, que se limitaba a suscribirse al tópico y guardar lo que le iba llegando.
 
     \item \textbf{Iteración 5. Pruebas de hardware.} La idea de partida era emplear hardware sencillo al que pudieran conectarse directamente las cámaras. En esta iteración se estudió si ese hardware era capaz de soportar la carga de capturar, procesar y segmentar por color los fotogramas manteniendo un rendimiento aceptable, evaluando así su viabilidad para el despliegue distribuido del sistema.
 
     \item \textbf{Iteración 6. Región de interés y readquisición del seguimiento.} Para mejorar el rendimiento se implementó una región de interés (ROI) que restringe la búsqueda de las etiquetas a la zona donde se espera encontrar el coche, reduciendo el área de procesamiento en cada fotograma. Junto a ella se desarrolló el mecanismo de readquisición, encargado de recuperar el seguimiento cuando se pierde de forma temporal, de manera que el sistema siga funcionando de forma robusta ante oclusiones o pérdidas momentáneas de visibilidad.
 
-    \item \textbf{Iteración 7. Nodo de análisis y captura de telemetría.} Se creó un nodo que recibe y guarda todo lo que circula por la red, apoyándose en la herramienta de grabación de ROS2 (\emph{rosbag}). Con esa información almacenada se escribió después un script del que sacar las métricas de cada sesión y estudiar el comportamiento del sistema.
+    \item \textbf{Iteración 7. Nodo de captura y análisis de telemetría.} Se creó un nodo que recibe y guarda todo lo que circula por la red, apoyándose en la herramienta de grabación de ROS2 (\emph{rosbag}). Con esa información almacenada se escribió después un script del que sacar las métricas de cada sesión y estudiar el comportamiento del sistema.
 
     \item \textbf{Iteración 8. Diseño del nodo controlador.} Diseño de un nuevo nodo controlador que implementa un algoritmo sencillo, capaz de controlar el coche del circuito de Scalextric a partir de las posiciones recibidas. Esta primera versión del controlador establece la base del sistema de control de velocidad que se refinaría en iteraciones posteriores.
 
@@ -107,7 +122,7 @@ El reparto de estas iteraciones en el tiempo se recoge en la figura~\ref{fig:gan
 
 A lo largo del proyecto surgieron diversas dificultades que condicionaron el ritmo del desarrollo. Las más relevantes se concentraron en la fase de integración con la red, donde el uso de Docker junto con ROS2 generó una serie de problemas que retrasaron el conseguir un despliegue estable. Asimismo, el hardware presentó fallos intermitentes que, al no manifestarse de forma constante, resultaron difíciles de diagnosticar y consumieron bastante tiempo. Finalmente, durante el desarrollo del algoritmo de control aparecieron fallos no previstos que obligaron a revisar y ajustar el diseño.
 
-El efecto de esas dificultades sobre el calendario se ve en la figura~\ref{fig:gantt-retrasos}, que enfrenta cada iteración con la duración que tenía planificada. Las que más se alargaron fueron la integración con la red y la mejora del algoritmo, y por detrás las pruebas de hardware, mientras que las demás se desplazaron en bloque tras ellas, de forma que el trabajo se cerró siete semanas más tarde de lo previsto, a mediados de agosto, cambiando la fecha de entrega.
+El efecto de esas dificultades sobre el calendario se ve en la figura~\ref{fig:gantt-retrasos}, que enfrenta cada iteración con la duración que tenía planificada. La que más se alargó fue la integración con la red, tres semanas por encima de lo previsto, y detrás la mejora del algoritmo y la propia redacción de la memoria, con dos cada una, mientras que las demás se desplazaron en bloque tras ellas, de forma que el trabajo se cerró siete semanas más tarde de lo previsto, a mediados de agosto, cambiando la fecha de entrega.
 
 \begin{figure}[tbp]
     \centering
@@ -117,30 +132,25 @@ El efecto de esas dificultades sobre el calendario se ve en la figura~\ref{fig:g
 \end{figure}
 
 
-\section{Gestión de archivos}
-\label{sec:xestion-arquivos}
-
-Con el fin de garantizar la trazabilidad y la reproducibilidad del trabajo, todos los archivos generados durante el desarrollo del proyecto se han organizado y publicado en un repositorio de acceso público alojado en GitHub~\cite{repogithub}. Dicho repositorio reúne el código fuente de los nodos ROS2 escritos en Python, las definiciones de los mensajes personalizados intercambiados entre nodos, el firmware de Arduino encargado de generar las señales PWM, así como los ficheros de configuración del sistema (el fichero de parámetros en YAML y los ficheros de Docker Compose empleados en el despliegue).
-
-Para ilustrar el funcionamiento del sistema se han grabado y publicado vídeos de las distintas pruebas realizadas, capturados a partir de las grabaciones (sección~\ref{sec:ros2-rosbag}) y accesibles desde el canal de YouTube asociado al proyecto~\cite{canalyoutube}. Este material aporta evidencia visual de los resultados alcanzados.
 
 \section{Recursos}
 \label{sec:recursos}
 
-En esta sección se enumeran los recursos hardware, software y humanos que han intervenido en el desarrollo del proyecto.
+En esta sección se enumeran los recursos hardware, software y humanos %que han intervenido en el desarrollo 
+del proyecto.
 
 \subsection{Recursos hardware}
 
-El material empleado se agrupa en tres bloques. El primero es la pista, un circuito de Scalextric con la electrónica que le aplica la tensión, formada por la placa Elegoo Uno R3 y el módulo controlador L293D. El segundo es el equipamiento de visión, con cuatro cámaras web (dos Microsoft LifeCam HD-5000 y dos Logitech Brio 100) y dos placas Raspberry Pi 5, que son las que ejecutan los nodos de captura. El tercero es el ordenador portátil ASUS Vivobook S 14, donde se ejecutaban habitualmente los nodos de control y el nodo de potencia, por lo que es el que tenía la placa conectada por USB. Todo ello se detalla, junto con su coste, en la tabla~\ref{tab:costes_hardware} de la sección~\ref{sec:custos}.
+El material empleado se agrupa en cuatro bloques. El primero es la pista, un circuito de Scalextric con la electrónica que le aplica la tensión, formada por la placa Elegoo Uno R3 y el módulo controlador L293D. El segundo es el equipamiento de visión, con cuatro cámaras web (dos Microsoft LifeCam HD-5000 y dos Logitech Brio 100) y dos placas Raspberry Pi 5, que son las que ejecutan los nodos de captura. El tercero es el equipamiento de red, con el router TP-Link Archer AX55 que da la red local y los dos adaptadores Archer T3U de las Raspberry. El cuarto es el ordenador portátil ASUS Vivobook S 14, donde se ejecutaban habitualmente los nodos de control y el nodo de potencia, por lo que es el que tenía la placa conectada por USB. Todo ello se detalla, junto con su coste, en la tabla~\ref{tab:costes_hardware} de la sección~\ref{sec:custos}.
 
 \subsection{Recursos software}
 
-Todo el software empleado en el proyecto es de código abierto o de uso gratuito, por lo que no lleva asociado ningún coste de licencia. El listado completo se detalla en el capítulo de tecnologías; los lenguajes de programación utilizados fueron:
-
-\begin{itemize}
-    \item Python, empleado en la implementación de los nodos ROS2 y de toda la lógica de visión y control.
-    \item C/C++, utilizado en el firmware de la placa Arduino encargado de interpretar los comandos de velocidad y generar las señales PWM.
-\end{itemize}
+Todo el software empleado en el proyecto es de código abierto o de uso gratuito, por lo que no lleva asociado ningún coste de licencia. El listado completo se detalla en el capítulo~\ref{chap:tecnologias}.
+%; los lenguajes de programación utilizados fueron:
+%\begin{itemize}
+%    \item Python, empleado en la implementación de los nodos ROS2 y de toda la lógica de visión y control.
+%    \item C/C++, utilizado en el firmware de la placa Arduino encargado de interpretar los comandos de velocidad y generar las señales PWM.
+%\end{itemize}
 
 \subsection{Recursos humanos}
 
@@ -157,8 +167,8 @@ Durante el desarrollo del proyecto, el alumno ha asumido de forma íntegra los d
 \section{Estimación de costes}
 \label{sec:custos}
 
-En este apartado se estima el coste total del proyecto a partir de los recursos materiales y humanos empleados. Los recursos software no generan coste alguno, ya que todo el software utilizado es libre o gratuito.
-
+En este apartado se estima el coste total del proyecto a partir de los recursos materiales y humanos empleados. Los recursos software no generan coste alguno, ya que todo el software utilizado es libre o gratuito. 
+%
 El coste de los recursos hardware se recoge en la tabla~\ref{tab:costes_hardware}. Todo el material aparece a precio de compra salvo el ordenador portátil, que no se adquirió para este trabajo, sino que es un equipo personal empleado también para otras tareas. Su coste se estima por amortización, repartiendo los 1.600~\euro{} que costó entre una vida útil de cuatro años, lo que supone 1,10~\euro{} al día y un total de 197~\euro{} por los 180 días que duró el desarrollo.
 
 \begin{table}[tbp]
@@ -211,4 +221,4 @@ Respecto a los recursos humanos, el desarrollo se llevó a cabo a lo largo de ap
     \end{tabular}
 \end{table}
 
-Sumando el coste de los recursos hardware (tabla~\ref{tab:costes_hardware}) y el de los recursos humanos (tabla~\ref{tab:costes_humanos}), y teniendo en cuenta que los recursos software no suponen coste alguno, el coste total estimado del proyecto asciende a \textbf{27\,481{,}18 \euro}.
+Sumando el coste de los recursos hardware (tabla~\ref{tab:costes_hardware}) y el de los recursos humanos (tabla~\ref{tab:costes_humanos}), y teniendo en cuenta que los recursos software no suponen coste alguno, el coste total estimado del proyecto asciende a \textbf{27\,678{,}18 \euro}.

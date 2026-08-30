@@ -43,7 +43,8 @@ Se extraen entonces los contornos externos y se toma el de mayor área, descart�
 
 El nodo implementa los dos modos descritos en la sección~\ref{sec:arquitectura}, y la diferencia entre ambos está en la región del fotograma sobre la que busca.
 
-En calibración, cada detección de la pegatina delantera se añade a la lista que reconstruye la trayectoria del coche. Basta con la delantera, que es la que da una trayectoria limpia~\cite{tfgadrian}. Esto es porque la trasera puede quedar oculta a ratos y la ruta base debe registrarse sin interrupciones. Al mantener una trayectoria por coche, la cámara puede filtrar por carril en carrera y dos coches pueden compartir el color de la pegatina trasera. Durante todo este proceso se busca sobre el fotograma completo como el que se puede ver \ref{fig:deteccion-color-a}, es por ello que las pegatinas delanteras sí que tienen que ser de diferente color.
+En calibración, cada detección de la pegatina delantera se añade a la lista que reconstruye la trayectoria del coche. Basta con la delantera, que es la que da una trayectoria limpia~\cite{tfgadrian}. Esto es porque la trasera puede quedar oculta a ratos y la ruta base debe registrarse sin interrupciones. Al mantener una trayectoria por coche, la cámara puede filtrar por carril en carrera y dos coches pueden compartir el color de la pegatina trasera. Durante todo este proceso se busca sobre el fotograma completo como el que se puede ver en la figura~\ref{fig:deteccion-color-a}.
+%, es por ello que las pegatinas delanteras sí que tienen que ser de diferente color.
 
 La calibración termina por coche, no para todo el sistema. El nodo se suscribe al \emph{topic} de calibración de cada coche configurado y, al recibir el aviso de que uno ha completado su vuelta, genera su máscara con los puntos acumulados. Desde ese momento la búsqueda de ese coche queda restringida a una franja alrededor del recorrido conocido, como recoge la figura~\ref{fig:mascara-trayectoria}. Esa franja deja fuera el carril contrario, con lo que el coche que circula por él deja de ser un falso positivo.
 
@@ -78,35 +79,34 @@ La calibración termina por coche, no para todo el sistema. El nodo se suscribe 
 
 En carrera la búsqueda se restringe a una región de interés de $150 \times 150$ píxeles centrada en la posición predicha para el coche. La predicción es la extrapolación lineal que introdujo Mario López~\cite{tfgmario}. Conocidas las dos últimas posiciones, el centro de la región es la actual más el vector de movimiento del último fotograma.
 
-Sobre ella se aplica además la máscara de trayectoria, de modo que solo sobreviven los píxeles que pertenecen a la vez a la región y a las proximidades del carril; la intersección de ambos filtros procede también de los trabajos previos~\cite{tfgmario,tfgadrian}. La detección de las pegatinas (\ref{subsec:deteccion-etiquetas}) se realiza sobre esa imagen reducida, se puede ver un ejemplo en \ref{fig:roi-filtrado}, donde las flechas encadenadas marcan el desplazamiento entre los dos últimos fotogramas y la cruz la posición predicha, que en ese caso queda a 1,6~px de la real. El problema que presenta hacerlo de esta manera es que sus coordenadas son relativas a la región y hay que trasladarlas al sistema de referencia de la cámara antes de publicarlas.
+Sobre ella se aplica además la máscara de trayectoria, de modo que solo sobreviven los píxeles que pertenecen a la vez a la región y a las proximidades del carril; la intersección de ambos filtros procede también de los trabajos previos~\cite{tfgmario,tfgadrian}. La detección de las pegatinas (sección~\ref{subsec:deteccion-etiquetas}) se realiza sobre esa imagen reducida, se puede ver un ejemplo en la figura~\ref{fig:roi-filtrado}.
+%, donde las flechas encadenadas marcan el desplazamiento entre los dos últimos fotogramas y la cruz la posición predicha, que en ese caso queda a 1,6~px de la real. El problema que presenta hacerlo de esta manera es que sus coordenadas son relativas a la región y hay que trasladarlas al sistema de referencia de la cámara antes de publicarlas.
 
 \begin{figure}[tbp]
     \centering
-    \begin{subfigure}[b]{0.48\textwidth}
+    \begin{subfigure}[b]{0.32\textwidth}
         \centering
         % Recortada por los lados hasta dejarla cuadrada, para que ocupe lo
-        % mismo que las otras tres. Lo que se quita es suelo, no pista.
+        % mismo que las otras dos. Lo que se quita es suelo, no pista.
         \includegraphics[trim={120 0 40 0},clip,height=4.2cm]{imaxes/IMPLEMENTACION/roi_a_recuadro.png}
         \caption{Región sobre el fotograma}
         \label{fig:roi-filtrado-a}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[b]{0.48\textwidth}
-        \centering
-        \includegraphics[height=4.2cm]{imaxes/IMPLEMENTACION/roi_b_extrapolacion.png}
-        \caption{Extrapolación de la posición}
-        \label{fig:roi-filtrado-b}
-    \end{subfigure}
-
-    \vspace{0.7em}
-    \begin{subfigure}[b]{0.48\textwidth}
+%    \begin{subfigure}[b]{0.32\textwidth}
+%        \centering
+%        \includegraphics[height=4.2cm]{imaxes/IMPLEMENTACION/roi_b_extrapolacion.png}
+%        \caption{Extrapolación de la posición}
+%        \label{fig:roi-filtrado-b}
+%    \end{subfigure}
+    \begin{subfigure}[b]{0.32\textwidth}
         \centering
         \includegraphics[height=4.2cm]{imaxes/IMPLEMENTACION/roi_c_recorte.png}
         \caption{Recorte de la región}
         \label{fig:roi-filtrado-c}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[b]{0.48\textwidth}
+    \begin{subfigure}[b]{0.32\textwidth}
         \centering
         \includegraphics[height=4.2cm]{imaxes/IMPLEMENTACION/roi_d_filtrado.png}
         \caption{Región tras la intersección}
@@ -130,7 +130,7 @@ Al perder el seguimiento se descartan las posiciones anteriores, como ya hacía 
 
 La línea de meta se señaliza con una etiqueta alargada de un color reservado que atraviesa la pista. Se detecta una sola vez, al arrancar el nodo, porque su posición no cambia durante la carrera.
 
-El procedimiento empleado para la detección de la línea de meta es el de Adrián Rego~\cite{tfgadrian}. Al igual que en la detección de las pegatinas, el fotograma se convierte al espacio de color HSV y se genera una máscara binaria con el rango del color reservado para la meta (se puede cambiar desde el fichero de configuración \ref{subsec:params-yaml}), de forma que se genera una mascara binaria con los píxeles de la etiqueta. Sobre está se aplica un cierre morfólogico con un tamaño de \emph{kernel} muy grande, porque los raíles y las ranuras de la pista atraviesan la etiqueta y la fragmentan en trozos que hay que unir en una única región. Sobre está región se calcula el rectángulo de área mínima que lo encierra, el cual, a diferencia del rectángulo delimitador convencional, puede estar rotado y se adapta así a la orientación real de la linea de meta. De sus cuatro vértices se identifican los dos lados cortos comparando las longitudes de las aristas adyacentes, y el segmento que une sus puntos medios define la línea de meta. La figura~\ref{fig:deteccion-meta} muestra las tres etapas del proceso.
+El procedimiento empleado para la detección de la línea de meta es el de Adrián Rego~\cite{tfgadrian}. Al igual que en la detección de las pegatinas, el fotograma se convierte al espacio de color HSV y se genera una máscara binaria con el rango del color reservado para la meta (se puede cambiar desde el fichero de configuración de la sección~\ref{subsec:params-yaml}), de forma que se genera una mascara binaria con los píxeles de la etiqueta. Sobre está se aplica un cierre morfólogico con un tamaño de \emph{kernel} muy grande, porque los raíles y las ranuras de la pista atraviesan la etiqueta y la fragmentan en trozos que hay que unir en una única región. Sobre está región se calcula el rectángulo de área mínima que lo encierra, el cual, a diferencia del rectángulo delimitador convencional, puede estar rotado y se adapta así a la orientación real de la línea de meta. De sus cuatro vértices se identifican los dos lados cortos comparando las longitudes de las aristas adyacentes, y el segmento que une sus puntos medios define la línea de meta. La figura~\ref{fig:deteccion-meta} muestra las tres etapas del proceso.
 
 \begin{figure}[tbp]
     \centering
@@ -158,4 +158,4 @@ El procedimiento empleado para la detección de la línea de meta es el de Adri�
     \label{fig:deteccion-meta}
 \end{figure}
 
-Cada nodo la busca al arrancar y, si no la ve, no publica línea de meta alguna. Por lo que en un despliegue multicámara solo lo hace la que observa la linea y generando el mensaje correspondiente (tabla~\ref{tab:mensajes}). No hay, por tanto, una cámara de meta designada de antemano por el usuario.
+Cada nodo la busca al arrancar y, si no la ve, no publica línea de meta alguna. Por lo que en un despliegue multicámara solo lo hace la que observa la línea y generando el mensaje correspondiente (tabla~\ref{tab:mensajes}). No hay, por tanto, una cámara de meta designada de antemano por el usuario.

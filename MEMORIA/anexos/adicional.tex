@@ -8,7 +8,7 @@
 
 Cada máquina que participe en el sistema necesita un sistema operativo Linux con Docker y Docker Compose instalados, y git para clonar el repositorio~\cite{repogithub}. No hace falta instalar ROS2 ni ninguna de las librerías de visión, ya que van dentro de la imagen que construye el propio Docker la primera vez que se levanta un contenedor.
 
-Todas las máquinas tienen que estar en la misma red local y compartir el mismo \texttt{ROS\_DOMAIN\_ID}, que es lo que permite a los nodos descubrirse entre ellos sin ningún proceso central (sección~\ref{sec:dds-qos}). Esa red debe además dejar pasar el tráfico multicast, porque es por donde viajan los anuncios del descubrimiento.
+Todas las máquinas tienen que estar en la misma red local y compartir el mismo \texttt{ROS\_DOMAIN\_ID}, que es lo que permite a los nodos descubrirse entre ellos sin ningún proceso central (sección~\ref{sec:dds-qos}). Esa red debe además dejar pasar el tráfico multicast, porque es por donde se realiza el descubrimiento.
 
 \section{Preparación del montaje}
 \label{sec:preparacion-hardware}
@@ -20,7 +20,7 @@ Antes de arrancar nada hay que dejar preparada la parte física.
     \item Pegar en cada coche sus dos etiquetas de color, una delante y otra detrás, con la precaución de que las delanteras sean de colores distintos entre coches.
     \item Marcar la línea de meta con una etiqueta alargada que cruce la pista, de un color reservado y visible por alguna de las cámaras.
     \item Cargar el firmware en la placa Arduino con su \gls{ide} y cablear el módulo L293D a los carriles, teniendo en cuenta la conexión del pin M+ a la tierra del circuito que se describe en la sección~\ref{sec:sistema-actuacion}.
-    \item Conectar la placa por \gls{usb} a la máquina que vaya a ejecutar el nodo de potencia, donde aparece como \texttt{/dev/ttyACM0}.
+    \item Conectar la placa por \gls{usb} a la máquina que vaya a ejecutar el nodo de potencia, donde suele aparecer como \texttt{/dev/ttyACM0}, aunque el nombre puede variar y hay que comprobarlo antes de arrancar.
 \end{itemize}
 
 \section{Configuración}
@@ -51,29 +51,29 @@ Fuera de ese bloque, los valores que más se tocan de una sesión a otra son el 
 \section{Puesta en marcha}
 \label{sec:instrucciones-execucion}
 
-Cada rol del sistema se levanta con un único comando desde el directorio \texttt{python} del repositorio. Conviene arrancar primero las cámaras, para que la línea de meta ya esté publicada cuando entren los nodos de control.
+Cada parte del sistema se levanta con un único comando desde el directorio \texttt{python} del repositorio. Conviene arrancar primero las cámaras, para que la línea de meta ya esté publicada cuando entren los nodos de control. Cada contenedor se levanta con su propio nombre de proyecto mediante la opción \texttt{-p}, ya que en caso contrario Docker Compose toma el nombre del directorio y un arranque tumbaría el anterior.
 
 En cada máquina con cámara se lanza un contenedor por cada una, indicando con \texttt{NODE\_ID} el nombre con el que esa cámara se identifica en la red y con \texttt{CAMERA\_DEV} el dispositivo de vídeo que tiene que abrir.
 
 \begin{lstlisting}[style=codigo, language=bash, caption={Arranque de un nodo de captura}, label={lst:cmd-camara}]
-NODE_ID=camara_01 CAMERA_DEV=0 docker compose -f docker-compose-camera.yml up
+NODE_ID=camara_01 CAMERA_DEV=0 docker compose -p camara_01 -f docker-compose-camera.yml up
 \end{lstlisting}
 
-En la máquina que tiene el Arduino conectado se levanta el cerebro, que arranca un nodo de control por cada coche que no sea manual, el nodo de potencia y el nodo de sondeo de red.
+En la máquina que tiene el Arduino conectado se levanta el cerebro, que arranca un nodo de control por cada coche que no sea manual, el nodo de potencia y el nodo de sondeo de red, que se puede desactivar desde el fichero de parámetros si no se quieren medir latencias.
 
 \begin{lstlisting}[style=codigo, language=bash, caption={Arranque de los nodos de control y del nodo de potencia}, label={lst:cmd-brain}]
-docker compose -f docker-compose-brain.yml up
+docker compose -p cerebro -f docker-compose-brain.yml up
 \end{lstlisting}
 
 Para una carrera conducida por personas se usa el lanzamiento manual, que levanta los mismos nodos de control pero sin el de potencia, de manera que arranca aunque el Arduino no esté conectado.
 
 \begin{lstlisting}[style=codigo, language=bash, caption={Arranque en modo manual}, label={lst:cmd-manual}]
-docker compose -f docker-compose-manual.yml up
+docker compose -p manual -f docker-compose-manual.yml up
 \end{lstlisting}
 
 Una carrera mixta, con un coche autónomo y otro conducido, se consigue levantando a la vez los dos anteriores, ya que cada lanzamiento coge del mismo fichero de parámetros el subconjunto de coches que le corresponde.
 
-Por último, el panel de la carrera en directo se arranca con un guion que levanta su contenedor y abre el navegador en el puerto 8990, donde sirve el panel de datos y el mosaico de las cámaras (sección~\ref{subsec:visualizacion-directo}).
+Por último, el panel de la carrera en directo se arranca con el script \texttt{arrancar\_visualizacion.sh}, que levanta su contenedor y abre el navegador en el puerto 8990, donde sirve el panel de datos y el mosaico de las cámaras (sección~\ref{subsec:visualizacion-directo}).
 
 \begin{lstlisting}[style=codigo, language=bash, caption={Arranque del panel en directo}, label={lst:cmd-visu}]
 ./arrancar_visualizacion.sh

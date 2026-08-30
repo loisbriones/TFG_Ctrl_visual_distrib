@@ -1,7 +1,7 @@
 \chapter{Fundamentos teóricos y trabajos relacionados}
 \label{chap:fundamentos}
 
-\lettrine{E}{n} este capítulo se repasan los fundamentos técnicos más relevantes para la comprensión del sistema desarrollado. Se presentan primero las técnicas de visión por computador empleadas para detectar y seguir los vehículos, a continuación los conceptos de sistemas distribuidos que sustentan la nueva arquitectura, y por último el mecanismo de control de la velocidad mediante señales \gls{pwm}. El capítulo se cierra con una revisión de los trabajos relacionados, en particular los dos Trabajos de Fin de Grado que constituyen el punto de partida directo de este proyecto. 
+\lettrine{E}{n} este capítulo se repasan los fundamentos técnicos más relevantes para la comprensión del sistema desarrollado. Se presentan primero las técnicas de visión por computador empleadas para detectar y seguir los vehículos, y después el mecanismo de control de la velocidad mediante señales \gls{pwm}. El capítulo se cierra con una revisión de los trabajos relacionados, en particular los dos Trabajos de Fin de Grado que constituyen el punto de partida directo de este proyecto. 
 
 \section{Visión por computador}
 \label{sec:vision}
@@ -10,25 +10,25 @@ La visión por computador, también denominada visión artificial, es un área m
 
 Aunque para los seres vivos procesar estímulos visuales es casi instantáneo, replicar esa capacidad en sistemas artificiales sigue siendo un reto complejo~\cite{bradski2008}. Su desarrollo combina principios de matemáticas, física, procesamiento de señales y ciencias de la computación, entre otras disciplinas, y se ha visto impulsado en gran medida por librerías de propósito general como OpenCV~\cite{opencv}, que han estandarizado y acelerado el procesamiento en tiempo real.
 
-En el alcance de este trabajo, la visión por computador es la base del sistema: permite capturar imágenes y procesarlas para identificar los coches y controlarlos después con esa información. Sin ese procesado no hay control posible. Para conseguirlo se emplea un conjunto de técnicas:
+En este trabajo, la visión por computador es la base del sistema: permite capturar imágenes y procesarlas para identificar los coches y controlarlos después con esa información. Sin ese procesado no hay control posible. Para conseguirlo se emplea un conjunto de técnicas:
 
 \begin{itemize}
     \item \textbf{Segmentación por color en espacio HSV:} Este tipo de espacio de color es mucho más robusto a los cambios  de iluminación, sobras y reflejos. Lo que facilita detectar los colores específicos asociados a pegatinas.     
-    \item \textbf{Extracción de contornos y calculo de centros geometricos} 
-    \item \textbf{Seguimiento de 2 marcadores:} Sistema de posicionamiento basado en 2 pegatinas, una frontal y una trasera, permiten controlar la posición del coche y el derrape.    
-    \item \textbf{Regiones de interés (ROI) y máscaras de trayectoria:} Delimitación del area de búsqueda sobre el trazado del circuito para reducir la carga computacional y eliminar falsas detecciones en los márgenes de la imagen.
+    \item \textbf{Detección de contornos y cálculo de centros geométricos} 
+    \item \textbf{Seguimiento de 2 pegatinas:} Sistema de posicionamiento basado en 2 pegatinas, una frontal y una trasera, permiten controlar la posición del coche y el derrape.    
+    \item \textbf{Regiones de interés (ROI) y máscaras de trayectoria:} Delimitación del área de búsqueda sobre el trazado del circuito para reducir la carga computacional y eliminar falsas detecciones en los márgenes de la imagen.
 \end{itemize}
 
 \subsection{Seguimiento de objetos}
 \label{sec:seguimiento}
 
-El seguimiento de objetos, o \textit{tracking}, es el proceso algorítmico que permite obtener la trayectoria de los objetos en una secuencia de imagenes~\cite{bradski2008}. En lugar de tratar cada imagen de manera independiente, los algoritmos de seguimiento combinan la detección visual instantánea con modelos de predicción basados en el estado previo del objeto.
+El seguimiento de objetos, o \textit{tracking}, es el proceso algorítmico que permite obtener la trayectoria de los objetos en una secuencia de imágenes~\cite{bradski2008}. En lugar de tratar cada imagen de manera independiente, los algoritmos de seguimiento combinan la detección visual instantánea con modelos de predicción basados en el estado previo del objeto.
 
-Para garantizar robustez frente a perturbaciones, es crítico seleccionar las propiedades visuales más distintivas y estables del objetivo. Normalmente las características más usadas son:
+Para garantizar robustez frente a perturbaciones, es crítico seleccionar las propiedades visuales más distintivas y estables del objeto. Normalmente las características más usadas son las que recoge Yilmaz et al. en su revisión del seguimiento de objetos~\cite{yilmaz2006}:
 
 \begin{itemize}
     \item \textbf{Color:} permite discriminar de forma muy sencilla y eficiente para aislar un objeto del fondo. El problema es que resulta muy sensible a los cambios de luz del entorno.
-    \item \textbf{Bordes y contornos:} Representan las zonas con saltos de alta frecuencia, estos cambios se pueden identificar lo que permite identifcar la forma del objeto.    
+    \item \textbf{Bordes y contornos:} el contorno de un objeto marca el límite con lo que tiene detrás, y ahí la intensidad de la imagen cambia de golpe, que es lo que permite recuperar su forma.
     \item \textbf{Flujo óptico:} Se usa un campo vectorial que describe el movimiento aparente de los píxeles entre fotogramas consecutivos. Permite identificar el patrón de desplazamiento del objeto. 
     \item \textbf{Textura:} Cuantifica los patrones de rugosidad o contraste en la superficie de un objeto.
 \end{itemize}
@@ -40,7 +40,7 @@ En escenarios reales, todo sistema de \textit{tracking} debe enfrentarse a facto
 
 La región de interés (\gls{roi}) es un subconjunto de la imagen que se procesa en lugar del fotograma completo, lo que reduce el coste computacional y disminuye el ruido al excluir zonas que no son relevantes y que podrían provocar falsas detecciones.
 
-Para situar la \gls{roi} en cada fotograma se recurre a la extrapolación lineal: conocidas las dos últimas posiciones del coche, $(x_{n-1}, y_{n-1})$ y $(x_n, y_n)$, la posición siguiente se estima:
+Para situar el \gls{roi} en cada fotograma se recurre a la extrapolación lineal, siguiendo el trabajo de Mario López~\cite{tfgmario}. Conocidas las dos últimas posiciones del coche, $(x_{n-1}, y_{n-1})$ y $(x_n, y_n)$, la posición siguiente se estima:
 \[
     x_{n+1} \approx x_n + (x_n - x_{n-1}), \qquad
     y_{n+1} \approx y_n + (y_n - y_{n-1}),
@@ -58,11 +58,11 @@ $x \in [x_n, x_{n+1}]$ es:
 
 En este trabajo se emplea para determinar con mayor precisión el instante del paso por meta. Este ocurre entre dos fotogramas y dado que el intervalo entre capturas es muy pequeño, el movimiento del coche apenas varía en él y puede suponerse lineal (sección~\ref{subsec:control-meta}). Se utilizan como valores conocidos las marcas de tiempo de los dos fotogramas.
 
-\section{Sistemas distribuidos}
-\label{sec:sistemas-distribuidos}
-Un sistema distribuido es un conjunto de computadores independientes que se presenta ante sus usuarios como un sistema único. Sus principales ventajas son la escalabilidad (la capacidad de crecer añadiendo más máquinas) y la tolerancia a fallos (la posibilidad de que el sistema continúe funcionando aunque alguno de sus componentes falle). A cambio, introduce retos que no existen en las aplicaciones monolíticas: los procesos no comparten memoria y deben coordinarse mediante mensajes, la red añade latencia y puede perder paquetes, y los fallos son parciales, es decir, una parte del sistema puede caer mientras el resto sigue en marcha.
-
-Este trabajo convierte el sistema monolítico heredado en un sistema distribuido precisamente para ganar escalabilidad: el número de cámaras deja de estar limitado por los puertos y la capacidad de procesamiento de un único ordenador. Los conceptos de esta sección fundamentan las decisiones de diseño tomadas para afrontar los retos mencionados.
+%\section{Sistemas distribuidos}
+%\label{sec:sistemas-distribuidos}
+%Un sistema distribuido es un conjunto de computadores independientes que se presenta ante sus usuarios como un sistema único. Sus principales ventajas son la escalabilidad (la capacidad de crecer añadiendo más máquinas) y la tolerancia a fallos (la posibilidad de que el sistema continúe funcionando aunque alguno de sus componentes falle). A cambio, introduce retos que no existen en las aplicaciones monolíticas: los procesos no comparten memoria y deben coordinarse mediante mensajes, la red añade latencia y puede perder paquetes, y los fallos son parciales, es decir, una parte del sistema puede caer mientras el resto sigue en marcha.
+%
+%Este trabajo convierte el sistema monolítico heredado en un sistema distribuido precisamente para ganar escalabilidad: el número de cámaras deja de estar limitado por los puertos y la capacidad de procesamiento de un único ordenador. Los conceptos de esta sección fundamentan las decisiones de diseño tomadas para afrontar los retos mencionados.
 
 \section{Control por Modulación por Ancho de Pulso (PWM)}
 \label{sec:pwm-fundamentos}
@@ -77,18 +77,21 @@ Este trabajo no parte de cero, sino que continúa una línea de Trabajos de Fin 
 
 \subsection{Línea de trabajos previos}
 
-La línea comienza con el TFG de Miguel Fernández López, centrado en la detección y el seguimiento visual de un coche de Scalextric, incluyendo la identificación de sectores de la pista y el cálculo de tiempos de vuelta, y con el TFG de Julián Barcia Facal, que aportó el diseño del hardware de control basado en Arduino y señales \gls{pwm}. Ambos trabajos están descritos en detalle en las memorias posteriores~\cite{tfgmario,tfgadrian}.
+La línea comienza con el TFG de Miguel Fernández López, centrado en la detección y el seguimiento visual de un coche de Scalextric, incluyendo la identificación de sectores de la pista y el cálculo de tiempos de vuelta, y con el TFG de Julián Barcia Facal, que aportó el diseño del hardware de control basado en Arduino y señales \gls{pwm}. Ambos trabajos están descritos en detalle en las memorias anteriores~\cite{tfgmario,tfgadrian}.
 
 \subsection{TFG de Mario López Cea}
 \label{sec:tfg-mario}
 
-El trabajo de Mario López Cea~\cite{tfgmario} logró por primera vez en esta línea el control autónomo y adaptativo del coche, con una única cámara fija sobre el circuito. Utiliza dos etiquetas de color colocadas en el coche (delantera y trasera) con las que consigue determinar la posición del coche. Sobre esta base diseñó dos algoritmos de control de velocidad: uno de maximización de la velocidad media y otro de anticipación a las zonas de derrape, que aprende las curvas peligrosas del circuito y frena el coche antes de alcanzarlas.
+El trabajo de Mario López Cea~\cite{tfgmario} logró por primera vez en esta línea el control autónomo y adaptativo del coche, con una única cámara fija sobre el circuito. La mayor parte de su trabajo está en el sistema de detección, donde sustituyó el seguimiento por \textit{tracker} de los trabajos anteriores por un ROI situado mediante extrapolación. Sobre esa base diseñó dos algoritmos de control de velocidad, uno de maximización de la velocidad media y otro de anticipación a las zonas de derrape, que aprende las curvas peligrosas del circuito y frena el coche antes de alcanzarlas.
+%Utiliza dos etiquetas de color colocadas en el coche (delantera y trasera) con las que consigue determinar la posición del coche.
 
 De este trabajo se heredan varias ideas:
 \begin{enumerate}
-    \item En primer lugar la utilización de una predicción lineal del movimiento para ajustar la ROI. Antes de este trabajo se utilizaban algoritmos más complejos para predecir el movimiento.
+    \item En primer lugar, la predicción lineal del movimiento para situar el ROI. Hasta entonces se usaba el \textit{tracker} CSRT de OpenCV, y Mario López demostró que sustituirlo por una extrapolación de las dos últimas posiciones daba menor tiempo de procesado y mejor escalabilidad con la resolución, sin perder precisión en la detección.
+%    \item En primer lugar la utilización de una predicción lineal del movimiento para ajustar la ROI. Antes de este trabajo se utilizaban algoritmos más complejos para predecir el movimiento.
     \item En segundo lugar la interpolación para el cálculo de tiempos y la idea para detectar el paso por meta.
-    \item En tercer lugar se hereda la idea del algoritmo que mejor le funcionaba, que era la detección de los derrapes para después anticiparse a ellos.
+    \item En tercer lugar, propone la idea de detectar los derrapes para anticiparse a ellos, que se apoya en que para un circuito dado siempre se producen en las mismas zonas.
+%    \item En tercer lugar se hereda la idea del algoritmo que mejor le funcionaba, que era la detección de los derrapes para después anticiparse a ellos.
 \end{enumerate}
 
 \subsection{TFG de Adrián Rego Criado}
