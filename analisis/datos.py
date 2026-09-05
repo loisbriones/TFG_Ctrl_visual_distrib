@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-De los ficheros a los DataFrames: aquí se localizan y se leen las dos fuentes
-(el bag y los logs del algoritmo) y se cruzan entre sí, de modo que figuras.py
-solo tenga que dibujar.
+Se localizan y se leen las dos fuentes: el bag y los logs del algoritmo y se cruzan entre si. 
 
 Salen dos tablas, que son las que alimentan todas las figuras:
-  df_pos  una fila por POSICIÓN válida del bag, con su vuelta y el
-          dist_derrape de la telemetría que originó   -> figuras 1, 2 y 4
-  df_tel  una fila por TELEMETRÍA caída dentro de una vuelta, con el instante
-          relativo al cruce de meta, la cámara que la vio y el PWM que estaba
+  df_pos  una fila por posicion valida del bag, con su vuelta y el
+          dist_derrape de la telemetria que origino   -> figuras 1, 2 y 4
+  df_tel  una fila por telemetria caida dentro de una vuelta, con el instante
+          relativo al cruce de meta, la camara que la vio y el PWM que estaba
           en vigor                                     -> figuras 3 y 5
 """
 
@@ -25,22 +23,19 @@ from parseo_log import (
     camara_del_log, derivar_por_vuelta, parsear_log, tabla_vueltas,
 )
 
-# Valores por defecto de EstrategiaPerfil, para cuando no hay ningún log del
-# que leerlos: el umbral por encima del cual la trasera cuenta como derrape y
-# la distancia a la ruta por encima de la cual el algoritmo descarta el frame
-# entero (la sección 2 lo usa para no dibujar perpendiculares de frames que el
-# controlador ni llegó a mirar).
+# Valores por defecto de EstrategiaPerfil, para cuando no hay ningun log del que leerlos
 UMBRAL_DERRAPE_DEF = 8.0
 MAX_DIST_RUTA_DEF = 80.0
 
 
+
 # ---------------------------------------------------------------------------
-# Los logs del algoritmo (uno por cámara)
+# Los logs del algoritmo (uno por camara)
 # ---------------------------------------------------------------------------
 def buscar_logs(argumentos, carpeta_bag):
     """Convierte los argumentos de logs en una lista de ficheros: cada
     argumento puede ser un .txt o una carpeta donde buscarlos; sin argumentos
-    se buscan dentro de la carpeta del bag."""
+    se buscan dentro de la carpeta del bag"""
     if not argumentos:
         return sorted(carpeta_bag.rglob("derrapesLog_*.txt"))
     rutas = []
@@ -55,19 +50,20 @@ def buscar_logs(argumentos, carpeta_bag):
     return rutas
 
 
+
 def cargar_logs(rutas):
-    """Parsea cada log y calcula sus derivados por vuelta.
+    """Parsea cada log 
 
     Devuelve {camara: {"c": Carrera, "vueltas": [...], "perfil_vuelta": {...},
     "zonas_ini_vuelta": {...}, "tabla": DataFrame, "ruta": Path}} ordenado por
-    nombre de cámara. La cámara sale de la línea [INIT] del propio fichero, no
-    de su nombre."""
+    nombre de camara. La camara sale de la linea [INIT] del propio fichero, no
+    de su nombre"""
+
     datos = {}
     for ruta in rutas:
         c = parsear_log(ruta)
         if c.frames is None or c.frames.empty:
-            print(f"AVISO: {ruta} no contiene líneas [FRAME] válidas (¿formato "
-                  "antiguo por tramos/arco?); se ignora este log")
+            print(f"AVISO: {ruta} no contiene líneas [FRAME] válidas se ignora este log")
             continue
         vueltas, perfil_vuelta, zonas_ini = derivar_por_vuelta(c)
         datos[camara_del_log(ruta)] = {
@@ -81,10 +77,11 @@ def cargar_logs(rutas):
     return dict(sorted(datos.items()))
 
 
+
 def umbrales_del_algoritmo(logs):
-    """(umbral_derrape, max_dist_ruta) con los que corrió el algoritmo, leídos
-    de la línea [INIT] del primer log que los traiga. Sin logs se usan los
-    defaults, para que las figuras del bag sigan pudiendo pintar su umbral."""
+    """(umbral_derrape, max_dist_ruta) con los que corrio el algoritmo, leidos
+    de la linea [INIT] del primer log que los traiga. Sin logs se usan los
+    defaults, para que las figuras del bag sigan pudiendo pintar su umbral"""
     def primero(nombre, defecto):
         return next((d["c"].params[nombre] for d in logs.values()
                      if nombre in d["c"].params), defecto)
@@ -92,12 +89,9 @@ def umbrales_del_algoritmo(logs):
             primero("max_dist_ruta", MAX_DIST_RUTA_DEF))
 
 
-# ---------------------------------------------------------------------------
-# Las dos tablas del bag
-# ---------------------------------------------------------------------------
+
 def preparar_bag(bag_dir, coche):
-    """Lee el bag y devuelve (bag, df_pos, df_tel), con los avisos por consola
-    de cuántos mensajes había y cuántos se pudieron cruzar."""
+    """Lee el bag y devuelve (bag, df_pos, df_tel)"""
     bag = leer_bag(bag_dir, coche)
     posiciones, telemetria, vueltas = (
         bag["posiciones"], bag["telemetria"], bag["vueltas"])
@@ -108,11 +102,10 @@ def preparar_bag(bag_dir, coche):
         print(f"Tiempos: mejor {min(t):.3f} s | media {sum(t) / len(t):.3f} s "
               f"| peor {max(t):.3f} s")
 
-    # Una posición con alguna pegatina en (0, 0) es una detección fallida
+    # Una posicion con alguna pegatina en (0, 0) no se coge porque no es valida para el analisis
     validas = [p for p in posiciones
                if (p["fx"], p["fy"]) != (0, 0) and (p["bx"], p["by"]) != (0, 0)]
-    # La telemetría no dice qué posición la originó: se empareja por tiempo de
-    # grabación, que es el mismo reloj para todos los topics del bag
+    # La telemetria no dice que posicion la origino se empareja por tiempo de grabacion
     indices_tel = emparejar_telemetria(telemetria, validas)
 
     df_pos = _tabla_posiciones(validas, telemetria, indices_tel, vueltas)
@@ -121,9 +114,10 @@ def preparar_bag(bag_dir, coche):
     return bag, df_pos, df_tel
 
 
+
 def _tabla_posiciones(validas, telemetria, indices_tel, vueltas):
-    """Una fila por posición válida, con la vuelta a la que pertenece y el
-    dist_derrape de su telemetría."""
+    """Una fila por posicion valida, con la vuelta a la que pertenece y el
+    dist_derrape de su telemetria"""
     vuelta_de_pos = repartir_por_vueltas([p["t"] for p in validas], vueltas)
     dist_de_pos = [np.nan] * len(validas)
     for i_tel, i_pos in enumerate(indices_tel):
@@ -140,13 +134,14 @@ def _tabla_posiciones(validas, telemetria, indices_tel, vueltas):
     return df
 
 
+
 def _tabla_telemetria(telemetria, validas, indices_tel, vueltas, pwm):
-    """Una fila por telemetría caída dentro de una vuelta. Las que caen en la
-    calibración o entre vueltas se descartan: las figuras van vuelta a vuelta."""
+    """Una fila por telemetria caida dentro de una vuelta. Las que caen en la
+    calibracion o entre vueltas se descartan"""
     vuelta_de_tel = repartir_por_vueltas([m["t"] for m in telemetria], vueltas)
     pwm_de_tel = pwm_en_instantes([m["t"] for m in telemetria], pwm)
-    # El mensaje time_per_lap se publica al CERRAR la vuelta, así que la vuelta
-    # empezó lap_time segundos antes de ese instante
+    # El mensaje time_per_lap se publica al cerrar la vuelta, asi que la vuelta
+    # empezo lap_time segundos antes de ese instante
     inicio = {v["numero"]: v["t"] - int(v["tiempo"] * 1e9) for v in vueltas}
     filas = []
     for m, i_pos, v, p in zip(telemetria, indices_tel, vuelta_de_tel, pwm_de_tel):
@@ -166,10 +161,11 @@ def _tabla_telemetria(telemetria, validas, indices_tel, vueltas, pwm):
     return pd.DataFrame(filas)
 
 
+
 def tabla_derrape_por_vuelta(df_tel, umbral):
-    """Resumen por vuelta de la serie dist_derrape del bag: máximo, percentil
-    95, mediana, cuántas muestras pasan el umbral, cuántas tenían derrape
-    abierto y el PWM medio. Alimenta el resumen de la sección 3."""
+    """Resumen por vuelta respecto a dist_derrape: maximo, percentil
+    95, mediana, cuantas muestras pasan el umbral, cuantas tenian derrape
+    abierto y el PWM medio"""
     filas = []
     for v, g in df_tel.groupby("vuelta"):
         filas.append({

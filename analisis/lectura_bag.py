@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-Lectura del bag mcap para el dashboard (analisis.py).
+Lectura del bag mcap 
 
-Saca del bag las cuatro series que usan las figuras (posiciones, telemetría,
-tiempos de vuelta y órdenes de PWM) y las funciones que las cruzan entre sí.
+Saca del bag las cuatro series que usan las figuras (posiciones, telemetria,
+tiempos de vuelta y ordenes de PWM)
 
-Los timestamps "t" son los de GRABACIÓN del bag en nanosegundos: el instante
-en que el grabador recibió cada mensaje. Todos los topics comparten reloj
-(los graba la misma máquina), así que se pueden comparar entre sí.
+Los timestamps "t" son los de grabacion del bag en nanosegundos: el instante
+en que el grabador recibio cada mensaje. Todos los topics comparten reloj
 """
 
 import bisect
@@ -25,53 +24,46 @@ import rosbag2_py
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
-# Desfase máximo (s) admitido al emparejar un mensaje de telemetría con el
-# mensaje de posición que lo originó (se emparejan por tiempo de grabación,
-# ver emparejar_telemetria). Subirlo empareja más mensajes pero con más riesgo
-# de asociar una telemetría a una posición que no es la suya; bajarlo deja
-# más telemetrías sin emparejar.
+# Desfase maximo (s) admitido al emparejar un mensaje de telemetria con el
+# mensaje de posicion que lo origino. 
+# Subirlo empareja mas mensajes pero con mas riesgo
+# de asociar una telemetria a una posicion que no es la suya
+# Bajarlo deja mas telemetrias sin emparejar
 MAX_DESFASE_EMPAREJADO = 0.2
 
-
-# ---------------------------------------------------------------------------
-# Localización de los ficheros dentro de la carpeta de datos
-# ---------------------------------------------------------------------------
 def encontrar_bag(carpeta: Path) -> Path:
-    """Devuelve la carpeta del bag (la que contiene metadata.yaml).
+    """Devuelve la carpeta del bag (la que contiene metadata.yaml)"""
 
-    Un bag de rosbag2 es una CARPETA con un metadata.yaml y uno o más .mcap,
-    así que basta con buscar el metadata.yaml de forma recursiva (rglob) por
-    si el bag está en una subcarpeta (p. ej. PRUEBAS/X/001_LUNES_13_08/)."""
     if (carpeta / "metadata.yaml").is_file():
         return carpeta
+
+    # Busqueda recursiva en los subdirectorios para buscar en los que hay metadata.yaml
     metadatas = sorted(carpeta.rglob("metadata.yaml"))
     if not metadatas:
         sys.exit(f"ERROR: no se encontró ningún bag (metadata.yaml) en {carpeta}")
     if len(metadatas) > 1:
         # Si hubiera varios bags se avisa y se usa el primero por orden
-        # alfabético; para analizar otro, pasar directamente su carpeta.
+        # alfabetico; para analizar otro, pasar directamente su carpeta
         print(f"AVISO: hay {len(metadatas)} bags; se usa {metadatas[0].parent}")
     return metadatas[0].parent
 
 
-# ---------------------------------------------------------------------------
-# Plan B de decodificación para bags grabados con .msg que luego cambiaron
-# ---------------------------------------------------------------------------
+
 def _decodificadores_mcap(bag_dir: Path):
     """Construye un decodificador por topic a partir de las definiciones de
-    mensaje EMBEBIDAS en el propio fichero mcap.
+    mensaje embebidas en el propio fichero mcap.
 
     Los mensajes se deserializan normalmente con las clases compiladas del
-    paquete (deserialize_message), pero si los .msg del código han cambiado
-    DESPUÉS de grabar el bag, la clase actual ya no coincide con los bytes
-    grabados y la deserialización revienta. El formato mcap guarda dentro
-    del fichero el texto completo de la definición de cada tipo tal y como
-    era al grabar, así que mcap-ros2-support puede decodificar cualquier bag
-    antiguo con SU definición original. Los objetos decodificados exponen
-    los campos con la misma notación (msg.front.center.x), por lo que el
-    resto del código no nota la diferencia.
+    paquete (deserialize_message), pero si los .msg del codigo han cambiado
+    despues de grabar el bag, la clase actual ya no coincide con los bytes
+    grabados y la deserializacion revienta. El formato mcap guarda dentro
+    del fichero el texto completo de la definicion de cada tipo tal y como
+    era al grabar, asi que mcap-ros2-support puede decodificar cualquier bag
+    antiguo con su definicion original. Los objetos decodificados exponen
+    los campos con la misma notacion (msg.front.center.x), por lo que el
+    resto del codigo no nota la diferencia.
 
-    Devuelve {nombre_topic: funcion(bytes) -> mensaje decodificado}."""
+    Devuelve {nombre_topic: funcion(bytes) -> mensaje decodificado}"""
     from mcap.reader import make_reader
     from mcap_ros2.decoder import DecoderFactory
 
@@ -80,17 +72,19 @@ def _decodificadores_mcap(bag_dir: Path):
     for fichero in sorted(bag_dir.glob("*.mcap")):
         with open(fichero, "rb") as f:
             resumen = make_reader(f).get_summary()
+
             if resumen is None:
-                continue  # mcap sin índice (grabación cortada): se ignora
+                continue            
+
+            # Creamos un decodificador para cada topic que guardado en el mcap 
             for canal in resumen.channels.values():
                 esquema = resumen.schemas[canal.schema_id]
                 decodificadores[canal.topic] = fabrica.decoder_for("cdr", esquema)
+
     return decodificadores
 
 
-# ---------------------------------------------------------------------------
-# Lectura del bag
-# ---------------------------------------------------------------------------
+
 def leer_bag(bag_dir: Path, coche: str):
     """Lee del bag todo lo que usa el dashboard para el coche indicado.
 
@@ -98,13 +92,12 @@ def leer_bag(bag_dir: Path, coche: str):
       posiciones  [{t, camara, fx, fy, bx, by}]   /coche/position
       telemetria  [{t, dist, derrapando}]         /telemetria/coche/car_control
       vueltas     [{numero, tiempo, t}]           /telemetria/coche/time_per_lap
-                  ("t" marca el FIN de la vuelta: el mensaje se publica al
-                  cruzar meta, así que la vuelta ocupa [t - tiempo*1e9, t])
+                  ("t" marca el fin de la vuelta: el mensaje se publica al
+                  cruzar meta, asi que la vuelta ocupa [t - tiempo*1e9, t])
       pwm         [{t, pwm}]                      /coche/pwd
-                  (la orden de PWM que el controlador mandó al puente; se
-                  publica una por posición procesada, así que sirve para
-                  saber con qué velocidad iba el coche en cada instante)
+
     """
+
     with open(bag_dir / "metadata.yaml") as f:
         metadata = yaml.safe_load(f)["rosbag2_bagfile_information"]
     storage_id = metadata.get("storage_identifier", "mcap")
@@ -119,33 +112,41 @@ def leer_bag(bag_dir: Path, coche: str):
     topic_tel = f"/telemetria/{coche}/car_control"
     topic_lap = f"/telemetria/{coche}/time_per_lap"
     topic_pwm = f"/{coche}/pwd"
+
+    # Diccionario que guarda todos los topics con su tipo y nombre que hay en el mcap
     tipos = {t.name: t.type for t in reader.get_all_topics_and_types()}
 
     interesantes = [topic_pos, topic_tel, topic_lap, topic_pwm]
+    
+    # Comprobamos que estan los 4 que nos interesan
     faltan = [t for t in interesantes if t not in tipos]
+    # Si falta alguno damos error
     if topic_pos in faltan:
         sys.exit(f"ERROR: el bag no contiene {topic_pos} (topics: {sorted(tipos)})")
     if faltan:
         print(f"AVISO: el bag no contiene {faltan}")
-    # Filtro de topics: el reader se salta todo lo demás, y en particular las
-    # imágenes de debug, que son el grueso del bag y aquí no se usan
+
+    # Generamos un filtro para quedarnos solo con los mensajes que nos interesan 
+    # El fichero se tiene que leer de manera secuencial mensaje a mensaje
     presentes = [t for t in interesantes if t in tipos]
     reader.set_filter(rosbag2_py.StorageFilter(topics=presentes))
 
     clases = {t: get_message(tipos[t]) for t in presentes}
-    decodificadores = None  # se construyen solo si una deserialización falla
+    decodificadores = None  # se construyen solo si una deserializacion falla
 
     posiciones, telemetria, vueltas, pwm = [], [], [], []
     while reader.has_next():
+        """Leer el siguiente mensaje"""
         topic, data, t_ns = reader.read_next()
         msg = None
+        # Compromaos que el topic es el que queremos
         if clases[topic] is not None:
             try:
+                # Cogemos el contenido del mensaje
                 msg = deserialize_message(data, clases[topic])
             except Exception:
-                # La definición actual del .msg no coincide con la del bag
-                # (cambió después de grabar): este topic pasa a decodificarse
-                # con el esquema embebido en el mcap de aquí en adelante
+                # La definicion actual del .msg no coincide con la del bag
+                # este topic pasa a decodificarse con el esquema embebido en el mcap
                 clases[topic] = None
                 print(f"AVISO: la definición actual de {tipos[topic]} no coincide "
                       f"con la grabada en el bag; {topic} se decodifica con el "
@@ -155,9 +156,10 @@ def leer_bag(bag_dir: Path, coche: str):
                 decodificadores = _decodificadores_mcap(bag_dir)
             msg = decodificadores[topic](data)
 
+        
+        """Comprobar para el mensaje actual a cual del los 4 topics corresponde"""
         if topic == topic_pos:
-            # Posición del coche vista por UNA cámara: centros de las dos
-            # pegatinas en píxeles de esa cámara. (0, 0) = no detectada.
+            # Posicion del coche vista por una camara: centros de las dos
             posiciones.append(
                 {
                     "t": t_ns,
@@ -166,12 +168,6 @@ def leer_bag(bag_dir: Path, coche: str):
                     "fy": msg.front.center.y,
                     "bx": msg.back.center.x,
                     "by": msg.back.center.y,
-                    # Nº de frame del contador de esa cámara: es el número que
-                    # va quemado en su imagen de debug y el que el algoritmo
-                    # escribe en su log, así que permite casar las tres cosas.
-                    # getattr porque los bags grabados antes de que CarLocation
-                    # tuviera el campo se decodifican con el esquema embebido y
-                    # no lo traen (ver NUMERACION_FRAMES.md).
                     "n_frame": getattr(msg, "n_frame", None),
                 }
             )
@@ -186,8 +182,8 @@ def leer_bag(bag_dir: Path, coche: str):
         elif topic == topic_lap:
             vueltas.append({"numero": msg.lap_number, "tiempo": msg.lap_time, "t": t_ns})
         elif topic == topic_pwm:
-            # El carril (msg.carril) no se guarda: ya se filtró por coche al
-            # elegir el topic, y el dashboard solo mira un coche cada vez
+            # El carril (msg.carril) no se guarda ya se filtro por coche al
+            # elegir el topic. Solo se hace para un coche de cada vez 
             pwm.append({"t": t_ns, "pwm": int(msg.pwm)})
 
     return {
@@ -199,20 +195,21 @@ def leer_bag(bag_dir: Path, coche: str):
 
 
 def emparejar_telemetria(telemetria, posiciones_validas):
-    """Asocia cada mensaje de telemetría con el mensaje de posición (válido)
-    anterior más cercano en tiempo de grabación.
+    """Asocia cada mensaje de telemetria con el mensaje de posicion (valido)
+    anterior mas cercano en tiempo de grabacion.
 
     CarControlTelemetry no lleva camara_id ni las coordenadas del coche, solo
-    dist_derrape. Como el controlador publica una telemetría inmediatamente
-    después de procesar cada posición, y el bag graba ambos topics con el
-    mismo reloj, la posición que originó una telemetría es la última posición
+    dist_derrape. Como el controlador publica una telemetria inmediatamente
+    despues de procesar cada posicion, y el bag graba ambos topics con el
+    mismo reloj, la posicion que origino una telemetria es la ultima posicion
     grabada antes que ella (a milisegundos de distancia). bisect_right hace
-    la búsqueda binaria sobre los tiempos (ordenados: el bag se lee en orden).
+    la busqueda binaria sobre los tiempos (ordenados: el bag se lee en orden).
 
-    Devuelve una lista paralela a `telemetria` con el índice de la posición
-    emparejada en posiciones_validas, o None si la más cercana está a más de
-    MAX_DESFASE_EMPAREJADO segundos (mensaje perdido por el QoS best-effort:
-    mejor descartar que emparejar mal)."""
+    Devuelve una lista paralela a `telemetria` con el indice de la posicion
+    emparejada en posiciones_validas, o None si la mas cercana esta a mas de
+    MAX_DESFASE_EMPAREJADO segundos"""
+
+    # Ordenados porque el bag se lee en orden
     tiempos = [p["t"] for p in posiciones_validas]
     max_dt_ns = int(MAX_DESFASE_EMPAREJADO * 1e9)
     indices = []
@@ -226,15 +223,17 @@ def emparejar_telemetria(telemetria, posiciones_validas):
 
 
 def pwm_en_instantes(tiempos_ns, pwm):
-    """PWM vigente en cada instante de `tiempos_ns`: el del último mensaje de
-    /coche/pwd anterior o igual a ese instante (una orden de PWM sigue en
-    vigor hasta que llega la siguiente).
+    """PWM aplicado en cada instante de `tiempos_ns`. El del ultimo mensaje de
+    /coche/pwd anterior o igual a ese instante, porque una orden sigue en vigor
+    hasta que llega la siguiente.
 
     Devuelve una lista paralela a tiempos_ns con el valor entero, o None si
-    ese instante es anterior a la primera orden grabada."""
+    ese instante es anterior a la primera orden grabada"""
     if not pwm:
         return [None] * len(tiempos_ns)
-    tiempos_pwm = [m["t"] for m in pwm]  # ordenados: el bag se lee en orden
+
+    # Ordenados porque el bag se lee en orden
+    tiempos_pwm = [m["t"] for m in pwm]  
     resultado = []
     for t in tiempos_ns:
         i = bisect.bisect_right(tiempos_pwm, t) - 1
@@ -243,17 +242,18 @@ def pwm_en_instantes(tiempos_ns, pwm):
 
 
 def repartir_por_vueltas(tiempos_ns, vueltas):
-    """Número de vuelta de cada timestamp, usando las ventanas de tiempo de
-    los mensajes time_per_lap: la vuelta `numero` termina en su "t" y empieza
-    tiempo*1e9 antes.
+    """Numero de vuelta de cada timestamp, usando las ventanas de tiempo de
+    los mensajes time_per_lap.
 
-    Devuelve una lista paralela a tiempos_ns con el número de vuelta o None
-    si el instante no cae en ninguna vuelta (calibración, huecos entre el
-    debounce de meta, o después de la última vuelta cronometrada)."""
+    Devuelve una lista paralela a tiempos_ns con el numero de vuelta o None
+    si el instante no cae en ninguna vuelta"""
+
     if not vueltas:
         return [None] * len(tiempos_ns)
-    finales = [v["t"] for v in vueltas]  # ordenados: el bag se lee en orden
+
+    finales = [v["t"] for v in vueltas]  
     resultado = []
+
     for t in tiempos_ns:
         i = bisect.bisect_left(finales, t)
         if i >= len(vueltas):
@@ -262,4 +262,5 @@ def repartir_por_vueltas(tiempos_ns, vueltas):
         v = vueltas[i]
         inicio = v["t"] - int(v["tiempo"] * 1e9)
         resultado.append(v["numero"] if t >= inicio else None)
+
     return resultado

@@ -1,6 +1,3 @@
-/* Estilo del dashboard. Los colores no se repiten aquí a mano: pagina.py
-   sustituye los --col-* de :root por la paleta de figuras.py, para que la
-   página y las gráficas vayan a juego. */
 :root { color-scheme: light; }
 
 body {
@@ -24,9 +21,6 @@ p  { color: var(--col-tinta-2); font-size: 13px; line-height: 1.5; }
 ul { color: var(--col-tinta-2); font-size: 13px; }
 code { background: var(--col-grid); padding: 1px 5px; border-radius: 3px; }
 
-/* Tabla de tiempos de la sección 5. OJO: comparativa.py lee estas filas del
-   HTML generado (busca table.tiempos y tr class="mejor|anomala"), así que su
-   marcado es un contrato; el estilo, no. */
 table.tiempos { border-collapse: collapse; font-size: 13px; }
 table.tiempos th,
 table.tiempos td {
@@ -38,7 +32,6 @@ table.tiempos tfoot td { font-weight: 600; }
 tr.mejor td { background: #e4f2e4; font-weight: 600; }
 tr.anomala td { background: #f9e9e2; }
 
-/* La tabla de tiempos y la tendencia, una al lado de la otra */
 .fila-tiempos { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
 .fila-tiempos .mini-grafica { flex: 1 1 500px; min-width: 380px; }
 
@@ -54,7 +47,6 @@ a.boton {
 }
 a.boton:hover { background: #d2d1c8; }
 
-/* Checkboxes de capas de la sección 2 */
 .checks-tray {
   display: inline-flex;
   flex-wrap: wrap;
@@ -76,5 +68,4 @@ a.boton:hover { background: #d2d1c8; }
 .checks-tray label:hover { background: #d2d1c8; }
 .checks-tray input[type=checkbox] { cursor: pointer; margin: 0; }
 
-/* Fila de controles bajo una gráfica (botones de PDF, checkboxes) */
 .controles { margin: 4px 0 18px; }

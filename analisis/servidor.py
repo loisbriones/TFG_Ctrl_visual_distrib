@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """
-El servidor del dashboard y la exportación a PDF.
+El servidor del dashboard y la exportacion a PDF.
 
 Sirve dos cosas en el puerto 8988:
-  /              la página
+  /              la pagina
   /pdf?fig=<clave>[&vuelta=N]   una figura en PDF vectorial
-
-El PDF existe solo aquí y no en el HTML suelto porque lo genera kaleido, que
-está instalado dentro del contenedor (ver Dockerfile). De ahí que con
---sin-servidor la página salga directamente sin botones.
 """
 
 import urllib.parse
@@ -20,38 +16,28 @@ import plotly.graph_objects as go
 # Puerto dentro del contenedor; run.sh lo publica tal cual en el host
 PUERTO = 8988
 
-# Ancho en puntos del PDF. Las figuras solo fijan el alto (_layout_base), y sin
-# esto kaleido usaría su ancho por defecto de 700 px, demasiado estrecho.
+# Ancho en puntos del PDF. Las figuras solo fijan el alto (_layout_base)
 ANCHO_PDF = 1100
 
 
 def figura_a_pdf(fig, vuelta=None):
-    """PDF vectorial de una figura, listo para \\includegraphics.
-
-    `vuelta` solo se escribe en el título: sin el slider, el papel no diría de
-    qué vuelta es la figura."""
+    """PDF de una figura"""
     copia = go.Figure(fig)
     if vuelta is not None and copia.layout.title.text:
         copia.layout.title.text += f" · vuelta {vuelta}"
-    # Fuera el slider y los menús: kaleido dibuja el estado ACTIVO de la figura
-    # y esos controles solo estorbarían en el papel. Se asignan directamente
-    # sobre layout porque update_layout(sliders=[]) no vacía la tupla existente.
     copia.layout.sliders = ()
     copia.layout.updatemenus = ()
     if copia.layout.width is None:
         copia.layout.width = ANCHO_PDF
     with warnings.catch_warnings():
-        # kaleido está fijado a la 0.2.1 a propósito (la 1.x exige un Chrome
-        # instalado) y plotly avisa de que es antigua en CADA exportación
+        # kaleido esta fijado a la 0.2.1 a proposito (la 1.x exige un Chrome
+        # instalado) y plotly avisa de que es antigua en cada exportacion
         warnings.simplefilter("ignore", DeprecationWarning)
         return copia.to_image(format="pdf")
 
 
 def activar_vuelta(fig, vuelta):
-    """Deja una copia de la figura en el estado de la vuelta pedida.
-
-    El estado del slider vive en el navegador; aquí se reproduce aplicando el
-    array de visibilidad que ya lleva el paso correspondiente."""
+    """Deja una copia de la figura en el estado de la vuelta pedida"""
     copia = go.Figure(fig)
     if not copia.layout.sliders:
         return copia
@@ -72,8 +58,7 @@ def activar_vuelta(fig, vuelta):
 
 
 def servir(pagina_bytes, figuras_registradas):
-    """Levanta el servidor hasta Ctrl+C. `figuras_registradas` es
-    {clave: go.Figure}: las mismas claves que llevan los botones de la página."""
+    """Levanta el servidor"""
 
     class Manejador(BaseHTTPRequestHandler):
         def _enviar(self, cuerpo, tipo, descarga=None):
@@ -97,7 +82,7 @@ def servir(pagina_bytes, figuras_registradas):
                 else:
                     self.send_error(404, f"ruta desconocida: {ruta}")
             except BrokenPipeError:
-                pass   # el navegador canceló la descarga: no es un error
+                pass   # el navegador cancelo la descarga: no es un error
             except Exception as e:  # noqa: BLE001 - el servidor no debe caerse
                 self.send_error(500, f"{type(e).__name__}: {e}")
 

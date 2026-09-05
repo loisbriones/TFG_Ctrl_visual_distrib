@@ -270,8 +270,9 @@ python/src/image_processor_pkg/politica_*.json
 # de las pruebas de la memoria (unos 560 MB, uno por ejecucion) y se publican a
 # proposito, para que quien entre al repositorio pueda abrirlos sin ir a buscar
 # los bags. Su indice es el README de esa carpeta, con el enlace de YouTube de
-# cada ejecucion al lado. Los saca analisis/generar_htmls.py; volver a lanzarlo
-# con --rehacer y commitear deja OTRA copia entera en el historial.
+# cada ejecucion al lado. Los saca un script local que no esta en el repo
+# (analisis/generar_htmls.py, ver mas abajo); volver a generarlos y commitear
+# deja OTRA copia entera en el historial.
 
 # Los mp4 de las pruebas (unos 7 GB). Su sitio es YouTube, que es desde donde
 # los referencia la memoria: aqui solo se versionaria la herramienta que los
@@ -299,3 +300,16 @@ python/src/image_processor_pkg/image_processor_pkg/subscriber.py
 # Script suelto para tantear a ojo rangos HSV con la webcam. No forma parte de
 # la arquitectura, no lo lanza ningun launch y nada del repo lo referencia.
 python/procesar_imagen.py
+
+# Apuntes de codigo para estudiar el proyecto de cara a la defensa. Explican el
+# codigo funcion a funcion, con arboles de llamadas y diagramas, pero no son
+# parte del sistema ni de la memoria: material de estudio personal. Para
+# subirlos, borrar esta linea.
+APUNTES_CODIGO/
+
+# Dos herramientas propias que no forman parte del dashboard y salieron del
+# repo. generar_htmls.py lanza el analisis sobre todas las pruebas de la memoria
+# y necesita el catalogo de videos/generar_videos.py, que tampoco esta en el
+# repo. comparativa.py superpone los tiempos de varios HTML ya generados.
+analisis/comparativa.py
+analisis/generar_htmls.py

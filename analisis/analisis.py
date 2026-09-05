@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Dashboard de análisis de una carrera: UN comando que junta el bag (posiciones,
-tiempos por vuelta, telemetría) con el/los logs del algoritmo (derrapesLog_*.txt,
-uno por cámara) y genera un HTML interactivo que además se sirve por web desde
+Dashboard de analisis de una carrera: un comando que junta el bag (posiciones,
+tiempos por vuelta, telemetria) con el/los logs del algoritmo (derrapesLog_*.txt,
+uno por camara) y genera un HTML interactivo que ademas se sirve por web desde
 el contenedor.
 
 Uso (dentro del contenedor; ver run.sh, que lo lanza con Docker):
@@ -12,11 +12,11 @@ Uso (dentro del contenedor; ver run.sh, que lo lanza con Docker):
 El HTML se escribe junto a los datos como <nombre_bag>_analisis.html y se sirve
 en http://localhost:8988, salvo con --sin-servidor.
 
-Este fichero es solo el guion: qué se lee, en qué orden salen las secciones y
-qué se hace con el resultado. El trabajo está repartido en
+Este fichero es solo el guion: que se lee, en que orden salen las secciones y
+que se hace con el resultado. El trabajo esta repartido en
   lectura_bag.py + parseo_log.py   leer las dos fuentes
   datos.py                         cruzarlas en los DataFrames de las figuras
-  figuras.py                       una función por figura
+  figuras.py                       una funcion por figura
   pagina.py + web/                 el HTML, el estilo y la interactividad
   servidor.py                      servirlo y exportar a PDF
 """
@@ -35,18 +35,18 @@ import servidor
 from figuras import PANELES_6
 from lectura_bag import encontrar_bag
 
-# Una vuelta se marca como anómala en la tabla de tiempos si supera este
-# múltiplo de la media (paradas, salidas de pista, relocalizaciones largas)
+# Una vuelta se marca como anomala en la tabla de tiempos si supera este
+# multiplo de la media (paradas, salidas de pista, relocalizaciones largas)
 FACTOR_VUELTA_ANOMALA = 2.0
 
 # {clave: go.Figure} de todo lo que se dibuja: la clave es la que llevan los
-# botones de la página y la que atiende el endpoint /pdf. Con varias cámaras
-# se le añade ":<camara>", porque hay una figura de cada por cámara.
+# botones de la pagina y la que atiende el endpoint /pdf. Con varias camaras
+# se le añade ":<camara>", porque hay una figura de cada por camara
 FIGURAS = {}
 
 
 def estadisticos_tiempos(vueltas):
-    """mejor / media / mediana / peor de los tiempos de vuelta del bag."""
+    """mejor / media / mediana / peor de los tiempos de vuelta del bag"""
     tiempos = sorted(v["tiempo"] for v in vueltas)
     mitad = len(tiempos) // 2
     return {
@@ -60,9 +60,9 @@ def estadisticos_tiempos(vueltas):
 
 
 def marco_de_la_pista(df_pos, logs):
-    """El encuadre COMÚN de las gráficas 2 y 4: la caja que envuelve todo lo
-    que dibujan las dos. Se calcula aquí porque cada figura sola solo conoce la
-    mitad de los datos, y así el circuito sale a la misma escala en ambas."""
+    """El encuadre comun de las graficas 2 y 4: la caja que envuelve todo lo
+    que dibujan las dos. Se calcula aqui porque cada figura sola solo conoce la
+    mitad de los datos, y asi el circuito sale a la misma escala en ambas"""
     camaras = sorted(
         (set(df_pos["camara"].dropna().unique()) if len(df_pos) else set())
         | set(logs))
@@ -83,7 +83,7 @@ def marco_de_la_pista(df_pos, logs):
 
 
 def registrar(clave, fig, camara=None, varias=False):
-    """Guarda una figura en FIGURAS y devuelve su clave definitiva."""
+    """Guarda una figura en FIGURAS y devuelve su clave definitiva"""
     if varias and camara:
         clave = f"{clave}:{camara}"
         fig = pagina.etiquetar_camara(fig, camara, varias)
@@ -92,6 +92,7 @@ def registrar(clave, fig, camara=None, varias=False):
 
 
 def main():
+
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("carpeta_bag", type=Path,
                         help="Carpeta del bag (o que contiene el bag)")
@@ -130,15 +131,17 @@ def main():
               f"{int((df_tel['dist'] > umbral_derrape).sum())} muestras sobre "
               f"el umbral ({umbral_derrape:.0f} px)")
 
-    # --- Las secciones, en el orden en el que salen ------------------------
+    # --- Las graficas, en el orden en el que salen ------------------------
     print("\nGenerando figuras ...")
+
     hay_posiciones = len(df_pos) and df_pos["vuelta"].notna().any()
     marco = marco_de_la_pista(df_pos, logs)
     partes = [pagina.seccion_resumen(
         bag_dir.name, len(bag["posiciones"]), len(df_pos), len(vueltas),
         len(bag["telemetria"]), logs)]
-    # Solo la primera figura del documento embebe plotly.js; las demás lo
-    # reutilizan, y por eso hay que ir contando cuál es la primera
+
+    # Solo la primera figura del documento embebe plotly.js; las demas lo
+    # reutilizan, y por eso hay que ir contando cual es la primera
     primera = True
 
     if hay_posiciones:
@@ -147,7 +150,7 @@ def main():
         primera = False
 
         # La trayectoria base y las perpendiculares salen de las celdas del
-        # log: sin logs la figura se queda solo con las dos pegatinas
+        # log. Sin logs la figura se queda solo con las dos pegatinas
         registrar("2", figuras.grafica_2_trayectorias(
             df_pos,
             celdas_por_camara={cam: d["c"].celdas for cam, d in logs.items()},
@@ -157,7 +160,6 @@ def main():
     else:
         partes += [pagina.seccion_vacia("1"), pagina.seccion_vacia("2")]
 
-    # La 3 sale de la telemetría del propio bag, no del log
     if len(df_tel):
         tabla_3 = datos.tabla_derrape_por_vuelta(df_tel, umbral_derrape)
         registrar("3", figuras.grafica_3_derrape_bag(df_tel, umbral_derrape))
@@ -170,7 +172,6 @@ def main():
         partes.append(pagina.seccion_vacia("3"))
 
     if logs:
-        # df_pos aporta el primer punto de cada vuelta para marcar la meta
         registrar("4", figuras.grafica_4_circuito(
             logs, df_pos if hay_posiciones else None, marco=marco))
         partes.append(pagina.seccion("4", [FIGURAS["4"]], ["4"], primera=primera))
@@ -192,8 +193,6 @@ def main():
         partes.append(pagina.seccion_vacia("5"))
 
     if logs:
-        # Además del panel completo, cada uno de sus cuatro subplots por
-        # separado: en la memoria interesa poder incluirlos sueltos
         figs, claves, botones = [], [], []
         for cam, d in logs.items():
             clave = registrar("6", figuras.grafica_6_resumen(d["tabla"]),

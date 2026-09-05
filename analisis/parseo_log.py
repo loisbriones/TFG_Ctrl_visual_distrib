@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 """
-Parser del log de EstrategiaPerfil (derrapesLog_<nodo>_<camara>.txt, formato
-de CADENA DE CELDAS + ZONAS con etiquetas [INIT]/[TRAY]/[FRAME]/[DERRAPE]/
-[ZONA]/[PERFIL]/[VUELTA]).
+Parser del log de EstrategiaPerfil (derrapesLog_<nodo>_<camara>.txt).
 
 Las regex son copias de los f-string de AlgoritmoVelocidad.py: si se cambia
-un mensaje allí, hay que retocar aquí la regex correspondiente. Ese formato
-es un CONTRATO, porque los logs ya grabados tienen que seguir leyéndose.
+un mensaje alli, hay que retocar aqui la regex correspondiente. 
 
 Contenido:
-  - Una regex por tipo de línea del log.
-  - Carrera: contenedor de todo lo extraído de UN log (una cámara).
+  - Una regex por tipo de linea del log.
+  - Carrera: contenedor de todo lo extraido de un log (una camara).
   - parsear_log(): una pasada por el fichero -> Carrera.
   - derivar_por_vuelta() / tabla_vueltas(): estado del algoritmo por vuelta.
-  - camara_del_log(): nombre de la cámara desde la línea [INIT] del fichero.
+  - camara_del_log(): nombre de la camara desde la linea [INIT] del fichero
 """
 
 import re
@@ -22,11 +19,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# ---------------------------------------------------------------------------
-# Expresiones regulares: UNA por mensaje de AlgoritmoVelocidad.py. El prefijo
-# común "HH:MM:SS.mmm " se separa antes (RE_LINEA) y aquí se casa solo el
-# cuerpo. Mantenerlas sincronizadas con los saveLogFile() del algoritmo.
-# ---------------------------------------------------------------------------
 RE_LINEA = re.compile(r"^(\d{2}):(\d{2}):(\d{2})\.(\d{3}) (.*)$")
 RE_CABECERA = re.compile(r"^=== LOG INICIADO ?(\S*) ===$")
 
@@ -39,6 +31,7 @@ RE_FRAME = re.compile(
     r"(?:zona=\[(\d+)-(\d+)\]\((\w+)\)|zona=\?) "
     r"pwm=(\d+) \| margen=([\d.]+|inf)"
 )
+
 RE_FRAME_DESCARTADO = re.compile(r"\[FRAME (\d+) v=(\d+)\] DESCARTADO(.*)$")
 
 RE_DERRAPE_ABIERTO = re.compile(
@@ -52,25 +45,24 @@ RE_DERRAPE_ZONA_MUERTA = re.compile(
     r"\[DERRAPE\] Frame (\d+) v=(\d+): dist=([\d.]+) > umbral pero IGNORADO "
     r"por zona muerta: la celda (\d+)"
 )
-# Segundo motivo de rechazo, más reciente: la trasera se localizó en una celda
-# incompatible con la de la delantera (el coche estaría en dos sitios a la vez),
-# lo que pasa cuando circula por un tramo que no tiene celdas. Es un regex
-# aparte y no una ampliación del anterior a propósito: así los logs grabados
-# antes de esta comprobación se siguen analizando exactamente igual.
+# pegatina trasera se localizo en una celda incompatible con la de la delantera 
+# el coche estaria en dos sitios a la vez
+# regex aparte y no una ampliacion del anterior a proposito: asi los logs grabados
+# antes de esta comprobacion se siguen analizando exactamente igual
 RE_DERRAPE_INCOHERENTE = re.compile(
     r"\[DERRAPE\] Frame (\d+) v=(\d+): dist=([\d.]+) > umbral pero IGNORADO "
     r"por localización incoherente: la trasera cae en la celda (\d+) y la "
     r"delantera en la (\d+), que están a ([\d.]+) px, pero las pegatinas "
     r"están a ([\d.]+) px"
 )
-# Cierres "especiales": el coche salió de la ruta / llegó al final de la
-# cadena / el controlador avisó de la pérdida de visión. Solo se cuentan.
+# Cierres "especiales": el coche salio de la ruta / llego al final de la
+# cadena / el controlador aviso de la perdida de vision
 RE_DERRAPE_CIERRE_VISION = re.compile(
     r"\[DERRAPE\] Frame (\d+) v=(\d+): el (coche salió de la trayectoria|"
     r"coche llegó al final de la cadena abierta|controlador avisa)"
 )
 
-# Decisión al registrar un derrape: zona nueva (retroceso largo) o fusión
+# Decision al registrar un derrape: zona nueva (retroceso largo) o fusion
 # (retroceso corto), con el arranque del retroceso
 RE_ZONA_DECISION = re.compile(
     r"\[ZONA\] Frame (\d+) vuelta (\d+): derrape en \[(\d+), (\d+)\] -> "
@@ -78,7 +70,7 @@ RE_ZONA_DECISION = re.compile(
     r"(?:corto )?de ([\d.]+) px desde la celda (\d+) "
     r"\(derrapes_contador=(\d+)\)"
 )
-# Carveo resultante en la partición (una línea por tramo contiguo castigado)
+# Carveo resultante en la particion (una linea por tramo contiguo castigado)
 RE_ZONA_CARVE_NUEVA = re.compile(
     r"\[ZONA\] Nueva zona de derrape \[(\d+), (\d+)\] pwm=(\d+)"
 )
@@ -117,10 +109,7 @@ RE_VUELTA_PROTEGE = re.compile(
     r"\[VUELTA (\d+)\] zona \[(\d+)-(\d+)\]\((\w+)\) PROTEGIDA: último "
     r"derrape en vuelta (\d+)"
 )
-# Dos formas, y las dos tienen que casar: la política de mejora pasó a
-# decidirse zona a zona (antes solo subía el perfil si la vuelta era limpia en
-# TODO el circuito, y por eso la línea empezaba por "limpia:"). Los logs
-# grabados antes de ese cambio llevan la forma antigua y se siguen analizando.
+
 RE_VUELTA_SUBE = re.compile(
     r"\[VUELTA (\d+)\] (?:limpia: \d+ de \d+ zonas suben|suben \d+ de \d+ zonas)"
 )
@@ -137,13 +126,9 @@ RE_TRAY_CADENA = re.compile(
     r"longitud total ([\d.]+) px, cerrada=(True|False)"
 )
 
-# Líneas conocidas que no aportan datos al análisis: se reconocen para que no
-# cuenten como "no reconocidas" (el aviso de líneas desconocidas queda para
-# detectar cambios de formato reales en el algoritmo)
+# Lineas conocidas que no aportan datos al analisis 
 RE_IGNORABLES = [
-    re.compile(r"\[INIT\] "),  # los pares clave=valor se extraen aparte
-    # "Filtrado" es el nombre que tenía la línea de cierre/rotación antes de
-    # que el filtrado desapareciera: se mantiene para los logs ya grabados
+    re.compile(r"\[INIT\] "),  
     re.compile(r"\[TRAY\] Filtrado"),
     re.compile(r"\[TRAY\] Cierre"),
     re.compile(r"\[TRAY\] Trayectoria de calibración"),
@@ -157,12 +142,10 @@ RE_IGNORABLES = [
 
 
 class Carrera:
-    """Contenedor simple de todo lo extraído del log (sin lógica).
+    """Contenedor con todo lo extraido del log
 
     Atributos rellenados por parsear_log():
-      camara           cámara dueña del log (de su [INIT]); los números de
-                       frame son de su contador y no se comparan con los de
-                       otra cámara (ver NUMERACION_FRAMES.md)
+      camara           camara dueña del log
       fecha            texto ISO de la cabecera del log (o "")
       params           dict {nombre: float} con los [INIT] (v_min, v_max...)
       celdas           DataFrame [celda, x, y, gigante, long_px, acum]
@@ -170,28 +153,27 @@ class Carrera:
       n_celdas         nº total de celdas de la cadena
       long_total       longitud de la cadena en px
       cerrada          bool (cadena cerrada o abierta)
-      frames           DataFrame con una fila por [FRAME] válido
+      frames           DataFrame con una fila por [FRAME] valido
       descartados      lista de (frame, vuelta, motivo)
-      derrapes         DataFrame de eventos CERRADO [t, linea, frame, vuelta,
-                       ini, fin, n_celdas]
+      derrapes         DataFrame [t, linea, frame, vuelta, ini, fin, n_celdas]
       aperturas        lista de dicts de eventos ABIERTO
       zona_muerta      lista de dicts (aperturas rechazadas por zona muerta)
       incoherentes     lista de dicts (aperturas rechazadas porque las dos
                        pegatinas se localizaron en celdas incompatibles)
       cierres_vision   lista de (frame, vuelta) de derrapes cerrados por
-                       salir del campo de visión / fin de cadena
-      decisiones       lista de dicts [ZONA] decisión (nueva/fusión+retroceso)
-      carveos          lista de dicts de carveos en la partición (con pwm)
+                       salir del campo de vision / fin de cadena
+      decisiones       lista de dicts [ZONA] decision (nueva/fusion+retroceso)
+      carveos          lista de dicts de carveos en la particion (con pwm)
       gigante_castigos lista de {linea, vuelta, celda, antes, despues}
       derrames         lista de {linea, vuelta, px, t_abs} (reduccion_pendiente)
-      externas         lista de {linea, vuelta, px, t_abs} (reducción de otra
-                       cámara). t_abs = segundos desde medianoche, el único
-                       reloj común entre los logs de dos cámaras
+      externas         lista de {linea, vuelta, px, t_abs} (reduccion de otra
+                       camara). t_abs = segundos desde medianoche, el unico
+                       reloj comun entre los logs de dos camaras
       estados_zona     lista de {linea, vuelta, zonas: [dict]} (volcados [ZONA])
       snapshots_perfil lista de {linea, vuelta, motivo, zonas: [dict]}
       vueltas_reg      lista de dicts de los bloques [VUELTA]
       protecciones     lista de {vuelta, ini, fin, tipo, ultimo_derrape}
-      no_reconocidas   lista de (nº línea, texto) que no casó con ningún patrón
+      no_reconocidas   lista de (nº linea, texto) que no caso con ningun patron
     """
 
     def __init__(self):
@@ -222,24 +204,25 @@ class Carrera:
 
 
 def parsear_log(ruta: Path) -> Carrera:
-    """Una pasada por el log casando cada línea contra su regex.
+    """Una pasada por el log casando cada linea contra su regex.
 
-    El log es secuencial y los mensajes multilínea ([ZONA] estado y [PERFIL]
-    volcado) van SIEMPRE seguidos: se abren con su cabecera y las líneas
-    siguientes que casen con el patrón "item" se añaden al último registro
+    El log es secuencial y los mensajes multilinea ([ZONA] estado y [PERFIL]
+    volcado) van siempre seguidos: se abren con su cabecera y las lineas
+    siguientes que casen con el patron "item" se añaden al ultimo registro
     abierto. Los timestamps HH:MM:SS.mmm se convierten a segundos desde la
-    primera línea (con corrección de +24 h si cruzara medianoche)."""
+    primera linea"""
+
     c = Carrera()
     filas_frame = []
     filas_derrape = []
     filas_celda = []
 
-    t0 = None          # segundos absolutos de la primera línea con hora
-    t_prev = 0.0       # último t relativo visto (para detectar medianoche)
+    t0 = None          # segundos absolutos de la primera linea con hora
+    t_prev = 0.0       # ultimo t relativo visto
     ajuste_dia = 0.0   # se suma 86400 cada vez que la hora "retrocede"
     vuelta_actual = 0  # contexto de vuelta para snapshots/castigos
 
-    # Registros multilínea abiertos (None cuando no hay ninguno en curso)
+    # Registros multilinea abiertos (None cuando no hay ninguno en curso)
     estado_abierto = None
     snapshot_abierto = None
 
@@ -265,19 +248,19 @@ def parsear_log(ruta: Path) -> Carrera:
         if t0 is None:
             t0 = t_abs
         t = t_abs - t0 + ajuste_dia
-        if t < t_prev - 43200:  # la hora retrocedió >12 h: cruzó medianoche
+        if t < t_prev - 43200:  # la hora retrocedio >12 h: cruzo medianoche
             ajuste_dia += 86400.0
             t += 86400.0
         t_prev = t
 
         # Los [INIT] llevan pares clave=valor sueltos: se acumulan todos en el
-        # dict de parámetros (v_min, v_max, umbral_derrape, paso_celda...)
+        # dict de parametros (v_min, v_max, umbral_derrape, paso_celda...)
         if cuerpo.startswith("[INIT]"):
             for clave, valor in re.findall(r"(\w+)=(-?[\d.]+)", cuerpo):
                 c.params[clave] = float(valor)
             continue
 
-        # --- continuaciones de mensajes multilínea (van antes que el resto
+        # --- continuaciones de mensajes multilinea (van antes que el resto
         # porque sus patrones son subconjuntos de otros mensajes [ZONA]/[PERFIL])
         if estado_abierto is not None:
             m = RE_ZONA_ESTADO_ITEM.search(cuerpo)
@@ -292,7 +275,7 @@ def parsear_log(ruta: Path) -> Carrera:
                     }
                 )
                 continue
-            estado_abierto = None  # primera línea que no es item: se cierra
+            estado_abierto = None  # primera linea que no es item: se cierra
         if snapshot_abierto is not None:
             m = RE_PERFIL_ITEM.search(cuerpo)
             if m:
@@ -306,15 +289,15 @@ def parsear_log(ruta: Path) -> Carrera:
                 )
                 continue
             if RE_PERFIL_COMPACTO.search(cuerpo):
-                continue  # la línea perfil=[[...]] es redundante con los items
+                continue  # la linea perfil=[[...]] es redundante con los items
             snapshot_abierto = None
 
-        # --- [FRAME]: el tipo más frecuente, se prueba primero
+        # --- [FRAME]: el tipo mas frecuente, se prueba primero
         m = RE_FRAME.search(cuerpo)
         if m:
             g = m.groups()
-            # Índices de grupo (0-based): 0 frame, 1 vuelta, 2-3 front x/y,
-            # 4 c_f, 5 d_f, 6-9 back x/y/c/d (None si no se localizó),
+            # Indices de grupo (0-based): 0 frame, 1 vuelta, 2-3 front x/y,
+            # 4 c_f, 5 d_f, 6-9 back x/y/c/d (None si no se localizo),
             # 10 derrapando, 11-13 zona ini/fin/tipo (None si zona=?),
             # 14 pwm, 15 margen
             vuelta_actual = int(g[1])
@@ -466,13 +449,7 @@ def parsear_log(ruta: Path) -> Carrera:
                 }
             )
             continue
-        # Las dos caras del MISMO evento: la cámara que se queda sin
-        # trayectoria al retroceder apunta un "Derrame" y la precedente, en el
-        # mismo instante, una "Reducción externa". Se guarda `t_abs` (segundos
-        # desde medianoche) y no el `t` relativo que usa el resto del parser,
-        # porque el `t` va referido al t0 de SU log y cada cámara tiene el suyo:
-        # para casar las dos caras hace falta un reloj común, y lo es porque los
-        # dos logs los escribe el mismo proceso (ver enlazar_zonas_entre_camaras)
+
         m = RE_ZONA_DERRAME.search(cuerpo)
         if m:
             c.derrames.append(
@@ -518,7 +495,7 @@ def parsear_log(ruta: Path) -> Carrera:
                     "derr_antes": int(m.group(3)),
                     "derr_despues": int(m.group(4)),
                     "hubo_local": m.group(5) == "True",
-                    "sube": None,  # se rellena con la línea siguiente
+                    "sube": None,  # se rellena con la linea siguiente
                     "motivo_no": "",
                 }
             )
@@ -593,59 +570,48 @@ def parsear_log(ruta: Path) -> Carrera:
     c.celdas = pd.DataFrame(
         filas_celda, columns=["celda", "x", "y", "gigante", "long_px", "acum"]
     )
-    # Los números de frame del log son de ESTA cámara y solo tienen sentido
-    # dentro de su escala, así que la cámara acompaña al número en todos los
-    # textos que este módulo genera (avisos de anomalías, etiquetas)
+
     c.camara = camara_del_log(ruta)
     return c
 
 
-# ---------------------------------------------------------------------------
-# Derivados por vuelta
-# ---------------------------------------------------------------------------
+
 def zonas_a_celdas(zonas, n_celdas):
-    """Expande una partición de zonas a un array de PWM por celda (NaN donde
-    ninguna zona cubra, que no debería pasar)."""
+    """Expande una particion de zonas a un array de PWM por celda (NaN donde
+    ninguna zona cubra, que no deberia pasar)"""
     arr = np.full(n_celdas, np.nan)
     for z in zonas:
         arr[z["ini"]: z["fin"] + 1] = z["pwm"]
     return arr
 
 
+
 def celdas_de_zona(zona, n_celdas):
     """Celdas de una zona en orden de recorrido.
 
-    Si `fin` < `ini` la zona ENVUELVE la meta (solo pasa en cadena cerrada, ver
-    unir_por_la_meta) y se recorre del `ini` al final de la cadena y luego del 0
-    al `fin`. Es el mismo criterio que `_intervalo_a_celdas()` del algoritmo."""
+    Si fin < ini la zona envuelve la meta, solo en cadena cerrada
+    Se recorre del ini al final de la cadena y luego del 0
+    al fin"""
+
     if zona["fin"] >= zona["ini"]:
         return list(range(zona["ini"], zona["fin"] + 1))
     return list(range(zona["ini"], n_celdas)) + list(range(0, zona["fin"] + 1))
 
 
+
 def unir_por_la_meta(zonas, n_celdas, cerrada):
-    """Funde en UNA las dos zonas de los extremos de la partición cuando en la
-    pista son la misma, separadas solo por la línea de meta.
+    """Funde en una las dos zonas de los extremos de la particion cuando en la
+    pista son la misma, separadas solo por la linea de meta.
 
-    En cadena cerrada la celda n-1 es vecina de la 0, pero la partición del
-    algoritmo es una lista plana de intervalos [ini, fin] sin envoltura: cuando
-    un castigo cae en medio de la zona libre, `_carvear_particion()` deja los
-    dos trozos que sobresalen como zonas distintas aunque sean el mismo tramo de
-    pista. En el log del óvalo se ve tal cual: [0-46] libre pwm=91, [47-68]
-    derrape pwm=89 y [69-88] libre pwm=91, tres zonas para lo que en la pista
-    son dos. Aquí se deshace ese corte para DIBUJARLO como es (el algoritmo se
-    queda como está: los dos trozos tienen el mismo valor y suben juntos, así
-    que el resultado es el mismo).
+    [0-46] libre pwm=91, [47-68] derrape pwm=89 y [69-88] libre pwm=91
 
-    Se unen solo si la primera empieza en la celda 0, la última acaba en la
-    n-1 y las dos comparten `tipo` y `pwm`: con el mismo valor ya se pintan como
-    un bloque continuo del mismo color, así que unirlas es contar lo que se ve.
-    Si el PWM difiere son dos zonas de verdad y no se tocan (pasa en el mismo
-    log: [0-80] derrape pwm=85 junto a [85-88] derrape pwm=90).
+    Tres zonas para lo que en la pista son dos. 
+    Aqui se deshace ese corte para dibujarlo como es.
 
-    La zona unida va con `fin` < `ini` (la marca de que envuelve) y con
-    `cruza_meta=True`, que es lo que la gráfica 4 usa para decirlo en la
-    leyenda. No modifica los dicts de entrada."""
+    Se unen solo si la primera empieza en la celda 0, la ultima acaba en la
+    n-1 y las dos comparten tipo y pwm
+
+    La zona unida va con fin < ini y con cruza_meta=True"""
     if not cerrada or len(zonas) < 2:
         return list(zonas)
     primera, ultima = zonas[0], zonas[-1]
@@ -657,64 +623,47 @@ def unir_por_la_meta(zonas, n_celdas, cerrada):
     # El historial de vueltas con derrape solo lo traen los vuelcos [ZONA]
     if "vueltas" in primera and "vueltas" in ultima:
         unida["vueltas"] = sorted(set(ultima["vueltas"]) | set(primera["vueltas"]))
-    # La unida se queda al final: la lista sigue ordenada por `ini`
+    # La unida se queda al final: la lista sigue ordenada por ini
     return list(zonas[1:-1]) + [unida]
 
 
 def seguir_zonas(vueltas, zonas_ini_vuelta, n_celdas, cerrada):
-    """Sigue la PISTA de cada zona a lo largo de las vueltas: le pone un `id`
-    que no cambia mientras la zona viva y el `delta` de PWM respecto a la
-    vuelta anterior. Devuelve {v: [zona]} con COPIAS enriquecidas.
+    """Para cada vuelta añade informacion extra a las zonas. Un id que no
+    cambia mientras la zona viva, y que por tanto permite seguirla de una
+    vuelta a otra, y un delta con lo que vario su PWM respecto a la vuelta
+    anterior. Devuelve un diccionario {vuelta: [zona]}, siendo zona el
+    diccionario del log (4 campos) +2 nuevos.
 
-    Hace falta porque el log NO numera las zonas: cada volcado [PERFIL] es una
-    partición nueva y completa de la cadena de celdas, y la única identidad que
-    trae una zona es su par (ini, fin)... que cambia justo cuando la zona crece,
-    la carvean o absorbe a la vecina. Sin este seguimiento la gráfica 4 no puede
-    dar a cada tramo un color estable y no se ve nacer ni morir a los tramos.
+    Hace falta porque el log no numera las zonas, cada escritura de [PERFIL] 
+    es una particion nueva y completa de la cadena de celdas. Sin este seguimiento 
+    la grafica 4 no puede dar a cada tramo un color estable y no se ve nacer ni morir 
+    a los tramos.
 
-    Antes de emparejar nada se deshace el corte de la meta (unir_por_la_meta),
-    para que la identidad se siga sobre la zona ENTERA: si no, el trozo de
-    después de la meta nace como zona nueva en cuanto un castigo parte la libre.
-
-    La identidad se deriva EMPAREJANDO las dos particiones por SOLAPE de celdas,
-    de forma voraz: se listan todos los pares (zona vieja, zona nueva) que
-    comparten alguna celda, se ordenan de más a menos celdas compartidas y se
-    casan uno a uno (cada zona solo puede casarse una vez); la nueva hereda el
-    id de la vieja con la que más comparte. Las nuevas que se quedan sin pareja
-    NACEN (id nuevo, nunca reutilizado) y las viejas sin pareja MUEREN. Esa
-    única regla cubre sin casos especiales las tres cosas que hace el algoritmo:
-      - castigo/crecimiento (una vieja <-> una nueva): mismo id, delta != 0
-      - fusión (dos viejas -> una nueva): gana la que aportaba más celdas, la
-        otra muere (y en la gráfica 4 libera su color)
-      - carveo/división (una vieja -> dos nuevas): la de mayor solape hereda,
-        la otra nace
-    Se trabaja con COPIAS (dict(z, ...)) y no tocando los dicts originales
-    porque el mismo volcado [PERFIL] lo comparten varias vueltas cuando entre
-    ellas no hubo volcado nuevo: escribir dentro mezclaría datos entre vueltas.
-
-    delta: pwm de esta vuelta menos el de la anterior para ESE MISMO id, o None
-    si la zona nace aquí (no hay con qué compararla).
+    Se usan copias y no los originales porque el mismo [PERFIL] lo comparten varias vueltas
+    cuando no se produce un cambio entre ellas. Envitando mezclar datos entre vueltas 
     """
     seguidas = {}
-    previas = []       # zonas ya enriquecidas de la vuelta anterior
+    previas = []       
     siguiente_id = 0
     for v in vueltas:
-        actuales = unir_por_la_meta(
-            [dict(z) for z in zonas_ini_vuelta.get(v, [])], n_celdas, cerrada)
-        # El solape se cuenta con CONJUNTOS de celdas y no restando ini/fin: así
-        # una zona que envuelve la meta se compara como cualquier otra
+        # Hace falta para deshacer el corte que provoca la meta
+        actuales = unir_por_la_meta([dict(z) for z in zonas_ini_vuelta.get(v, [])], n_celdas, cerrada)
+
         celdas_previas = [set(celdas_de_zona(z, n_celdas)) for z in previas]
         celdas_actuales = [set(celdas_de_zona(z, n_celdas)) for z in actuales]
-        # Pares con solape > 0, del que más comparte al que menos. El desempate
-        # va por (ini de la vieja, ini de la nueva) para que el resultado no
-        # dependa del orden en que python recorra la lista.
         pares = []
+
+        # Se comparan las zonas viejas con las nuevas y se guardan las parejas que comparten celdas
         for i, vieja in enumerate(previas):
             for j, nueva in enumerate(actuales):
                 solape = len(celdas_previas[i] & celdas_actuales[j])
                 if solape > 0:
+                    # solape va en negativo para que sorted() ponga primero el que mas comparte 
                     pares.append((-solape, vieja["ini"], nueva["ini"], i, j))
+
         casadas_viejas, casadas_nuevas = set(), set()
+
+        # Se asocian los ids de las zonas viejas a las zonas nuevas
         for _, _, _, i, j in sorted(pares):
             if i in casadas_viejas or j in casadas_nuevas:
                 continue
@@ -722,66 +671,45 @@ def seguir_zonas(vueltas, zonas_ini_vuelta, n_celdas, cerrada):
             casadas_nuevas.add(j)
             actuales[j]["id"] = previas[i]["id"]
             actuales[j]["delta"] = actuales[j]["pwm"] - previas[i]["pwm"]
+
+        # Se crean ids nuevos para las zonas que se quedaron sin pareja
         for j, nueva in enumerate(actuales):
             if j not in casadas_nuevas:
                 nueva["id"] = siguiente_id
                 nueva["delta"] = None
                 siguiente_id += 1
+
         seguidas[v] = actuales
         previas = actuales
+
     return seguidas
 
 
-# ---------------------------------------------------------------------------
-# Enlace de zonas ENTRE cámaras (derrame)
-# ---------------------------------------------------------------------------
-# Segundos de margen para dar por simultáneos un "Derrame" y la "Reducción
-# externa" que provoca. En los logs de pista van a 1 ms: los escribe el MISMO
-# proceso (el controlador), uno justo detrás del otro dentro del mismo callback.
-# Medio segundo es holgadísimo y sigue siendo mil veces menor que la separación
-# entre dos derrames consecutivos (varios segundos), así que no puede cruzarlos.
+# Segundos de margen para dar por simultaneos un "Derrame" y la "Reduccion externa" que provoca
 TOLERANCIA_ENLACE_S = 0.5
-# Margen en px para dar por iguales las dos cifras. El algoritmo escribe el
-# mismo float por los dos lados, así que en la práctica coinciden exactas; el
-# margen solo cubre el redondeo del texto del log (un decimal).
+# Margen en px para dar por iguales las dos cifras. 
+# El algoritmo escribe el mismo float por los dos lados
 TOLERANCIA_ENLACE_PX = 0.5
-
-
 def enlazar_zonas_entre_camaras(datos_camaras,
                                 tol_px=TOLERANCIA_ENLACE_PX,
                                 tol_s=TOLERANCIA_ENLACE_S):
-    """Zonas que son la MISMA zona de derrape partida entre dos cámaras.
+    """Zonas que son la misma zona de derrape partida entre dos camaras.
 
-    Devuelve {(camara, id_zona): clave_de_grupo}; las zonas sin enlazar NO
-    aparecen en el mapa. La gráfica 4 usa esa clave para repartir el estilo, de
-    modo que las dos mitades salen del mismo color y la misma forma y se leen
-    como lo que son: un único tramo de pista en el que el coche derrapa.
+    Devuelve {(camara, id_zona): clave_de_grupo}. La grafica 4 usa esa clave 
+    para repartir el estilo, de modo que las dos mitades salen del mismo color 
+    y la misma forma
 
-    Hace falta porque `seguir_zonas()` trabaja sobre UNA cámara: sus `id` son
-    locales y dos cámaras no comparten ni coordenadas ni numeración de celdas.
-    Nadie mira entre cámaras, así que una curva repartida entre dos encuadres
-    salía como dos zonas independientes y parecían dos problemas distintos.
+    El log deja las partes del evento:
+    Quien se queda sin trayectoria al retroceder escribe "[ZONA] Derrame: ... N px" 
+    Quien va despues escribe "[ZONA] Reduccion externa: ... N px ...". 
+    Se unen por los px y por la marca de tiempo 
 
-    El log NO nombra a la otra cámara, pero sí deja las dos caras del evento:
-    quien se queda sin trayectoria al retroceder escribe "[ZONA] Derrame: ... N
-    px" y la precedente "[ZONA] Reducción externa: ... N px ...". Se casan por
-    los px y por la marca de tiempo (ver TOLERANCIA_ENLACE_S), de forma voraz y
-    uno a uno, del par más próximo en el tiempo al más lejano: mismo criterio
-    que el emparejamiento por solape de `seguir_zonas()`.
-
-    Sabido el par de cámaras, QUÉ zona es cada extremo lo fija la construcción
-    del algoritmo, sin heurística:
-      - en la EMISORA, la que toca la celda 0 (el retroceso se salió justo por
-        el inicio de la cadena, que es lo que genera el derrame);
-      - en la RECEPTORA, la que toca la última celda (`aplicar_reduccion_externa`
-        extiende hacia atrás desde el final de su trayectoria).
-    La zona que nace en la vuelta V aparece en la partición del inicio de V+1,
-    así que se busca en la primera vuelta posterior de la que haya datos.
+    La zona que nace en la vuelta V aparece en la particion del inicio de V+1,
+    asi que se busca en la primera vuelta posterior de la que haya datos.
 
     Los grupos se cierran con union-find para que un derrame en cascada
     (A -> B -> C, cuando tampoco cabe en B) deje las tres zonas en el mismo
-    grupo. La clave del grupo es el menor de sus (camara, id): es estable entre
-    ejecuciones y no hace falta un contador nuevo.
+    grupo. La clave del grupo es el menor de sus (camara, id) 
     """
     # --- union-find sobre claves (camara, id) ---
     padre = {}
@@ -796,14 +724,12 @@ def enlazar_zonas_entre_camaras(datos_camaras,
     def unir(a, b):
         ra, rb = raiz(a), raiz(b)
         if ra != rb:
-            # El menor manda, así la clave del grupo no depende del orden en
-            # que se hayan ido uniendo los pares
             mayor, menor = max(ra, rb), min(ra, rb)
             padre[mayor] = menor
 
     def zona_en_celda(cam, vuelta_evento, celda):
-        """(cam, id) de la zona que cubre `celda` en la primera partición
-        posterior al evento, o None si no hay ninguna."""
+        """(cam, id) de la zona que cubre celda en la primera particion
+        posterior al evento, o None si no hay ninguna"""
         d = datos_camaras[cam]
         posteriores = [v for v in d["vueltas"] if v > vuelta_evento]
         if not posteriores:
@@ -814,7 +740,7 @@ def enlazar_zonas_entre_camaras(datos_camaras,
                 return (cam, z["id"])
         return None
 
-    # --- candidatos (derrame de A, externa de B) ordenados por cercanía ---
+    # --- candidatos (derrame de A, externa de B) ordenados por cercania ---
     candidatos = []
     for cam_a, d_a in datos_camaras.items():
         for cam_b, d_b in datos_camaras.items():
@@ -825,7 +751,7 @@ def enlazar_zonas_entre_camaras(datos_camaras,
                     if abs(der["px"] - ext["px"]) > tol_px:
                         continue
                     dt = abs(der["t_abs"] - ext["t_abs"])
-                    # Por si la sesión cruza medianoche: t_abs se reinicia a 0
+                    # Por si la sesion cruza medianoche: t_abs se reinicia a 0
                     dt = min(dt, 86400.0 - dt)
                     if dt <= tol_s:
                         candidatos.append((dt, cam_a, i, cam_b, j))
@@ -837,15 +763,15 @@ def enlazar_zonas_entre_camaras(datos_camaras,
             continue
         der = datos_camaras[cam_a]["c"].derrames[i]
         ext = datos_camaras[cam_b]["c"].externas[j]
-        # Emisora: la zona pegada al INICIO. Receptora: la pegada al FINAL
+        # Emisora: la zona pegada al inicio. Receptora: la pegada al final
         za = zona_en_celda(cam_a, der["vuelta"], 0)
         zb = zona_en_celda(
             cam_b, ext["vuelta"], max(datos_camaras[cam_b]["c"].n_celdas - 1, 0))
         usados_der.add((cam_a, i))
         usados_ext.add((cam_b, j))
         if za is None or zb is None:
-            # El evento cayó en la última vuelta del log y no llegó a haber una
-            # partición posterior donde mirar: no se puede enlazar
+            # El evento cayo en la ultima vuelta del log y no llego a haber una
+            # particion posterior donde mirar no se puede enlazar
             continue
         unir(za, zb)
         enlaces += 1
@@ -861,12 +787,11 @@ def derivar_por_vuelta(c: Carrera):
     """Reconstruye el estado del algoritmo vuelta a vuelta.
 
     Devuelve (vueltas, perfil_vuelta, zonas_ini_vuelta):
-      vueltas          lista ordenada de números de vuelta con frames
-      perfil_vuelta    {v: array de PWM por celda} = perfil CON EL QUE SE
-                       CORRIÓ la vuelta v (último volcado [PERFIL] anterior a
+      vueltas          lista ordenada de numeros de vuelta con frames
+      perfil_vuelta    {v: array de PWM por celda} = perfil con el que se
+                       corrio la vuelta v (ultimo volcado [PERFIL] anterior a
                        su primer frame)
-      zonas_ini_vuelta {v: [zona]} = partición al EMPEZAR la vuelta v, con el
-                       `id` y el `delta` que les pone seguir_zonas()
+      zonas_ini_vuelta {v: [zona]} diccionario que devuelve seguir_zonas()
     """
     vueltas = sorted(c.frames["vuelta"].unique().tolist())
     primera_linea = c.frames.groupby("vuelta")["linea"].min().to_dict()
@@ -874,8 +799,8 @@ def derivar_por_vuelta(c: Carrera):
     perfil_vuelta = {}
     zonas_ini_vuelta = {}
     for v in vueltas:
-        # El perfil de la vuelta v es el último volcado [PERFIL] ANTERIOR a su
-        # primer frame: con ese es con el que el coche corrió la vuelta.
+        # El perfil de la vuelta v es el ultimo volcado [PERFIL] anterior a su
+        # primer frame: con ese es con el que el coche corrio la vuelta
         candidatos = [s for s in c.snapshots_perfil if s["linea"] < primera_linea[v]]
         if candidatos:
             perfil_vuelta[v] = zonas_a_celdas(candidatos[-1]["zonas"], c.n_celdas)
@@ -888,12 +813,12 @@ def derivar_por_vuelta(c: Carrera):
 
 
 def tabla_vueltas(c: Carrera, vueltas, perfil_vuelta) -> pd.DataFrame:
-    """Tabla resumen con una fila por vuelta: derrapes, si el perfil subió al
-    terminarla, duración, PWM medio (del perfil y el realmente aplicado) y
-    velocidad media medida (celdas/s convertidas a px/s)."""
+    """Tabla resumen con una fila por vuelta: derrapes, si el perfil subio al
+    terminarla, duracion, PWM medio (del perfil y el realmente aplicado) y
+    velocidad media medida (celdas/s convertidas a px/s)"""
     paso = c.params.get("paso_celda", 30.0)
-    # El bloque [VUELTA v] se emite al CRUZAR meta: cierra la vuelta v-1 y abre
-    # la v. Por eso los datos "de cierre" de la vuelta v salen de [VUELTA v+1].
+    # El bloque [VUELTA v] se emite al cruzar meta: cierra la vuelta v-1 y abre
+    # la v. Por eso los datos "de cierre" de la vuelta v salen de [VUELTA v+1]
     reg_por_vuelta = {r["vuelta"]: r for r in c.vueltas_reg}
     filas = []
     for v in vueltas:
@@ -905,8 +830,7 @@ def tabla_vueltas(c: Carrera, vueltas, perfil_vuelta) -> pd.DataFrame:
         duracion = (cierre["t"] - t_ini) if cierre else np.nan
 
         # Velocidad media: avances de celda entre frames consecutivos por el
-        # paso de celda, filtrando saltos enormes (localización falsa o cruce
-        # del origen en cadena cerrada) y huecos temporales (frames perdidos)
+        # paso de celda, filtrando saltos enormes y huecos temporales
         dc = fr["c_f"].diff().abs()
         dt = fr["t"].diff()
         validos = (dc <= 3) & (dt > 0) & (dt < 0.25)
@@ -932,10 +856,10 @@ def tabla_vueltas(c: Carrera, vueltas, perfil_vuelta) -> pd.DataFrame:
 
 
 def camara_del_log(ruta: Path) -> str:
-    """Nombre de la cámara de un log, leído de su línea "[INIT] nodo=...
-    camara=camara_01" (los pares no numéricos no entran en Carrera.params).
-    Si no aparece se usa el nombre del fichero, que siempre lo lleva detrás
-    del último guion bajo (derrapesLog_<nodo>_<camara>.txt)."""
+    """Nombre de la camara de un log, leido de su linea "[INIT] nodo=...
+    camara=camara_01" (los pares no numericos no entran en Carrera.params).
+    Si no aparece se usa el nombre del fichero, que siempre lo lleva detras
+    del ultimo guion bajo (derrapesLog_<nodo>_<camara>.txt)"""
     with open(ruta, encoding="utf-8") as f:
         for linea in f:
             m = re.search(r"\[INIT\] nodo=\S+ camara=(\S+)", linea)

@@ -1,28 +1,24 @@
 // Interactividad del dashboard. Se incrusta al final del <body>, cuando todos
-// los <div> de plotly existen ya. Cada bloque sale sin hacer nada si su
-// gráfica no está en la página (una sesión sin logs no tiene la 4 ni la 6).
+// los <div> de plotly existen ya
 //
-// Estos dos ids los pone pagina.py al crear los <div>: si cambian allí, hay
-// que cambiarlos aquí.
-const ID_GRAFICA_2 = "g-trayectorias";   // sección 2, trayectorias
-const ID_GRAFICA_3 = "g-derrape-bag";    // sección 3, distancia de derrape
+// Estos dos ids los pone pagina.py al crear los <div>
+// Ojo si cambian alli hay que cambiarlos aqui
+const ID_GRAFICA_2 = "g-trayectorias";   // seccion 2, trayectorias
+const ID_GRAFICA_3 = "g-derrape-bag";    // seccion 3, distancia de derrape
 
-// Índice del paso activo de un slider (0 si no tiene).
+// Indice del paso activo de un slider (0 si no tiene)
 function vueltaActiva(gd) {
   const s = (gd.layout.sliders || [])[0];
   return s ? (s.active || 0) : 0;
 }
 
 // ---------------------------------------------------------------------------
-// Sección 2: los checkboxes que quitan o ponen cada capa
+// Seccion 2: los checkboxes que quitan o ponen cada capa
 // ---------------------------------------------------------------------------
-// Son checkboxes HTML y no un `updatemenus` de plotly porque los dos controles
-// tocarían lo mismo (`visible`) y se pisarían: el slider de vueltas volvería a
-// encender una capa que el checkbox acaba de apagar. Por eso se RE-APLICA el
-// estado de los checkboxes después de cada cambio de vuelta.
+// Son checkboxes HTML  
+// El slider de vueltas volveria a encender una capa que el checkbox acaba de apagar. 
+// Por eso se reaplica el estado de los checkboxes despues de cada cambio de vuelta
 //
-// Los índices de traza viajan en `layout.meta` (los pone grafica_2_trayectorias):
-// así este script no necesita saber cómo está montada la figura.
 (function () {
   const gd = document.getElementById(ID_GRAFICA_2);
   const cont = document.getElementById("checks-tray-2");
@@ -30,11 +26,10 @@ function vueltaActiva(gd) {
 
   function marcado(serie) {
     const el = cont.querySelector('input[data-serie="' + serie + '"]');
-    return el ? el.checked : true;  // capa sin checkbox: se deja como esté
+    return el ? el.checked : true;  
   }
 
-  // Aplica el estado de los checkboxes a la vuelta ACTIVA. Las capas por vuelta
-  // solo tocan la traza de esa vuelta; las demás ya las apagó el slider.
+  // Aplica el estado de los checkboxes a la vuelta activa
   function reaplicar() {
     const meta = gd.layout.meta || {};
     const k = vueltaActiva(gd);
@@ -55,21 +50,19 @@ function vueltaActiva(gd) {
     if (on.length) Plotly.restyle(gd, {visible: true}, on);
   }
 
-  gd.__reaplicar = reaplicar;   // lo llama la sincronización de más abajo
+  gd.__reaplicar = reaplicar;   
   cont.querySelectorAll('input[type="checkbox"]').forEach(function (el) {
     el.addEventListener("change", reaplicar);
   });
-  // Al cambiar de vuelta, el slider reescribe todas las visibilidades: hay que
-  // volver a imponer lo marcado, en un tick aparte, cuando plotly ya terminó.
+  // Al cambiar de vuelta, el slider reescribe todas las visibilidades
   gd.on("plotly_sliderchange", function () { setTimeout(reaplicar, 0); });
   reaplicar();
 })();
 
 // ---------------------------------------------------------------------------
-// Sección 3: las flechas ← y → cambian de vuelta
+// Seccion 3: las flechas ← y → cambian de vuelta
 // ---------------------------------------------------------------------------
-// Solo mientras el ratón está ENCIMA de la gráfica: así no se le roban las
-// teclas al resto de la página y no hay que hacer clic en ningún sitio.
+// Solo mientras el raton esta encima de la grafica
 (function () {
   const gd = document.getElementById(ID_GRAFICA_3);
   if (!gd) return;
@@ -82,23 +75,19 @@ function vueltaActiva(gd) {
     if (ev.key === "ArrowRight") paso = 1;
     else if (ev.key === "ArrowLeft") paso = -1;
     else return;
-    ev.preventDefault();   // que la página no se desplace con las flechas
+    ev.preventDefault();   // que la pagina no se desplace con las flechas
     const slider = gd.layout.sliders[0];
     const actual = vueltaActiva(gd);
     const k = Math.min(slider.steps.length - 1, Math.max(0, actual + paso));
     if (k === actual) return;
-    // El paso ya lleva su array de visibilidad: se aplica igual que si se
-    // hubiera pinchado en él.
     Plotly.update(gd, slider.steps[k].args[0], {"sliders[0].active": k});
   });
 })();
 
 // ---------------------------------------------------------------------------
-// La vuelta de la sección 2 y la de la 3 van atadas
+// La vuelta de la seccion 2 y la de la 3 van atadas
 // ---------------------------------------------------------------------------
-// Se miran juntas ("veo algo raro en el trazado de la vuelta 12, quiero su
-// distancia de derrape"). Las dos usan el número de vuelta como etiqueta del
-// paso, así que casan directamente.
+// Las dos usan el numero de vuelta como etiqueta hay que unirlas 
 (function () {
   const g2 = document.getElementById(ID_GRAFICA_2);
   const g3 = document.getElementById(ID_GRAFICA_3);
@@ -136,13 +125,10 @@ function vueltaActiva(gd) {
 // ---------------------------------------------------------------------------
 // El PDF sale de la vuelta que marque el slider
 // ---------------------------------------------------------------------------
-// El estado del slider vive SOLO en el navegador: el go.Figure que guarda el
-// servidor sigue como se construyó. Justo antes de que el enlace navegue se le
+// El estado del slider vive en el navegador. El go.Figure que guarda el
+// servidor sigue como se construyo. Justo antes de que el enlace navegue se le
 // añade &vuelta=<etiqueta del paso activo>, que es lo que el endpoint /pdf ya
-// sabe atender. Sin esto, el botón bajaría siempre la primera vuelta.
-//
-// Lo que NO arregla: los checkboxes de capas de la sección 2, que tampoco
-// viajan al servidor, así que el PDF sale con todas las capas.
+// sabe atender. Sin esto, el boton bajaria siempre la primera vuelta
 (function () {
   document.querySelectorAll('a.boton[data-grafica]').forEach(function (a) {
     const base = a.getAttribute("href");

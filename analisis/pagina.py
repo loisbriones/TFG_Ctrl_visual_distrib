@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """
-El HTML: convierte las figuras ya construidas en las secciones de la página y
-las mete en la plantilla.
-
-El marcado, el estilo y la interactividad viven en web/ (plantilla.html,
-estilos.css y panel.js); aquí solo se rellenan huecos. La página resultante es
-AUTOCONTENIDA —el CSS, el JS y plotly.js van incrustados— para que se pueda
-abrir con doble clic desde cualquier sitio.
+Apartir de las figuras ya construidas por figuras.py (objetos
+go.Figure), las convierte en HTML y las coloca en el esqueleto de
+web/plantilla.html junto con el titulo de cada seccion, su explicacion y su
+boton de PDF
 """
 
 import html
@@ -18,42 +15,35 @@ from textos import TEXTOS, TEXTOS_VACIOS, TITULOS
 
 WEB = Path(__file__).resolve().parent / "web"
 
-# Ids de los <div> que panel.js busca por nombre: cambiar uno aquí obliga a
-# cambiarlo también allí.
+# Ids de los <div> que web/panel.js busca por nombre
+# Cambiar uno aqui obliga a cambiarlo tambien alli
 ID_GRAFICA_2 = "g-trayectorias"
 ID_GRAFICA_3 = "g-derrape-bag"
 
-# Los botones de PDF llevan a un endpoint del servidor, así que con
-# --sin-servidor no llevarían a ningún sitio: en vez de salir muertos, no
-# salen. Lo pone analisis.py al arrancar.
+# Los botones de PDF llevan a un endpoint del servidor, asi que con --sin-servidor no llevarian a ningun sitio
 CON_SERVIDOR = True
 
-# Config de plotly común a todas las figuras incrustadas
+# Config de plotly comun a todas las figuras incrustadas
 CONFIG_PLOTLY = {"displaylogo": False, "responsive": True}
 
 
-# ---------------------------------------------------------------------------
-# Piezas sueltas
-# ---------------------------------------------------------------------------
-def id_div_figura(clave):
-    """id del <div> de una figura. Hace falta uno estable (plotly pondría un
-    UUID distinto en cada generación) para que el botón de PDF la encuentre."""
-    return "g-fig-" + clave.replace(":", "-")
 
+def id_div_figura(clave):
+    """id del <div> de una figura. Hace falta uno estable (plotly pone un
+    UUID distinto en cada generacion) para que el boton de PDF la encuentre"""
+    return "g-fig-" + clave.replace(":", "-")
 
 def boton_pdf(clave, etiqueta="Descargar PDF", div_id=None):
     """Enlace al endpoint /pdf. Con div_id, panel.js le añade al vuelo la
-    vuelta que marque el slider justo antes de pinchar."""
+    vuelta que marque el slider justo antes de pinchar"""
     if not CON_SERVIDOR:
         return ""
     dato = f' data-grafica="{div_id}"' if div_id else ""
     return (f'<a class="boton" href="/pdf?fig={urllib.parse.quote(clave)}"'
             f"{dato} download>{html.escape(etiqueta)}</a>")
 
-
 def botones_paneles(claves_y_etiquetas, nombre_camara=""):
-    """La fila de botones para bajar cada subplot de la sección 6 por separado.
-    Sin servidor no hay botones, así que tampoco se pone el rótulo."""
+    """La fila de botones para bajar cada subplot de la seccion 6 por separado"""
     if not CON_SERVIDOR:
         return ""
     enlaces = "".join(boton_pdf(clave, etiqueta)
@@ -62,41 +52,34 @@ def botones_paneles(claves_y_etiquetas, nombre_camara=""):
     return controles(f'<span style="font-size:12px">PDF de cada panel por '
                      f"separado{html.escape(sufijo)}: </span>" + enlaces)
 
-
 def controles(*piezas):
-    """La fila que va debajo de una gráfica (botones, checkboxes). Vacía si no
-    queda ninguna pieza, para no dejar un hueco en blanco."""
+    """La fila que va debajo de una grafica (botones, checkboxes)"""
     contenido = "".join(p for p in piezas if p)
     return f'<div class="controles">{contenido}</div>' if contenido else ""
 
-
 def incrustar(fig, clave=None, con_plotlyjs=False):
-    """Una figura como HTML. Solo la PRIMERA figura del documento embebe
-    plotly.js (~3 MB); las demás reutilizan esa copia."""
+    """Una figura como HTML. Solo la primera figura del documento embebe
+    plotly.js 
+    Las demas reutilizan esa copia"""
     return fig.to_html(full_html=False, include_plotlyjs=con_plotlyjs,
                        div_id=id_div_figura(clave) if clave else None,
                        config=CONFIG_PLOTLY)
 
-
 def envolver(clave, cuerpo):
-    """Una <section> con su título y su explicación delante del cuerpo."""
+    """Una <section> con su titulo y su explicacion delante del cuerpo"""
     return (f"<section><h2>{html.escape(TITULOS[clave])}</h2>"
             f"<p>{TEXTOS[clave]}</p>{cuerpo}</section>")
 
 
+
 def seccion_vacia(clave):
-    """La sección cuando el bag o los logs no traen lo que necesita."""
+    """La seccion cuando el bag o los logs no traen lo que necesita"""
     return (f"<section><h2>{html.escape(TITULOS[clave])}</h2>"
             f"<p>{TEXTOS_VACIOS[clave]}</p></section>")
 
-
-# ---------------------------------------------------------------------------
-# Las secciones
-# ---------------------------------------------------------------------------
 def seccion(clave, figs, claves, primera=False, extra=""):
-    """Sección estándar: título, explicación y una figura por cámara, cada una
-    con su botón de PDF. `claves` es paralela a `figs` y lleva la clave con la
-    que cada figura quedó registrada (la que usa el endpoint /pdf)."""
+    """Seccion estandar: titulo, explicacion y una figura por camara, cada una
+    con su boton de PDF"""
     cuerpo = []
     for i, (fig, clave_fig) in enumerate(zip(figs, claves)):
         cuerpo.append(incrustar(fig, clave_fig, con_plotlyjs=primera and i == 0))
@@ -104,16 +87,14 @@ def seccion(clave, figs, claves, primera=False, extra=""):
                                           div_id=id_div_figura(clave_fig))))
     return envolver(clave, "".join(cuerpo) + extra)
 
-
 def seccion_trayectorias(fig, hay_base, primera):
-    """Sección 2. Lleva checkboxes para quitar y poner cada capa; el porqué de
-    que sean checkboxes HTML y no un menú de plotly está en panel.js."""
+    """Seccion 2. Lleva checkboxes para quitar y poner cada trayectoria"""
     def check(serie, etiqueta):
         return (f'<label><input type="checkbox" data-serie="{serie}" checked> '
                 f"{etiqueta}</label>")
 
-    # La delantera y la trasera siempre están; la base y sus perpendiculares
-    # solo si hay logs, que es de donde salen las celdas.
+    # La delantera y la trasera siempre estan; la base y sus perpendiculares
+    # solo si hay logs, que es de donde salen las celdas
     checks = [check("delantera", "Etiq. delantera"),
               check("trasera", "Etiq. trasera")]
     if hay_base:
@@ -131,9 +112,8 @@ def seccion_trayectorias(fig, hay_base, primera):
     return (f"<section><h2>{html.escape(TITULOS['2'])}</h2>"
             f"<p>{texto}</p>{cuerpo}</section>")
 
-
 def seccion_derrape_bag(fig_detalle, fig_resumen, primera):
-    """Sección 3: la serie muestra a muestra y, debajo, su resumen por vuelta."""
+    """Seccion 3. Lleva muestra a muestra y debajo resumen por vuelta"""
     cuerpo = (
         fig_detalle.to_html(full_html=False, include_plotlyjs=primera,
                             div_id=ID_GRAFICA_3, config=CONFIG_PLOTLY)
@@ -144,13 +124,8 @@ def seccion_derrape_bag(fig_detalle, fig_resumen, primera):
     )
     return envolver("3", cuerpo)
 
-
 def seccion_tiempos(vueltas, stats, fig_tendencia, fig_cajas, primera=False):
-    """Sección 5: la tabla de tiempos y, a su lado, la tendencia y las cajas.
-
-    OJO: comparativa.py lee esta tabla del HTML ya generado (busca
-    table.tiempos y las filas <tr class="..."><td>N</td><td>T.TTT). Cambiar su
-    marcado deja sin leer todos los análisis guardados."""
+    """Seccion 5: la tabla de tiempos y al lado la tendencia y las cajas"""
     filas = []
     for v in vueltas:
         clases, nota = [], ""
@@ -168,8 +143,6 @@ def seccion_tiempos(vueltas, stats, fig_tendencia, fig_cajas, primera=False):
              "<th>tiempo (s)</th></tr></thead><tbody>"
              + "".join(filas) + f"</tbody><tfoot>{pie}</tfoot></table>")
 
-    # Las cajas van justo debajo de la tendencia, en la misma columna: las dos
-    # tienen la vuelta en el eje X y se leen una encima de otra.
     cajas = ""
     if fig_cajas is not None:
         cajas = (f'<p>{TEXTOS["5-cajas"]}</p>' + incrustar(fig_cajas, "5-cajas")
@@ -182,10 +155,9 @@ def seccion_tiempos(vueltas, stats, fig_tendencia, fig_cajas, primera=False):
               f"{cajas}</div></div>")
     return envolver("5", cuerpo)
 
-
 def seccion_resumen(nombre_bag, n_posiciones, n_validas, n_vueltas,
                     n_telemetria, logs):
-    """La cabecera: de dónde salen los datos y qué trae cada log."""
+    """La cabecera: de donde salen los datos y que trae cada log"""
     lineas = "".join(
         f"<li><code>{html.escape(d['ruta'].name)}</code> ({camara}): "
         f"{len(d['vueltas'])} vueltas, cadena de {d['c'].n_celdas} celdas "
@@ -202,12 +174,9 @@ def seccion_resumen(nombre_bag, n_posiciones, n_validas, n_vueltas,
     )
 
 
-# ---------------------------------------------------------------------------
-# La página entera
-# ---------------------------------------------------------------------------
+
 def _estilos():
-    """El CSS, con los colores de figuras.py puestos en sus variables: la
-    página y las gráficas comparten paleta y no hay dos listas que cuadrar."""
+    """El CSS, con los colores de figuras.py puestos en sus variables"""
     paleta = {
         "--fuente": FUENTE,
         "--col-superficie": COL_SUPERFICIE,
@@ -220,10 +189,9 @@ def _estilos():
     return css.replace(":root { color-scheme: light; }",
                        ":root {\n  color-scheme: light;\n" + declaraciones + "\n}")
 
-
 def ensamblar(nombre, secciones):
-    """La plantilla con todo dentro. Son reemplazos de texto y no str.format
-    a propósito: el CSS y el JS están llenos de llaves."""
+    """Devuelve web/plantilla.html con sus marcadores {{...}} sustituidos"""
+
     pagina = (WEB / "plantilla.html").read_text(encoding="utf-8")
     for marcador, valor in (
         ("{{titulo}}", html.escape(nombre)),
@@ -232,12 +200,10 @@ def ensamblar(nombre, secciones):
         ("{{script}}", (WEB / "panel.js").read_text(encoding="utf-8")),
     ):
         pagina = pagina.replace(marcador, valor)
+
     return pagina
 
-
 def etiquetar_camara(fig, camara, varias):
-    """Con varias cámaras, el nombre de la cámara va al título de su figura
-    (las secciones por-cámara llevan una figura de cada)."""
     if varias:
         fig.update_layout(title_text=fig.layout.title.text + f" — {camara}")
     return fig

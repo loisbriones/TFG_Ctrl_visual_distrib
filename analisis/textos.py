@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 """
-Los títulos y las explicaciones que salen en la página, todos juntos para
-poder reescribirlos sin tocar el código que las coloca (pagina.py).
-
-Criterio: una frase de manejo si la sección tiene controles (slider, flechas,
-checkboxes) y dos o tres de qué se está mirando. El porqué de cada decisión
-de diseño va en el README, no en la página.
-
-Las claves son las mismas con las que las figuras se registran en FIGURAS,
-que son también las que viajan en la URL de /pdf.
+Los titulos y las explicaciones que salen en la pagina
 """
 
 TITULOS = {
@@ -35,7 +27,7 @@ TEXTOS = {
         "segmentos rojos van de la trasera hasta ella: son la distancia que "
         "mide el algoritmo. La estrella ámbar marca el inicio de la vuelta.",
 
-    # Sin logs no hay celdas, así que no hay trayectoria base ni perpendiculares
+    # Sin logs no hay celdas, asi que no hay trayectoria base ni perpendiculares
     "2-sin-base":
         "El recorrido de las dos pegatinas, una vuelta cada vez: el slider "
         "cambia de vuelta y los checkboxes quitan o ponen cada capa. La "
@@ -47,9 +39,8 @@ TEXTOS = {
         "La distancia de derrape que publicó el controlador, muestra a "
         "muestra dentro de una vuelta, con el PWM que se estaba aplicando en "
         "el eje derecho. Con el ratón encima, las flechas ← y → cambian de "
-        "vuelta. Cada punto lleva el color de la cámara que lo vio: un pico "
-        "estrecho que arranca justo en un cambio de cámara (línea de puntos "
-        "vertical) es falso, no un derrape.",
+        "vuelta. Cada punto lleva el color de la cámara que lo vio, y las "
+        "líneas de puntos verticales son los cambios de cámara.",
 
     "3-resumen":
         "La misma serie resumida a un valor por vuelta: el máximo, el "
@@ -84,7 +75,7 @@ TEXTOS = {
 }
 
 # Lo que sale en lugar de la figura cuando el bag o los logs no traen lo que
-# esa sección necesita. No es un error: hay grabaciones que no lo llevan.
+# esa seccion necesita. No es un error: hay grabaciones que no lo llevan
 TEXTOS_VACIOS = {
     "1": "El bag no tiene posiciones dentro de vueltas cronometradas.",
     "2": "El bag no tiene posiciones dentro de vueltas cronometradas.",
