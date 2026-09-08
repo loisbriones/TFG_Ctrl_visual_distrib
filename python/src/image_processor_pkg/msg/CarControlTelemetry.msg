@@ -1,8 +1,8 @@
 float64 dist_derrape
 bool estado_derrapando
-# Tiempo que pasa desde que recibimos la informacion del coche hasta que enviamos el valor del pwm a RaceController
+# Lo que tarda desde que llega la posicion hasta que sale la orden de PWM
 float64 pipeline_time
-# Tiempo que permite almacenar el momento exacto en el que llego el paquete de la camar al CarController 
+# Instante exacto en el que llego el mensaje de la camara al controlador
 builtin_interfaces/Time receive_msg_stamp
-# Para saber si estamos detectando correctamente el coche 
+# Sin usar: el controlador no lo rellena
 int32 roi_size

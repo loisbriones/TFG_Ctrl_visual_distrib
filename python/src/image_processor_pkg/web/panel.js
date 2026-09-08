@@ -1,30 +1,19 @@
-// ---------------------------------------------------------------------------
-// Estado del navegador. El servidor manda solo lo que cambia, asi que la
-// pagina va acumulando: el trazado de cada camara crece punto a punto y los
-// eventos se van apilando. Cuando el servidor avisa con "reinicio" (primera
-// conexion, recarga, o EventSource reconectando tras un corte) se tira todo y
-// se vuelve a construir.
-// ---------------------------------------------------------------------------
-// camara -> coche -> [[x, y], ...] en pixeles DE ESA CAMARA. Un trazado por
-// coche porque cada uno va por su carril: son dos curvas paralelas, y juntas
-// en una sola lista el circuito salia dibujado en zigzag entre los dos carriles
+// camara -> coche -> [[x, y], ...] en pixeles de esa camara
 const trazados = {};
 const metas = {};      // camara -> [[x1, y1], [x2, y2]]
 let coches = [];
 let vista = null;      // {escala, dx, dy} del encuadre; null = recalcular
 let totalPuntos = 0;
 let arrastrando = null;
-let saltoCorte = 60;   // lo fija el servidor (4 x paso del trazado)
+let saltoCorte = 60;   // Lo fija el servidor (4 x paso del trazado)
 
-// Offsets del encaje manual entre camaras. Se guardan en el navegador porque
-// dependen de COMO estan puestas las camaras en este montaje concreto: una vez
-// encajado, no hay que volver a tocarlo aunque se recargue la pagina.
+// Offsets del encaje manual entre camaras, se guardan en el navegador porque
+// dependen de como esten colocadas las camaras en este montaje
 const CLAVE = "offsets_camaras_tfg";
 let offsets = JSON.parse(localStorage.getItem(CLAVE) || "{}");
 
-// Ancho de la "plaza" de cada camara al aparecer: 640 px de imagen + margen.
-// Mismo criterio que ANCHO_PLAZA_CAMARA en analisis/figuras.py, para que las
-// camaras arranquen separadas y no una encima de otra
+// Ancho de la "plaza" de cada camara al aparecer, para que arranquen separadas
+// Mismo criterio que ANCHO_PLAZA_CAMARA en analisis/figuras.py
 const ANCHO_PLAZA = 660;
 
 const lienzo = document.getElementById("mapa");
@@ -62,16 +51,13 @@ fuente.onmessage = (e) => {
   let puntos = 0;
   for (const cam of d.camaras) {
     if (!trazados[cam.id]) { trazados[cam.id] = {}; offsetDe(cam.id); vista = null; }
-    // Cada trazado llega entero, pero solo cuando ha cambiado (los puntos se
-    // intercalan en el servidor, asi que no se pueden ir añadiendo aquí)
+    // Cada trazado llega entero, pero solo cuando ha cambiado
     for (const coche in cam.trazos) trazados[cam.id][coche] = cam.trazos[coche];
     if (cam.meta) metas[cam.id] = cam.meta;
     puntos += cam.total_puntos;
   }
-  // Mientras el circuito se sigue dibujando (la vuelta de calibracion) el
-  // encuadre se rehace solo para que no se salga nada; una vez cerrado el
-  // trazado deja de cambiar. Si la persona esta arrastrando no se toca, que
-  // si no el mapa se le movería debajo del raton
+  // Mientras el circuito se sigue dibujando el encuadre se rehace solo
+  // Si la persona esta arrastrando no se toca, o el mapa se le mueve
   if (puntos !== totalPuntos && !arrastrando) { totalPuntos = puntos; vista = null; }
 
   pintarSalud(d);
@@ -88,9 +74,8 @@ function pintarSalud(d) {
   const trozos = [];
   for (const cam of d.camaras) {
     // Una camara solo publica mientras ve al coche, asi que estar callada un
-    // rato es NORMAL (el coche esta en el trozo de otra camara). Solo se marca
-    // en rojo si lleva mas de 15 s sin dar señales, que a 4-6 s por vuelta son
-    // ya tres vueltas enteras sin aparecer: eso si es una Raspberry caida
+    // rato es normal. Se marca en rojo a partir de 15 s, que ya son varias
+    // vueltas sin aparecer
     const muerta = cam.desde === null || cam.desde > 15;
     const cuando = cam.desde === null ? "sin datos" :
                    cam.desde < 1 ? "ahora" : `hace ${cam.desde.toFixed(0)} s`;
@@ -118,8 +103,7 @@ const seg = (t) => t === null ? "—" : t.toFixed(3);
 
 function pintarTabla(d) {
   // Orden de carrera: manda el numero de vueltas y, a igualdad, quien cruzo
-  // meta antes. No hay posicion "en pista" porque nadie la calcula: cada
-  // camara ve pixeles suyos y no hay una distancia comun al circuito
+  // meta antes
   const orden = [...d.coches].sort((a, b) =>
     (b.vuelta - a.vuelta) || ((a.t_cruce ?? Infinity) - (b.t_cruce ?? Infinity)));
 
@@ -137,8 +121,7 @@ function pintarTabla(d) {
     if (c.sin_senal) estado = '<span class="estado gris">SIN SEÑAL</span>';
     else if (c.derrapando) estado = `<span class="estado derrapa">DERRAPA ${c.dist_derrape}px</span>`;
 
-    // En modo manual no hay PWM: el controlador no publica pwd porque conduce
-    // una persona, y la celda se queda vacia a proposito
+    // En modo manual no hay PWM porque conduce una persona, la celda va vacia
     let pwm = '<span class="apagado">—</span>';
     if (c.pwm !== null) {
       const pc = Math.max(0, Math.min(100, (c.pwm - d.v_min) / (d.v_max - d.v_min) * 100));
@@ -174,8 +157,7 @@ function pintarEventos(eventos) {
     caja.appendChild(fila);
   }
   while (caja.childElementCount > 200) caja.removeChild(caja.firstChild);
-  // Solo se sigue al ultimo evento si ya se estaba mirando el final: si
-  // alguien ha subido a leer algo, no se le arrastra hacia abajo
+  // Solo se sigue al ultimo evento si ya se estaba mirando el final
   if (abajo) caja.scrollTop = caja.scrollHeight;
 }
 
@@ -187,14 +169,12 @@ function ajustarLienzo() {
   const dpr = window.devicePixelRatio || 1;
   lienzo.width = Math.round(r.width * dpr);
   lienzo.height = Math.round(r.height * dpr);
-  // La transformacion se FIJA (setTransform, no scale) en cada ajuste: con
-  // scale se iría acumulando en cada redimensionado de la ventana
+  // setTransform y no scale, que se iria acumulando en cada redimensionado
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   return { ancho: r.width, alto: r.height };
 }
 
-// Todos los puntos de una cámara (los de todos sus coches), ya trasladados al
-// plano común con el offset de esa cámara
+// Todos los puntos de una camara, ya trasladados al plano comun con su offset
 function* puntosDe(cam) {
   const [ox, oy] = offsetDe(cam);
   for (const coche in trazados[cam])
@@ -215,8 +195,7 @@ function encuadrar(ancho, alto) {
   const l = limites();
   if (!l) return null;
   const m = 24;
-  // Escala UNICA para los dos ejes: el circuito tiene que salir sin deformar,
-  // igual que el scaleanchor 1:1 de las figuras del analisis
+  // Escala unica para los dos ejes, para que el circuito no salga deformado
   const escala = Math.min((ancho - 2 * m) / Math.max(l.x1 - l.x0, 1),
                           (alto - 2 * m) / Math.max(l.y1 - l.y0, 1));
   return {
@@ -247,7 +226,7 @@ function dibujar() {
     const [ox, oy] = offsetDe(cam);
     let primero = null;
 
-    // La línea de carrera de cada coche, en su color y apagada para que los
+    // La linea de carrera de cada coche, en su color y apagada para que los
     // puntos de los coches destaquen encima
     for (const coche in trazados[cam]) {
       const pts = trazados[cam][coche];
@@ -262,23 +241,14 @@ function dibujar() {
       pts.forEach(([x, y], i) => {
         const [px, py] = aPantalla(x + ox, y + oy);
         // Se levanta el lapiz en los saltos: ese trozo es lo que esta camara
-        // NO ve (el coche se sale del encuadre y vuelve a entrar por otro
-        // lado), y unirlo pintaria una recta por donde no hay pista
+        // no ve, y unirlo pintaria una recta por donde no hay pista
         const salto = i > 0 && Math.hypot(x - pts[i-1][0], y - pts[i-1][1]) > saltoCorte;
         (i && !salto) ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
       });
-      // Y se CIERRA EL ANILLO. La lista es lineal pero el circuito no: cuando
-      // el coche completa la vuelta, el ultimo punto queda pegado al primero,
-      // solo que nadie dibujaba el segmento que los une. Quedaba un hueco en
-      // mitad del trazado, en un sitio distinto cada vez (donde estuviera el
-      // coche al conectarse el panel) y sin ninguna oclusion que lo explicara.
-      //
-      // El cierre pasa por el MISMO filtro que el resto de segmentos: si los
-      // dos extremos estan a mas de saltoCorte no se unen. Asi se respetan los
-      // dos casos en los que ese segmento no existe: una camara que solo ve un
-      // trozo del circuito (cadena abierta), y las sesiones en las que el
-      // trazado arranca con el coche entrando en el encuadre, donde el primer
-      // punto no esta sobre el trazado cerrado sino a un lado.
+      // Se cierra el anillo: la lista es lineal pero el circuito no, asi que
+      // el ultimo punto y el primero quedan sin unir
+      // Pasa por el mismo filtro que el resto, si estan a mas de saltoCorte no
+      // se unen, que es el caso de la camara que solo ve un trozo del circuito
       const [ax, ay] = pts[0], [zx, zy] = pts[pts.length - 1];
       if (pts.length > 2 && Math.hypot(zx - ax, zy - ay) <= saltoCorte)
         ctx.lineTo(...aPantalla(ax + ox, ay + oy));
@@ -308,8 +278,7 @@ function dibujar() {
     const [ox, oy] = offsetDe(c.camara);
     const f = aPantalla(c.front[0] + ox, c.front[1] + oy);
 
-    // La trasera se pinta hueca y unida a la delantera: esa rayita ES el
-    // derrape (el algoritmo mide justo cuanto se separa de la trayectoria)
+    // La trasera se pinta hueca y unida a la delantera: esa rayita es el derrape
     if (c.back) {
       const b = aPantalla(c.back[0] + ox, c.back[1] + oy);
       ctx.strokeStyle = c.derrapando ? "#ff6b6b" : c.color;
@@ -328,9 +297,9 @@ function dibujar() {
 
 // --- Encaje manual: arrastrar cada camara hasta que el circuito sea continuo
 function camaraEn(px, py) {
-  // Se elige la camara con el punto de trazado mas cercano al raton; el limite
-  // en pixeles de PANTALLA (no de mundo) para que agarrar cueste lo mismo
-  // este el mapa muy alejado o muy cerca
+  // Se elige la camara con el punto de trazado mas cercano al raton
+  // El limite va en pixeles de pantalla, para que agarrar cueste lo mismo con
+  // el mapa cerca o lejos
   let mejor = null, mejorD = 30;
   for (const cam in trazados)
     for (const [x, y] of puntosDe(cam)) {
@@ -352,8 +321,8 @@ lienzo.addEventListener("mousedown", (e) => {
 
 window.addEventListener("mousemove", (e) => {
   if (!arrastrando) return;
-  // El raton se mueve en pixeles de pantalla y el offset esta en pixeles de
-  // camara: hay que dividir por la escala del encuadre
+  // El raton se mueve en pixeles de pantalla y el offset en pixeles de camara,
+  // asi que hay que dividir por la escala del encuadre
   const o = offsetDe(arrastrando.cam);
   o[0] += (e.clientX - arrastrando.x) / vista.escala;
   o[1] += (e.clientY - arrastrando.y) / vista.escala;
@@ -372,15 +341,13 @@ document.getElementById("btn-encajar").onclick = () => { vista = null; dibujar()
 
 document.getElementById("btn-reset").onclick = () => {
   offsets = {};
-  Object.keys(trazados).sort().forEach(offsetDe);  // vuelven a sus plazas
+  Object.keys(trazados).sort().forEach(offsetDe);  // Vuelven a sus plazas
   guardarOffsets(); vista = null; dibujar();
 };
 
 document.getElementById("btn-copiar").onclick = () => {
-  // Se normaliza para que la primera camara quede en (0, 0): asi el resultado
-  // es exactamente lo que espera OFFSETS_CAMARAS en analisis/figuras.py, y el
-  // analisis posterior del bag dibuja el circuito con el mismo encaje que se
-  // acaba de ajustar aqui a ojo
+  // Se normaliza para que la primera camara quede en (0, 0), que es el formato
+  // que espera OFFSETS_CAMARAS en analisis/figuras.py
   const cams = Object.keys(trazados).sort();
   if (!cams.length) return;
   const [bx, by] = offsetDe(cams[0]);
@@ -392,7 +359,7 @@ document.getElementById("btn-copiar").onclick = () => {
   navigator.clipboard.writeText(texto).then(
     () => { const b = document.getElementById("btn-copiar");
             b.textContent = "✓ copiado"; setTimeout(() => b.textContent = "copiar offsets", 1500); },
-    () => alert(texto));   // sin permiso de portapapeles (http a secas): se enseña
+    () => alert(texto));   // Sin permiso de portapapeles se enseña para copiarlo
 };
 
 window.addEventListener("resize", () => { vista = null; dibujar(); });

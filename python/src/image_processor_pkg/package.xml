@@ -6,6 +6,9 @@
   <maintainer email="user@todo.com">User</maintainer>
   <license>Apache-2.0</license>
 
+  <!-- ament_cmake y no ament_python aunque los nodos sean de Python, porque los
+       mensajes de msg/ solo se pueden generar desde CMake. Los .py se instalan
+       como PROGRAMS en el CMakeLists -->
   <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>rclpy</depend>
   <depend>builtin_interfaces</depend>

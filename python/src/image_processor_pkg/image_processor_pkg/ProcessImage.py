@@ -1,38 +1,26 @@
+"""
+El codigo esta basado en las ideas de deteccion de los trabajos de:
+Mario: https://github.com/mariolopez15/control_coche_scalextric
+Adrian: https://github.com/Rego523/GEI-TFG
+"""
+
 import cv2 as cv
 import numpy as np
 
+# Rangos HSV (minimo, maximo) de cada color de pegatina
+# El rojo necesita dos rangos porque su tono da la vuelta en 0/180
+# Los rangos son anchos porque la misma pegatina da tonos distintos en cada camara
 COLOR_RANGES = {
     "rojo": [
         (np.array([0, 100, 100]), np.array([10, 255, 255])),
         (np.array([160, 100, 100]), np.array([180, 255, 255])),
     ],
-    # El techo del tono sube de 120 a 130: la misma pegatina azul da H=96..99 en
-    # camara_01/02/03 pero H=112 en camara_04, con muestras hasta 123. Con el
-    # techo en 120 esa camara se quedaba fuera. S y V no se tocan (ver el
-    # comentario del verde: aflojarlos no mejora nada y empieza a confundir).
     "azul": [
         (
             np.array([85, 114, 80], dtype=np.uint8),
             np.array([130, 255, 255], dtype=np.uint8),
         )
     ],
-    # El suelo del tono baja de 50 a 35. La MISMA pegatina verde da un tono
-    # distinto en cada camara porque cada una fija su balance de blancos por su
-    # cuenta (medido en PRUEBA_FINAL_003/004, sobre el blob que contiene el
-    # centro que publica el propio detector):
-    #     camara_01  H mediana 49 (34-53)     camara_02  H mediana 51 (34-60)
-    #     camara_03  H mediana 52 (39-61)     camara_04  H mediana 45 (28-80)
-    # Con el suelo en 50 la camara_04 (Logitech, la que renderiza mas calido)
-    # quedaba fuera entera: cero detecciones en 5217 fotogramas, sin un solo
-    # error, y de ahi una calibracion vacia que la dejaba ciega. Y las otras
-    # tres iban raspando: solo pasaba el NUCLEO de la pegatina, asi que el area
-    # del blob se quedaba rondando min_area (40 px) y cualquier perdida la
-    # tumbaba. Con el tono ancho pasa la pegatina entera (~200 px).
-    # Buscando dentro de un ROI de 150 px pegado al coche, el acierto sube de
-    # 16/15/12 % a 97/79/87 % en camara_01/02/03, con 0 % de falsos positivos.
-    # S y V se dejan como estaban a proposito: aflojarlos por separado solo
-    # sube el acierto al 23/19/13 %, y de S40 V50 en adelante empieza a
-    # confundir el fondo (7-22 %). El problema era el tono, no la saturacion.
     "verde": [
         (
             np.array([42, 60, 130], dtype=np.uint8),
@@ -51,19 +39,36 @@ COLOR_RANGES = {
             np.array([50, 255, 255], dtype=np.uint8),
         )
     ],
-    "cian": [(np.array([78, 65, 120]), np.array([120, 255, 255]))],
-    "violeta": [(np.array([120, 80, 100]), np.array([175, 255, 255]))],
+    "cian": [
+        (
+            np.array([78, 65, 120],dtype=np.uint8), 
+            np.array([120, 255, 255],dtype=np.uint8)
+        )
+    ],
+    "violeta": [
+        (
+            np.array([120, 80, 100],dtype=np.uint8), 
+            np.array([175, 255, 255],dtype=np.uint8)
+        )
+    ],
 }
 
 
 class ColorDetector:
+    """Busca dentro de un frame, usando rangos de color, las dos pegatinas de un
+    coche y la linea de meta
+    Lo usa CameraNode, que crea un objeto por cada coche
+    """
+
+    # Los parametros vienen de CameraNode, que los lee de params.yaml
     def __init__(self, stiker_front, stiker_back, kernel_size):
-        # Configuramos el kernel que vamos a usar para detectar los colores
+
+        # Kernel de la limpieza morfologica, comun a las dos pegatinas
         self.kernel = cv.getStructuringElement(
             cv.MORPH_RECT, (kernel_size, kernel_size)
         )
 
-        # Establecemos el primer color que queremos buscar
+        # El rojo se guarda como dos rangos y los demas colores como uno solo
         if stiker_front == "rojo":
             self.stiker_front_lower_red1, self.stiker_front_upper_red1 = COLOR_RANGES[
                 "rojo"
@@ -76,7 +81,7 @@ class ColorDetector:
                 stiker_front
             ][0]
 
-        # Establecemos el segundo color que queremos buscar
+        # Igual para la pegatina trasera
         if stiker_back == "rojo":
             self.stiker_back_lower_red1, self.stiker_back_upper_red1 = COLOR_RANGES[
                 "rojo"
@@ -90,10 +95,15 @@ class ColorDetector:
             ]
 
     def find_object(self, frame, min_area, stiker_front, stiker_back):
-        # Convertimos el frame que tenemos que procesar a HSV
+        """Busca las dos pegatinas en el frame y devuelve las coordenadas del
+        centro (x, y) como {"front": ..., "back": ...}, con None en la que no
+        encuentre
+        """
+        
+        # Se pasa el frame al espacio de color HSV
         frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
 
-        # Generamos una mascara donde solo van los pixeles que tiene stiker_front
+        # Mascara binaria con los pixeles del color de la pegatina delantera
         if stiker_front == "rojo":
             mask_stiker_front = cv.add(
                 cv.inRange(
@@ -112,7 +122,7 @@ class ColorDetector:
                 frame_hsv, self.stiker_front_lower, self.stiker_front_upper
             )
 
-        # Generamos una mascara donde solo van los pixeles que tienen traget_color_2
+        # Y lo mismo para la trasera
         if stiker_back == "rojo":
             mask_stiker_back = cv.add(
                 cv.inRange(
@@ -131,19 +141,21 @@ class ColorDetector:
                 frame_hsv, self.stiker_back_lower, self.stiker_back_upper
             )
 
-        # Buscamos los objetos dentro de la mascara para stiker_front
         front_color = self._detectar(mask_stiker_front, stiker_front, min_area)
-        # Buscamos los objetos dentro de la mascara para stiker_back
         back_color = self._detectar(mask_stiker_back, stiker_back, min_area)
 
         return {"front": front_color, "back": back_color}
 
     def _detectar(self, mask, color_bgr, min_area):
-        # Aplicamos un cierre morfologico para eliminar ruido o pequeñas imprecisiones
+        """Aplica la mascara sobre el frame para detectar las pegatinas y
+        devolver su posicion"""
+
+        # Apertura morfologica para quitar los pixeles sueltos
         mask_limpia = cv.morphologyEx(mask, cv.MORPH_OPEN, self.kernel)
+        # Cierre morfologico para tapar los agujeros entre los pixeles detectados
         mask_limpia = cv.morphologyEx(mask_limpia, cv.MORPH_CLOSE, self.kernel)
 
-        # Lista de puntos que representa el contorno exterior del objeto que acabamos de detectar
+        # Contornos exteriores de los objetos que quedaron
         contornos, _ = cv.findContours(
             mask_limpia, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE
         )
@@ -151,12 +163,14 @@ class ColorDetector:
         if not contornos:
             return None
 
+        # Nos quedamos con la mancha mas grande, que es la pegatina. Si no llega
+        # a min_area es ruido y se descarta
         c = max(contornos, key=cv.contourArea)
 
         if cv.contourArea(c) < min_area:
             return None
 
-        # Devuelve 4 puntos que representan un rectangulo que envuelve el contorno detectado
+        # La posicion que se publica es el centro del rectangulo que la envuelve
         x, y, w, h = cv.boundingRect(c)
 
         cx = x + (w / 2)
@@ -165,9 +179,14 @@ class ColorDetector:
         return {"color": color_bgr, "cx": cx, "cy": cy, "x": x, "y": y, "w": w, "h": h}
 
     def find_finish_line(self, frame, sector_color):
+        """
+        Busca la franja de color de la meta y devuelve el segmento que la cruza
+        a lo ancho o None
+        """
+
+        # Se pasa el frame al espacio de color HSV
         frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
 
-        # Buscamos los rangos directamente en COLOR_RANGES usando 'sector_color'
         if sector_color == "rojo":
             lower_red1, upper_red1 = COLOR_RANGES["rojo"][0]
             lower_red2, upper_red2 = COLOR_RANGES["rojo"][1]
@@ -179,8 +198,12 @@ class ColorDetector:
             lower, upper = COLOR_RANGES[sector_color][0]
             mask_sector_color = cv.inRange(frame_hsv, lower, upper)
 
-        # kernel ancho para unir trozos de cada sección
+        # Kernel distinto al de las pegatinas porque las ranuras de los carriles
+        # rompen la franja de la meta y las partes detectadas tienen que quedar
+        # unidas
         kernel = np.ones((40, 40), np.uint8)
+
+        # Se aplica cierre para unir los pixeles detectados
         mask_sector_color_aplicada = cv.morphologyEx(
             mask_sector_color, cv.MORPH_CLOSE, kernel, iterations=1
         )
@@ -197,14 +220,13 @@ class ColorDetector:
         if cv.contourArea(c) < 40:
             return None
 
-        # Busca el rectangulo con area minima que encierra los pixeles que se detectan, pudiendo estar rotado.
+        # La meta puede ir girada, por eso no se usa boundingRect
         rect = cv.minAreaRect(c)
         box = cv.boxPoints(rect).astype(int)
 
-        # Obtenemos las coordenadas.
         p0, p1, p2, p3 = box
 
-        # Buscamos que puntos corresponden con los sectores más pequeños del rectangulo para luego unirlos con una linea recta
+        # La meta es el segmento que une los centros de los dos lados cortos
         if self._edge_len(p0, p1) < self._edge_len(p1, p2):
             m1 = ((p0[0] + p1[0]) // 2, (p0[1] + p1[1]) // 2)
             m2 = ((p2[0] + p3[0]) // 2, (p2[1] + p3[1]) // 2)
@@ -215,4 +237,5 @@ class ColorDetector:
         return (m1, m2)
 
     def _edge_len(self, a, b):
+        """Longitud del lado que va del punto a al punto b"""
         return np.hypot(b[0] - a[0], b[1] - a[1])

@@ -1,5 +1,12 @@
 #!/usr/bin/python3
 
+"""
+Codigo del TFG de Adrián Rego
+Proyecto del año pasado
+
+Se puede encontrar este codigo y el proyecto en: https://github.com/Rego523/GEI-TFG
+"""
+
 import serial
 import serial.tools.list_ports
 import time

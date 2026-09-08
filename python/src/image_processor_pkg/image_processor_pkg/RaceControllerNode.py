@@ -20,6 +20,12 @@ import os
 
 
 class ArduinoBridgeNode(Node):
+    """
+    Nodo de ROS2 que traduce las ordenes de PWM a lo que entiende el Arduino
+    Escucha el /<coche>/pwd de cada coche y manda el valor por el puerto serie
+    con ArduinoController
+    """
+
     def __init__(self):
         super().__init__("arduino_bridge")
 
@@ -33,7 +39,7 @@ class ArduinoBridgeNode(Node):
         # Lista para no perder la referencia de las suscripciones
         self.sub_pwd = {}
 
-        # Nos suscribimos al topic "pwd" de CADA coche (ej. /car1/pwd, /car2/pwd)
+        # Subscriber de /<coche>/pwd -> SpeedCarril.msg, uno por coche
         for car_name in self.coches:
             topic_name = f"/{car_name}/pwd"
             self.sub_pwd[car_name] = self.create_subscription(
@@ -44,23 +50,23 @@ class ArduinoBridgeNode(Node):
                 callback_group=MutuallyExclusiveCallbackGroup(),
             )
 
-        # --- CALIBRACION POR COCHE (solo los que NO son manuales) ---
-        # La calibracion dejo de ser global: cada coche cierra su vuelta cuando
-        # quiere y solo entonces su carril pasa de calibration_speed al PWM de
-        # carrera. Necesitamos por eso el carril fisico de cada coche
-        # (cars.<coche>.carril) y su modo: los tres modos que publican PWM
-        # (incremental, automatico y politica) se comportan igual aqui, y a los
-        # manuales los conduce una persona, asi que su carril NO lo toca el
-        # puente.
-        self.carril_de = {}       # coche NO manual -> nº de carril
-        self.calibrando = {}      # coche NO manual -> sigue en calibracion?
+        # --- CALIBRACION POR COCHE ---
+        # Numero de carril del coche
+        self.carril_de = {}
+        # Permite saber si tiene el modo de calibracion activado
+        self.calibrando = {}
         self.sub_modo_calibracion = {}
         self.grupo_calibracion = MutuallyExclusiveCallbackGroup()
 
         for car_name in self.coches:
+
+            # Numero de carril para el coche
             self.declare_parameter(f"cars.{car_name}.carril", "1")
+
+            # Como se controla la potencia del coche
             self.declare_parameter(f"cars.{car_name}.modo", "automatico")
             modo = self.get_parameter(f"cars.{car_name}.modo").value
+
             if modo == "manual":
                 continue
 
@@ -68,7 +74,7 @@ class ArduinoBridgeNode(Node):
             self.carril_de[car_name] = self._parse_carril(carril_str)
             self.calibrando[car_name] = True
 
-            # Suscripcion de calibracion POR COCHE: /<coche>/modo_calibracion
+            # Subscriber de /<coche>/modo_calibracion -> Bool
             self.sub_modo_calibracion[car_name] = self.create_subscription(
                 Bool,
                 f"/{car_name}/modo_calibracion",
@@ -91,64 +97,61 @@ class ArduinoBridgeNode(Node):
         self.arduino = ArduinoController(port=port, baudrate=baud)
         self.get_logger().info(f"Conectando a Arduino en {port}...")
 
-        # Arrancamos a la velocidad de calibración el carril de cada coche que
-        # publique PWM (los carriles de coches manuales no se tocan: los mueve
-        # la persona).
+        # Los carriles de los coches que no son manuales arrancan con calibration_speed
         for car_name, carril in self.carril_de.items():
             self.arduino.set_rail_speed(carril, self.calibration_speed)
 
     @staticmethod
     def _parse_carril(carril_str):
-        # Acepta "r2" o "2" (misma limpieza que pwm_callback) -> entero 2
+        """Convierte el carril del YAML, que puede venir como "r2" o "2", en 2"""
         limpio = carril_str.strip().lower().replace("'", "").replace('"', "")
         return int(limpio.replace("r", ""))
 
     def callback_control_calibracion(self, car_name, msg):
-        # Aviso de calibracion de UN coche no manual (/<car_name>/modo_calibracion).
+        """Callback que se llama cuando llega un mensaje del topic de calibracion
+        Pasa a modo carrera o vuelve al modo calibracion de un coche
+        """
         if msg.data == False and self.calibrando.get(car_name, False):
-            # El coche cerro su vuelta: dejamos de forzar calibration_speed en su
-            # carril; el PWM de carrera lo tomara en cuanto llegue por pwm_callback.
+            # Cerramos la calibracion
             self.calibrando[car_name] = False
         elif msg.data == True and not self.calibrando.get(car_name, True):
-            # Reinicio de calibracion de este coche: su carril vuelve a calibration_speed
+            # Iniciamos la calibracion
             self.calibrando[car_name] = True
             self.arduino.set_rail_speed(self.carril_de[car_name], self.calibration_speed)
 
     def pwm_callback(self, msg: SpeedCarril):
-        """
-        Cada vez que llega un nuevo valor de PWM, lo enviamos al Arduino.
-        """
+        """Callback que se llama cuando llega un mensaje de /<coche>/pwd
+        Se recibe el valor de PWM que hay que aplicar y se manda al Arduino"""
+
         pwm_value = msg.pwm
 
-        # Limpieza agresiva: quitamos comillas (simples y dobles), espacios y pasamos a minúscula
+        # Quitamos comillas, espacios y mayusculas antes de leer el carril
         rail_str = str(msg.carril).strip().lower().replace("'", "").replace('"', "")
 
-        # Extraemos el número del carril (ej: de "r2" o "2" sacamos el entero 2)
         try:
             rail_num = int(rail_str.replace("r", ""))
         except ValueError:
             self.get_logger().error(f"Formato de carril inválido: {msg.carril}")
             return
 
-        # Inicializamos dinámicamente el carril en la memoria del puente si no existía
+        # Carril que aparece por primera vez
         if rail_num not in self.rails:
+            # Se guarda un -1 porque no es un PWM valido y asi el primero siempre se manda
             self.rails[rail_num] = -1
 
-        # Filtro antispam para no saturar al Arduino mandando repetidamente el mismo valor
+        # El algoritmo repite el valor de PWM, asi que solo se manda si cambia
         if pwm_value == self.rails[rail_num]:
             return
 
         self.rails[rail_num] = pwm_value
 
-        # Validación de seguridad y envío físico
+        # El Arduino solo acepta valores dentro de [0,255]
         if 0 <= pwm_value <= 255:
             self.get_logger().info(f"Arduino OK -> Carril {rail_num} a PWM {pwm_value}")
             self.arduino.set_rail_speed(rail_num, pwm_value)
 
     def destroy_node(self):
-        """
-        Al cerrar el nodo, nos aseguramos de parar el coche por seguridad.
-        """
+        """Para los carriles al cerrar, antes de destruir el nodo"""
         self.get_logger().info("Cerrando conexión. Deteniendo motores...")
         if hasattr(self, "arduino") and self.arduino:
             self.arduino.stop_all_rails()
@@ -163,7 +166,8 @@ def main(args=None):
     pkg_share = get_package_share_directory("image_processor_pkg")
     params_file = os.path.join(pkg_share, "config", "params.yaml")
 
-    # 1. Cargamos la lista de coches desde el YAML
+    # Se lee el YAML solo para saber cuantos coches hay y con eso el numero de
+    # hilos del Executor
     with open(params_file, "r") as f:
         config = yaml.safe_load(f)
         coches = config["/**"]["ros__parameters"]["coches"]

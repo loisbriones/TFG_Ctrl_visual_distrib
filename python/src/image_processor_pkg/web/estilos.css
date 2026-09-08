@@ -1,6 +1,9 @@
 /* Estilos de las dos paginas que sirve VisualizacionNode.py: el panel de la
-   carrera en directo (index.html) y el mosaico de camaras (camaras.html), que
-   comparten cabecera y colores. El navegador los pide en /estilos.css */
+   carrera (index.html) y el mosaico de camaras (camaras.html) */
+
+/* ---------------------------------------------------------------------------
+   Paleta y tipografia comunes a las dos paginas
+   --------------------------------------------------------------------------- */
 
 :root {
   --fondo: #101215;
@@ -19,6 +22,10 @@
 * {
   box-sizing: border-box;
 }
+
+/* ---------------------------------------------------------------------------
+   Estructura de la pagina y cabecera
+   --------------------------------------------------------------------------- */
 
 body {
   margin: 0;
@@ -103,9 +110,8 @@ h1 {
    Rejilla de la pagina
    --------------------------------------------------------------------------- */
 
-/* La tabla necesita 640 px para que sus nueve columnas quepan sin que las
-   cabeceras se toquen entre si; por debajo de eso no hay reparto que valga y
-   es mejor darle el ancho entero de la pagina poniendo el mapa debajo */
+/* Por debajo de 640 px las nueve columnas de la tabla no caben, asi que el
+   mapa pasa debajo y la tabla se queda con el ancho entero */
 .rejilla {
   display: grid;
   grid-template-columns: minmax(640px, 1fr) minmax(420px, 1fr);
@@ -139,19 +145,14 @@ h1 {
    Tabla de clasificacion
    --------------------------------------------------------------------------- */
 
-/* Ultimo recinto de seguridad: en una ventana de verdad estrecha (movil, o el
-   navegador a media pantalla) ni con el mapa debajo caben las nueve columnas.
-   Antes que dejar que las cabeceras se pisen, la tabla se planta en su ancho
-   minimo y el recuadro se desplaza a mano */
+/* En una ventana muy estrecha ni con el mapa debajo caben las nueve columnas:
+   la tabla se planta en su ancho minimo y el recuadro se desplaza a mano */
 .tabla-scroll {
   overflow-x: auto;
 }
 
-/* table-layout: fixed -> el ancho lo mandan los porcentajes de abajo y NO el
-   contenido. Con el reparto automatico las columnas cambiaban de tamaño segun
-   lo que tocase poner en cada celda (no es lo mismo "OK" que "DERRAPA 14.9px"),
-   y con una sola fila el navegador las estiraba a su antojo. Fijas, la tabla es
-   la misma con uno o con dos coches */
+/* table-layout: fixed -> el ancho lo mandan los porcentajes de abajo y no el
+   contenido, asi la tabla es la misma con uno o con dos coches */
 table {
   width: 100%;
   min-width: 620px;
@@ -160,10 +161,9 @@ table {
   font-variant-numeric: tabular-nums;
 }
 
-/* Reparto del ancho. Suman 100, y estan calculados para que TODO quepa en el
-   caso peor: la tabla en su ancho minimo (640 px) y el texto mas largo de cada
-   columna, que casi siempre es la CABECERA y no el valor ("CARRIL" ocupa mas
-   que "2"). Por eso columnas de un solo digito llevan un 9% */
+/* Reparto del ancho, suman 100. Calculados para el caso peor: la tabla en 640
+   px y el texto mas largo de cada columna, que casi siempre es la cabecera
+   ("CARRIL" ocupa mas que "2") */
 th:nth-child(1) { width:  4%; }   /* posicion: un digito */
 th:nth-child(2) { width: 14%; }   /* coche: tira de color + nombre */
 th:nth-child(3) { width:  9%; }   /* carril: manda la cabecera "CARRIL" */
@@ -174,10 +174,8 @@ th:nth-child(7) { width: 12%; }   /* mejor: "1.663 v22" */
 th:nth-child(8) { width: 13%; }   /* pwm: la barra */
 th:nth-child(9) { width: 17%; }   /* estado: "DERRAPA 14.9px", el mas largo */
 
-/* La cabecera y su valor comparten alineacion SIEMPRE: es lo unico que hace
-   que el numero se lea debajo de la palabra que le corresponde. Antes las th
-   iban a la derecha y las td heredaban la izquierda, asi que cada valor caia
-   bajo la cabecera de al lado y engañaba al leerlo */
+/* La cabecera y su valor comparten alineacion siempre, que es lo que hace que
+   el numero se lea debajo de la palabra que le corresponde */
 th, td {
   text-align: center;
 }
@@ -209,6 +207,10 @@ td[colspan] {
 tr:last-child td {
   border-bottom: none;
 }
+
+/* ---------------------------------------------------------------------------
+   Celdas de la tabla: posicion, colores de tiempo y estado del coche
+   --------------------------------------------------------------------------- */
 
 .pos {
   color: var(--suave);
@@ -248,9 +250,8 @@ tr.perdido td {
   color: #6b7079;
 }
 
-/* Un punto mas pequeño y sin tanto espaciado que el resto de etiquetas: es el
-   texto mas largo de la fila ("DERRAPA 14.9px") y asi entra de una linea hasta
-   con la tabla en su ancho minimo, sin partirse en dos y crecer la fila */
+/* Mas pequeño que el resto de etiquetas: es el texto mas largo de la fila
+   ("DERRAPA 14.9px") y asi entra en una sola linea */
 .estado {
   font-size: 10px;
   font-weight: 700;
@@ -272,12 +273,12 @@ tr.perdido td {
 
 
 /* ---------------------------------------------------------------------------
-   Barra de PWM: la escala son minimum_speed..maximum_speed del params.yaml, no
-   0-255, porque el recorrido real del perfil son ~15 unidades.
-   inline-block con ancho propio: como div suelto era un BLOQUE y se comia toda
-   la celda, estirandose por debajo de las columnas vecinas. Siendo inline se
-   centra sola bajo su cabecera, como el resto de valores
+   Barra de PWM
    --------------------------------------------------------------------------- */
+
+/* La escala va de minimum_speed a maximum_speed del params.yaml y no de 0 a
+   255, porque el recorrido real del perfil son unas 15 unidades
+   inline-block para que se centre bajo su cabecera y no se coma la celda */
 
 .barra {
   display: inline-block;
@@ -297,9 +298,8 @@ tr.perdido td {
   border-radius: 3px;
 }
 
-/* El numero va centrado ENCIMA de la barra, asi que segun el PWM le toca caer
-   sobre el azul del relleno, sobre el gris del fondo o justo en el borde entre
-   los dos. La sombra lo despega del fondo y lo hace legible en los tres casos */
+/* El numero va centrado encima de la barra y puede caer sobre el relleno o
+   sobre el fondo, la sombra lo hace legible en los dos casos */
 .barra span {
   position: absolute;
   inset: 0;
@@ -419,8 +419,7 @@ button:hover {
 }
 
 /* auto-fit y no un numero fijo de columnas: con una camara ocupa el ancho
-   entero, con cuatro se reparten solas en dos filas, y en el portatil de al
-   lado de la pista bajan a una columna sin tener que tocar nada */
+   entero, con cuatro se reparten en dos filas y en pantalla estrecha en una */
 #mosaico {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
@@ -464,10 +463,8 @@ button:hover {
   color: var(--rojo);
 }
 
-/* Altura reservada con aspect-ratio: sin esto, cada camara que empieza a
-   mandar imagen empuja a las de abajo y el mosaico pega un salto justo
-   mientras se estan encuadrando. 4/3 es la relacion de todos los modos de
-   camera.mode (640x480 y compañia) */
+/* Altura reservada con aspect-ratio, si no cada camara que empieza a mandar
+   imagen empuja a las de abajo. 4/3 es la relacion de todos los camera.mode */
 .camara-img {
   width: 100%;
   display: block;

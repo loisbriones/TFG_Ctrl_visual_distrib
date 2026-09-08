@@ -1,11 +1,8 @@
 // ---------------------------------------------------------------------------
-// Mosaico de camaras. Mucho mas simple que panel.js: aqui no se pinta nada.
-// Cada camara es un <img src="/video/<camara>"> apuntando a un MJPEG, y de
-// mostrar el video se encarga el navegador el solo.
-//
-// Lo unico que hace este fichero es preguntar cada dos segundos que camaras hay
-// (/estado_camaras), crear el recuadro de las que aparezcan y reabrir el video
-// de las que se hayan quedado sin imagen.
+// Mosaico de camaras. Cada una es un <img src="/video/<camara>"> con un MJPEG,
+// y de mostrar el video se encarga el navegador
+// Aqui solo se pregunta cada 2 s que camaras hay (/estado_camaras), se crean sus
+// recuadros y se reabre el video de las que se hayan quedado sin imagen
 // ---------------------------------------------------------------------------
 const mosaico = document.getElementById("mosaico");
 
@@ -14,15 +11,13 @@ const tiles = {};
 
 const PERIODO_SONDEO = 2000;
 
-// Cada cuanto, como mucho, se reabre el video de una camara que no da imagen.
-// Tiene que ser >= el SIN_IMAGEN del nodo (10 s), que es lo que este tarda en
-// cerrar por su cuenta un video que no recibe nada: reintentando mas a menudo
-// que eso, cada camara apagada iria dejando conexiones a medio morir
+// Cada cuanto se reabre el video de una camara que no da imagen
+// Tiene que ser >= el SIN_IMAGEN del nodo (10 s), o se acumulan conexiones
 const PERIODO_REINTENTO = 10000;
 
 function urlVideo(cam) {
-  // El ?t=<ahora> no lo lee nadie en el servidor: esta para que el navegador no
-  // reutilice de su cache la conexion anterior, que ya esta cerrada
+  // El ?t=<ahora> no lo lee nadie, esta para que el navegador no reutilice de su
+  // cache la conexion anterior, que ya esta cerrada
   return `/video/${cam}?t=${Date.now()}`;
 }
 
@@ -53,10 +48,8 @@ function crearTile(cam) {
   boton.onclick = () => {
     tile.pausada = !tile.pausada;
     if (tile.pausada) {
-      // Quitar el src CORTA la conexion, y esa es toda la gracia: el nodo ve
-      // que ya no queda nadie mirando esta camara y se da de baja de su topic.
-      // Con cuatro camaras en una red compartida, esto es lo que evita mandar
-      // imagenes que nadie esta viendo
+      // Quitar el src corta la conexion: el nodo ve que ya no queda nadie
+      // mirando esta camara y se da de baja de su topic
       img.removeAttribute("src");
       boton.textContent = "ver";
       caja.classList.add("pausada");
@@ -84,7 +77,7 @@ function pintarEstado(cam, hayImagen) {
     tile.etiqueta.textContent = "en directo";
     tile.etiqueta.className = "camara-estado viva";
   } else {
-    // O la camara tiene 'camera.debug: False', o esta arrancando, o se cayo
+    // O la camara tiene camera.debug en False, o esta arrancando, o se cayo
     tile.etiqueta.textContent = "sin imagen";
     tile.etiqueta.className = "camara-estado muerta";
   }
@@ -104,9 +97,7 @@ async function sondear() {
     if (!tiles[c.id]) crearTile(c.id);
     const tile = tiles[c.id];
 
-    // Sin imagen y no es que este pausada: se reabre el video. Cubre las dos
-    // situaciones normales, la camara que aun no habia arrancado cuando se
-    // abrio la pagina y el stream que el nodo cerro por no llegarle nada
+    // Sin imagen y sin estar pausada: se reabre el video
     if (!c.imagen && !tile.pausada
         && Date.now() - tile.reintento > PERIODO_REINTENTO) {
       tile.reintento = Date.now();

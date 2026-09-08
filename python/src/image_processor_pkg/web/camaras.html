@@ -1,20 +1,8 @@
 <!DOCTYPE html>
 <!--
-  Mosaico de lo que ve cada camara, en directo.
-
-  Lo sirve VisualizacionNode.py en el mismo puerto que el panel de la carrera
-  (8990), en /camaras. Es la pagina de ANTES de la carrera: se levantan solo los
-  nodos camara, se abre esto y se van encuadrando hasta que entre todas se vea
-  el circuito entero, sin ir maquina por maquina enchufando el USB.
-
+  Mosaico de lo que ve cada camara, lo sirve VisualizacionNode.py en /camaras
   Aqui solo esta el esqueleto: los recuadros de cada camara los crea camaras.js
-  segun quien vaya apareciendo en la red.
-
-  Cada imagen es un <img> apuntando a /video/<camara>, que es un MJPEG. El
-  navegador sabe pintarlo el solo, asi que no hay ni una linea de JavaScript de
-  video en toda la pagina. Comparte estilos.css con el panel, y por lo mismo que
-  aquel: sin CDN, sin frameworks y sin dependencias, porque en una carrera esto
-  se abre en un portatil que puede estar en una red sin salida a internet.
+  Cada imagen es un <img> apuntando a /video/<camara>, que es un MJPEG
 -->
 <html lang="es">
 <head>

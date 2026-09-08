@@ -1,44 +1,15 @@
 /**:
   ros__parameters:
     modo_calibracion: True
-    # Lista de coches del sistema. Genera un detector por coche en la camara,
-    # un controlador por coche y las suscripciones del puente Arduino. Cada
-    # nombre de esta lista tiene que tener su bloque en 'cars' de abajo.
+    # Lista de coches que queremos controlar, genera un CarControllerNode por cada uno
+    # Cada nombre de esta lista tiene que tener su bloque dentro de "cars"
     coches: ["car1","car2"]
 
-    # Configuracion POR COCHE. La clave (car1, car2, ...) es el identificador
-    # del coche y coincide con 'coches' y con el namespace ROS (/car1/...).
-    # Aqui vive TODO lo que distingue a un coche de otro:
-    #   - stiker_front/back: colores de sus dos pegatinas. La camara construye
-    #     un ColorDetector por coche con estos colores, y por eso dos coches
-    #     con colores distintos se pueden seguir a la vez sin confundirse.
-    #   - carril: carril fisico del Arduino al que esta conectado este coche
-    #     ("r1"/"1" o "r2"/"2"; el puente parsea ambas formas). Sustituye al
-    #     antiguo reparto por orden de la lista en el launch: aqui se pone el
-    #     carril REAL del montaje, no el que toque por posicion.
-    #   - modo: como se decide el PWM que se aplica al coche. Son los cuatro
-    #     modos de operacion de la memoria, y en TODOS el algoritmo corre
-    #     entero: lo que deja escrito en derrapesLog_*.txt es de donde sale
-    #     despues el analisis de la sesion.
-    #       manual      -> NO se publica PWM: conduce una persona con el mando
-    #                      fisico y el Arduino queda fuera del circuito. El
-    #                      algoritmo apunta en su log lo que HABRIA hecho, para
-    #                      contrastarlo luego con lo que hizo la persona.
-    #       incremental -> se parte de minimum_speed y se sube un escalon cada
-    #                      'vueltas_incremento' vueltas, igual en todo el
-    #                      circuito. Es el modo tonto para tantear un trazado
-    #                      nuevo y ver por donde empieza a irse el coche. El
-    #                      algoritmo corre igual que en manual (no decide nada).
-    #       automatico  -> el PWM lo decide el algoritmo, celda a celda, con su
-    #                      aprendizaje por zonas. Es el modo normal.
-    #       politica    -> se le carga un perfil YA FIJADO desde un JSON y se
-    #                      limita a aplicarlo: el algoritmo detecta derrapes y
-    #                      los registra, pero no puede mover ni un PWM. Sirve
-    #                      para repetir una politica concreta y comparar.
-    #     Los tres ultimos necesitan el Arduino, asi que van por BrainLaunch;
-    #     los manuales por ManualLaunch (sin puente). Cada launch filtra
-    #     'coches' por este valor, asi que para un mixto (uno manual + uno
-    #     autonomo) se levantan los dos docker-compose a la vez.
+    # Configuracion de cada coche. La clave (car1, car2...) es su nombre y su
+    # namespace de ROS. Aqui va todo lo que distingue un coche de otro:
+    #   stiker_front/back  colores de sus dos pegatinas
+    #   carril             carril del Arduino al que esta conectado ("1" o "2")
+    #   modo               quien decide su PWM: manual, incremental, automatico o politica
     cars:
       car1:
         stiker_front: "amarillo"
@@ -51,194 +22,116 @@
         carril: "1"
         modo: "manual"
 
-    #Parametros para la camara
+    # Parametros para la camara
     camera:
-      # Controlar el tamaño de la foto que sacamos
-      # CAMERA_MODES = {
-      #     0: (160, 120),
-      #     1: (320, 240),
-      #     2: (640, 480),
-      #     3: (800, 600),
-      #     4: (1280, 720),
-      # }
+      # Resolucion de captura. 0=160x120, 1=320x240, 2=640x480, 3=800x600, 4=1280x720
       mode: 2
+      # Que camara del sistema usar, el numero (0) o la ruta entera (/dev/video0)
       device: '0'
-      # Tamaño del kernel que vamos a usar para generar la mascara 
+      # Kernel con el que se ensancha la mascara de trayectoria
       mascara_kernel_size: 25 
-      # Parametro que controla si estamos en modo debug o no, en caso de estar en bug se envia la imagen de lo que ve la camara
+      # Si queremos activar el modo debug de la camara
       debug: True 
 
-      # Parametros para el modulo de deteccion
-      # (los colores de las pegatinas NO van aqui: son por coche, en 'cars')
       detection:
-        # Color de la linea del meta del circuito
+        # Color de la franja que marca la linea de meta
         finish_line_color: "naranja"
-        # Tamaño del kernel que usamos para la operacion de deteccion
+        # Kernel de la limpieza de ruido. Tiene que ser impar
         kernel_size: 5
-        # Area minima que tiene que tener el stiker detectado para considerarlo valido
+        # Pixeles minimos de una mancha de color para aceptarla como pegatina
         min_area: 40 
       
     # Parametros para el controlador
     controller:
-      # Velocidad minima a la que podemos ir. Es con la que arranca la carrera
-      # y el suelo por debajo del cual no baja ninguna zona del perfil
-      minimum_speed: 70
-      # Velocidad maxima que vamos a poder alcanzar aplicando el algoritmo
+      # PWM minimo con el que empieza la carrera el coche
+      minimum_speed: 75 
+      # PWM maximo limite que puede alcanzar durante la carrera el coche
       maximum_speed: 85 
-      # Separacion minima (px) entre nodos de la trayectoria base. Los puntos
-      # que la camara envia durante la calibracion llegan mas o menos juntos
-      # segun lo rapido que fuese el coche: al quedarnos solo con los que estan
-      # a mas de esta distancia del ultimo aceptado, la ruta queda adelgazada
+      # Separacion minima (px) entre nodos de la trayectoria base
       distancia_nodos_trayectoria: 15.0
-      # Tolerancia (px) del cruce de meta. El instante del cruce se interpola
-      # sobre la RECTA que contiene el segmento de meta, pero la meta es un
-      # SEGMENTO: como el circuito es cerrado esa recta vuelve a cortar la
-      # pista en otro punto, donde el signo cambia igual. Los cambios de signo
-      # que caigan a mas de esta distancia del segmento pintado se descartan
+      # Tolerancia (px) para dar por valido un cruce de meta
       umbral_meta: 30.0
-      # Segundos sin fotogramas validos para dar por perdida a la camara activa
-      # y conmutar a otra que si este entregando (~10 fotogramas a 30 Hz). La
-      # regla es pegajosa a proposito: con dos camaras solapadas publicando
-      # posiciones intercaladas, sin esto el orden de camaras aprendido seria
-      # un ir y venir en vez del orden real de paso
+      # Segundos sin frames validos para dar por perdida la camara activa y
+      # conmutar a otra
       timeout_camara_activa: 0.3
-      # Vueltas que aguanta el modo INCREMENTAL antes de subir el PWM un
-      # escalon (de incremento_vuelta, el mismo que usa el algoritmo). Solo lo
-      # mira ese modo; los otros tres lo ignoran. No va en 'algoritmo' porque
-      # no es un parametro del algoritmo: el escalon lo cuenta el controlador
+      # En modo incremental marca el numero de vueltas que tiene que pasar para subir el PWM
       vueltas_incremento: 10
 
-      # Parametros del ALGORITMO DE VELOCIDAD (EstrategiaPerfil). El algoritmo
-      # no es un nodo ROS: los lee el controlador y se los pasa al crear una
-      # instancia por camara. Estan en px, en celdas o en unidades de PWM
-      # segun el caso, y se indica en cada uno
+      # Parametros AVANZADOS del algoritmo de velocidad. El algoritmo no es un
+      # nodo de ROS, asi que los lee el controlador y se los pasa. Van en px, en
+      # celdas o en unidades de PWM, y se dice en cada uno
       algoritmo:
         # -- Deteccion de derrape y localizacion --
-        # Distancia perpendicular (px) de la pegatina TRASERA a la trayectoria
-        # a partir de la cual se considera que el coche derrapa. Ajustado en
-        # pista: con 15 px el derrape se confirmaba tan tarde que el coche ya
-        # se habia salido
+        # Distancia (px) que se tiene que separar la pegatina trasera de la
+        # trayectoria para decidir que se esta produciendo un derrape
         umbral_derrape: 10.0
-        # Si la pegatina DELANTERA aparece a mas de esta distancia (px) de la
-        # ruta, la deteccion es falsa y se descarta el fotograma entero: el
-        # controlador mantiene entonces la velocidad anterior
+        # Distancia (px) que se tiene que separar la pegatina delantera para
+        # marcar la deteccion como falsa
         max_dist_ruta: 80.0
-        # Zona muerta, en CELDAS, junto a los extremos de la cadena abierta y
-        # junto a las celdas gigantes. Al entrar o salir del encuadre la pose
-        # del coche no es fiable y daria derrapes falsos
+        # Celdas de los extremos de la trayectoria abierta donde no se abre
+        # derrape porque saldrian falsos positivos
         margen_extremo_celdas: 2
 
         # -- Construccion de la cadena de celdas --
-        # Separacion entre celdas (px medidos sobre la trayectoria). Las celdas
-        # se generan interpolando, asi que este valor manda sobre lo juntos o
-        # separados que llegasen los puntos de calibracion
+        # Separacion entre celdas (px)
         paso_celda: 15.0
-        # Salto entre puntos consecutivos (px) a partir del cual se considera
-        # un hueco tapado y se crea una celda gigante en vez de interpolar. En
-        # los logs de pista los huecos por salida de encuadre miden 189-489 px
-        # y los cortes falsos 60-133 px: 150 separa bien ambos mundos
+        # Separacion (px) a partir de la cual se da por hecho que ahi hay un trozo
+        # de circuito que la camara no ve, y se crea una celda gigante
         umbral_celda_gigante: 150.0
-        # Distancia maxima (px) entre el ultimo y el primer punto para dar por
-        # hecho que el final de la trayectoria conecta con su inicio. Es lo que
-        # decide si la cadena es CERRADA (la camara ve el circuito completo) o
-        # ABIERTA (ve solo una porcion)
+        # Distancia maxima (px) entre el ultimo punto y el primero para dar por
+        # hecho que la trayectoria se cierra sobre si misma, es decir que una sola
+        # camara ve todo el circuito
         umbral_cierre: 60.0
 
         # -- Perfil de zonas y ciclo de aprendizaje --
-        # Cuanto sube el PWM de cada zona no protegida al completarse una
-        # vuelta limpia (unidades de PWM)
+        # Cuanto sube el PWM de cada zona no protegida al cruzar meta
         incremento_vuelta: 1.0
-        # Cuanto baja el PWM de una zona cuando se registra un derrape en ella
-        # (unidades de PWM)
+        # Cuanto baja el PWM de una zona al derrapar en ella
         reduccion_derrape: 2.0
-        # Retroceso (px) al CREAR una zona de derrape: el exceso de velocidad
-        # se gesta antes de manifestarse, asi que hay que frenar bastante antes
-        # del punto donde se perdio la adherencia
+        # Distancia hacia atras (px) que hay que castigar cuando se crea una zona
+        # de derrape, para que el coche llegue mas despacio
+        # Lo mejor es que sea un multiplo de paso_celda
         retroceso_creacion: 150.0
-        # Retroceso (px) al FUSIONAR un derrape con una zona ya existente, que
-        # ya aplico el suyo al crearse. Si cada reincidencia retrocediera la
-        # distancia completa, el circuito entero acabaria protegido y el perfil
-        # no volveria a subir en ningun tramo
+        # Distancia hacia atras (px) que hay que castigar cuando se unen dos zonas
+        # de derrape, para que el coche llegue mas despacio
+        # Lo mejor es que sea un multiplo de paso_celda
         retroceso_fusion: 60.0
-        # Holgura (en celdas) para considerar que un derrape "toca" una zona
-        # existente y hay que fusionar en vez de crear una nueva
+        # Celdas de holgura para decidir que un derrape es el mismo de antes y
+        # hay que ampliar su zona en vez de crear otra nueva
         margen_fusion_celdas: 1
-        # Vueltas que una zona permanece protegida (sin poder subir) despues de
-        # registrar un derrape
+        # Vueltas que una zona se queda sin poder subir despues de un derrape
         vueltas_proteccion: 2
 
-    # Parámetros para el Arduino
+    # Conexion serie con el Arduino que alimenta los carriles
     arduino:
+      # Puerto donde aparece el Arduino al enchufarlo por USB
       port: "/dev/ttyACM0"
       baudrate: 115200
-      calibration_speed: 70
+      # PWM que se aplica durante la vuelta de calibracion
+      calibration_speed: 75 
 
-    # MEDIDOR DE LATENCIA DE RED (NetProbeNode en el PC + eco en cada camara).
-    # Nada de esto forma parte del camino de datos: es instrumentacion para las
-    # pruebas de red de la memoria y se puede apagar entera sin desmontar nada.
-    #
-    # Se mide el viaje de IDA Y VUELTA (RTT) y no el de ida solo. El motivo, que
-    # esta desarrollado en la cabecera de NetProbeNode.py: en un RTT las dos
-    # marcas de tiempo las toma el MISMO reloj, asi que el desfase entre los
-    # relojes de las dos maquinas se cancela al restar (RFC 2681, 2.7.1). En una
-    # medida unidireccional ese desfase se suma entero al resultado, y sobre
-    # WiFi es del mismo orden de magnitud que la latencia que se quiere medir.
-    # Aqui no hay NTP en ninguna parte, y es deliberado.
     net_probe:
-      # Interruptor general, lo leen LOS DOS nodos: el emisor del PC y el eco de
-      # la camara. Con False el sistema queda exactamente como si esto no
-      # existiera (ni sondeos, ni suscripciones, ni ficheros). Se deja en True
-      # los dias de medicion y en False el resto del tiempo.
-      enabled: False 
 
-      # Camaras a sondear. Los nombres tienen que ser los mismos node_id con los
-      # que se levanta cada CameraNode (los que pasa docker-compose-camera.yml
-      # en NODE_ID), porque de ahi sale su namespace: el eco escucha en
-      # /<node_id>/net_probe. Un enlace por camara y una medida independiente
-      # por enlace: mezclar una camara por cable con otra por WiFi en la misma
-      # media no diria nada de ninguna de las dos.
-      #
-      # Aqui van SOLO las camaras que corren en una Raspberry, que son las que
-      # cruzan la red de verdad: camara_03 y camara_04 corren en el mismo PC que
-      # el emisor y sondearlas mediria el loopback, no el enlace.
-      camaras: ["camara_01", "camara_02"]
+      # Con False el sistema queda como si esto no existiera
+      enabled: True 
 
-      # Cadencia de sondeo, con timer FIJO: sale un sondeo por camara cada tick
-      # pase lo que pase, sin esperar al eco anterior. Que la cadencia sea
-      # constante es lo que hace que el porcentaje de perdida signifique algo.
-      # 5 Hz es el compromiso: bastantes muestras para una mediana y un p95
-      # decentes en una ejecucion de 30 vueltas, y muy por debajo de los 30 Hz
-      # del camino real para no falsear la medida metiendo trafico propio.
+      # Camaras a las que se manda el echo, con el mismo nombre con el que se
+      # levantan (NODE_ID)
+      camaras: ["camara_01"]
+
+      # Frecuencia con la que se mandan los echos
       frecuencia_hz: 5.0
 
-      # Relleno del sondeo, en bytes. Sirve para que el paquete pese mas o menos
-      # lo que un CarLocation real y atraviese la red en las mismas condiciones:
-      # un datagrama de 40 bytes y uno de 200 no se fragmentan igual ni esperan
-      # lo mismo en las colas. 128 B deja el NetProbe a la altura de un
-      # CarLocation con sus dos pegatinas y sus dos rectangulos.
+      # Bytes de relleno, para que el echo pese lo mismo que un CarLocation
       padding_bytes: 128
 
-      # Un sondeo que lleve mas de esto sin volver se da por PERDIDO: se apunta
-      # con perdido=1 y sale del calculo de latencia. No se cuenta como "muy
-      # lento" a proposito — si no, la cola de la distribucion se llenaria de
-      # sondeos que en realidad no llegaron nunca y el p95 acabaria midiendo
-      # este umbral en vez de la red. 500 ms es mas de dos veces el peor punto
-      # del barrido de tc netem (200 ms de ida y vuelta = 400 ms), asi que un
-      # sondeo que lo supera es que se ha perdido de verdad.
+      # Un echo que tarde mas de esto en volver se da por perdido
       umbral_perdida_ms: 500.0
 
-      # Etiqueta de la ejecucion. Va en el nombre del CSV
-      # (netprobe_<etiqueta>_<camara>.csv) y es lo que permite separar despues
-      # unos de otros los escenarios de una campana de medidas: A1_rep1,
-      # A2_rep3, B_100ms... SE CAMBIA A MANO ENTRE EJECUCIONES. Si se olvida,
-      # los ficheros se abren en modo "a" y dos ejecuciones quedan pegadas en el
-      # mismo CSV, mezcladas y sin forma de separarlas.
-      etiqueta: "sin_etiqueta"
+      # Nombre del CSV donde se guardan los datos
+      # Si no se cambia, las filas se añaden al fichero que ya estuviera creado
+      etiqueta: "2_COCHES_CIRCUITO_FINAL"
 
-      # Donde se escriben los CSV. Por defecto dentro del paquete, igual que los
-      # logs_carrera del algoritmo: docker-compose-brain.yml monta
-      # src/image_processor_pkg desde el host, asi que lo que se escribe ahi
-      # sobrevive a parar el contenedor y se lee sin entrar en el. Esta ruta es
-      # la de DENTRO del contenedor.
+      # Ruta donde se guarda el CSV con los resultados
       directorio_csv: "/ros2_ws/src/image_processor_pkg/logs_red"
 

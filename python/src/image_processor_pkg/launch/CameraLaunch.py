@@ -1,3 +1,9 @@
+"""
+Lanza el nodo camara
+
+Uso:  NODE_ID=camara_01 CAMERA_DEV=0 docker compose -f docker-compose-camera.yml up
+"""
+
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -6,14 +12,14 @@ from launch.actions import DeclareLaunchArgument
 
 def generate_launch_description():
     
-    # Cargamos el fichero de configuracion: params.yaml 
+    # Fichero con toda la configuracion del sistema
     params_file = PathJoinSubstitution([
         FindPackageShare('image_processor_pkg'),
         'config',
         'params.yaml'
     ])
 
-    # Obtenemos el nombre del nodo
+    # Identifica a esta camara en toda la red. Es tambien su namespace
     node_id = DeclareLaunchArgument(
         'node_id',
         default_value='camera_00',
@@ -21,7 +27,7 @@ def generate_launch_description():
 
     )
 
-    # Nombre de la camara que queremos levantar
+    # Que webcam de esta maquina hay que abrir
     camera_name = DeclareLaunchArgument(
         'camera_name',
         default_value='0',

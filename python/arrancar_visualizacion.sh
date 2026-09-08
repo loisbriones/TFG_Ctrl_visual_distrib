@@ -1,33 +1,18 @@
 #!/usr/bin/env bash
-# Levanta el panel de la carrera en directo y abre el navegador.
+# Levanta el panel de la carrera en directo y abre el navegador. Se para con
+# Ctrl+C. Sirve dos paginas, / con el panel y /camaras con el mosaico para
+# encuadrar las camaras antes de empezar (ver README, "El panel en directo").
 #
-# Uso:
-#   ./arrancar_visualizacion.sh
-#
-# Sirve dos paginas en el mismo puerto:
-#   /          el panel de la carrera (clasificacion, plano, eventos)
-#   /camaras   el mosaico de lo que ve cada camara, para ENCUADRARLAS antes de
-#              empezar: se levantan solo los nodos camara, se abre esa pagina y
-#              se van colocando hasta que entre todas se vea el circuito entero
-#
-# Se para con Ctrl+C. Para ver una carrera ya grabada, dejar esto corriendo y
-# en otra terminal lanzar la reproduccion del bag en el mismo dominio DDS:
-#
-#   ROS_DOMAIN_ID=42 ros2 bag play GRABACIONES/bags/<nombre>
-#
-# (arrancar SIEMPRE este script antes que el play: la linea de meta se publica
-# una sola vez, al principio de la reproduccion).
+# Uso:  ./arrancar_visualizacion.sh
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
 PUERTO=8990   # PUERTO en VisualizacionNode.py
 
-# El navegador se abre en segundo plano y con una espera: el contenedor tiene
-# que compilar el workspace con colcon antes de que haya nada escuchando en el
-# puerto, y una pestaña abierta demasiado pronto se queda en "no se puede
-# conectar". El EventSource de la pagina reconecta solo, pero la primera carga
-# del HTML no
+# El navegador se abre con espera porque el contenedor tiene que compilar antes
+# de que haya nada escuchando. Una pestana abierta demasiado pronto se queda en
+# "no se puede conectar", y la primera carga del HTML no reintenta sola
 (sleep 12; xdg-open "http://localhost:$PUERTO" >/dev/null 2>&1 || true) &
 
 echo "Panel   en http://localhost:$PUERTO          (Ctrl+C para parar)"

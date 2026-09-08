@@ -1,28 +1,11 @@
 services:
-  # Panel de la carrera EN DIRECTO (http://localhost:8990).
-  #
-  # Va en su propio compose y no dentro del cerebro a proposito: solo mira, no
-  # decide nada, asi que se puede levantar y tirar en mitad de una carrera sin
-  # reiniciar los controladores. Tampoco tiene que correr en el mismo PC: al ir
-  # por DDS basta con estar en la misma red y en el ROS_DOMAIN_ID 42, asi que
-  # se puede abrir en el portatil de quien esta mirando la carrera.
-  #
-  # Sirve tambien para ver una carrera GRABADA: se levanta esto y se lanza
-  # 'ros2 bag play' de cualquier bag de GRABACIONES/bags. Conviene arrancarlo
-  # ANTES del play porque /finish_line_position se publica una sola vez.
   visualizacion:
     build: .
-    # Igual que el resto del sistema: sin esto DDS no descubre a los nodos de
-    # las otras maquinas. Ademas hace que el puerto 8990 quede publicado
-    # directamente en el host, por eso aqui no hace falta un 'ports:'
     network_mode: "host"
     ipc: "host"
     environment:
       - ROS_DOMAIN_ID=42
       - ROS_LOCALHOST_ONLY=0
-      # ros:humble va en UTC. El panel usa un reloj RELATIVO a su arranque, no
-      # la hora del sistema, asi que esto no le afecta; se deja por coherencia
-      # con los demas compose y para que los logs del contenedor cuadren
       - TZ=Europe/Madrid
     volumes:
       - /etc/localtime:/etc/localtime:ro

@@ -35,8 +35,7 @@ install(DIRECTORY config launch web
 # Cargar los scripts de python
 install(PROGRAMS 
   image_processor_pkg/CameraNode.py
-  image_processor_pkg/subscriber.py
-  image_processor_pkg/ProcessImage.py 
+  image_processor_pkg/ProcessImage.py
   image_processor_pkg/RaceControllerNode.py
   image_processor_pkg/ArduinoController.py
   image_processor_pkg/CarControllerNode.py
