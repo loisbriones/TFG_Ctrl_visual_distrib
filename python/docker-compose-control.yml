@@ -1,7 +1,7 @@
-# Lanza launch/BrainLaunch.py
-# Uso:  docker compose -f docker-compose-brain.yml up
+# Lanza launch/ControlLaunch.py
+# Uso:  docker compose -f docker-compose-control.yml up
 services:
-  cerebro:
+  control:
     build: .
     network_mode: "host"
     privileged: true
@@ -18,4 +18,4 @@ services:
       - ./src/image_processor_pkg:/ros2_ws/src/image_processor_pkg
     command: >
       bash -c "source /opt/ros/humble/setup.bash && colcon build --symlink-install &&
-               source install/setup.bash && ros2 launch image_processor_pkg BrainLaunch.py"
+               source install/setup.bash && ros2 launch image_processor_pkg ControlLaunch.py"

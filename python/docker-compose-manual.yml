@@ -1,7 +1,7 @@
-# Lanza launch/CameraLaunch.py
+# Lanza launch/ManualLaunch.py
 # Uso:  docker compose -f docker-compose-manual.yml up
 services:
-  cerebro:
+  control:
     build: .
     network_mode: "host"
     privileged: true

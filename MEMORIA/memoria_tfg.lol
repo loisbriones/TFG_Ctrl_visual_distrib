@@ -11,11 +11,11 @@
 \contentsline {lstlisting}{\numberline {D.5}{\ignorespaces Parámetros del control, del algoritmo y del Arduino (\texttt {config/params.yaml})}}{93}{lstlisting.D.5}%
 \contentsline {lstlisting}{\numberline {D.6}{\ignorespaces Política aplicada en la prueba de la política óptima (\texttt {politica\_CarController\_politica\_car1\_camara\_02.json}).}}{94}{lstlisting.D.6}%
 \contentsline {lstlisting}{\numberline {D.7}{\ignorespaces Lanzamiento del nodo de captura (\texttt {launch/CameraLaunch.py})}}{95}{lstlisting.D.7}%
-\contentsline {lstlisting}{\numberline {D.8}{\ignorespaces Lanzamiento de los controladores y del nodo de potencia (\texttt {launch/BrainLaunch.py})}}{96}{lstlisting.D.8}%
+\contentsline {lstlisting}{\numberline {D.8}{\ignorespaces Lanzamiento de los controladores y del nodo de potencia (\texttt {launch/ControlLaunch.py})}}{96}{lstlisting.D.8}%
 \contentsline {lstlisting}{\numberline {D.9}{\ignorespaces Lanzamiento en modo manual, sin nodo de potencia (\texttt {launch/ManualLaunch.py})}}{97}{lstlisting.D.9}%
 \contentsline {lstlisting}{\numberline {D.10}{\ignorespaces Lanzamiento del panel en directo (\texttt {launch/VisualizacionLaunch.py})}}{97}{lstlisting.D.10}%
 \contentsline {lstlisting}{\numberline {D.11}{\ignorespaces Imagen común de todos los nodos (\texttt {Dockerfile})}}{98}{lstlisting.D.11}%
 \contentsline {lstlisting}{\numberline {D.12}{\ignorespaces Despliegue del nodo de captura, en cada máquina con cámara (\texttt {docker-compose-camera.yml})}}{98}{lstlisting.D.12}%
-\contentsline {lstlisting}{\numberline {D.13}{\ignorespaces Despliegue de los controladores y del nodo de potencia en la máquina conectada al Arduino (\texttt {docker-compose-brain.yml})}}{99}{lstlisting.D.13}%
+\contentsline {lstlisting}{\numberline {D.13}{\ignorespaces Despliegue de los controladores y del nodo de potencia en la máquina conectada al Arduino (\texttt {docker-compose-control.yml})}}{99}{lstlisting.D.13}%
 \contentsline {lstlisting}{\numberline {D.14}{\ignorespaces Despliegue en modo manual, sin acceso al Arduino y sin nodo de potencia (\texttt {docker-compose-manual.yml})}}{99}{lstlisting.D.14}%
 \contentsline {lstlisting}{\numberline {D.15}{\ignorespaces Despliegue del panel en directo (\texttt {docker-compose-visualizacion.yml})}}{99}{lstlisting.D.15}%

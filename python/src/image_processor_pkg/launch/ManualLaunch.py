@@ -1,8 +1,8 @@
 """
-Lanza el cerebro para los coches en CARRERA MANUAL, los que conduce una persona
-con el mando fisico. De la lista 'coches' del params.yaml arranca solo los que
-tienen modo: "manual", y a diferencia de BrainLaunch NO lanza el arduino_bridge,
-que es la garantia de que nada mueve el coche.
+Lanza los controladores de los coches en CARRERA MANUAL, los que conduce una
+persona con el mando fisico. De la lista 'coches' del params.yaml arranca solo
+los que tienen modo: "manual", y a diferencia de ControlLaunch NO lanza el
+arduino_bridge, que es la garantia de que nada mueve el coche.
 
 Uso:  docker compose -f docker-compose-manual.yml up
 """

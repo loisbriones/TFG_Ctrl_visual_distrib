@@ -1,9 +1,9 @@
 """
-Lanza el cerebro: un controlador por cada coche que NO sea manual (los modos
-incremental, automatico y politica), el puente Arduino y el medidor de red. Lee
-params.yaml por su cuenta para saber cuantos nodos tiene que crear.
+Lanza un controlador por cada coche que NO sea manual (los modos incremental,
+automatico y politica), el puente Arduino y el medidor de red. Lee params.yaml
+por su cuenta para saber cuantos nodos tiene que crear.
 
-Uso:  docker compose -f docker-compose-brain.yml up
+Uso:  docker compose -f docker-compose-control.yml up
 """
 
 from launch import LaunchDescription
@@ -69,16 +69,17 @@ def generate_launch_description():
             )
         )
 
-    # Se lanza el medidor de latencia de red
-    ld.add_action(
-        Node(
-            package="image_processor_pkg",
-            executable="NetProbeNode.py",
-            name="net_probe",
-            parameters=[params_file],
-            respawn=True,
-            respawn_delay=2.0,
+    # El medidor de latencia de red solo se levanta si esta activado
+    if params.get("net_probe", {}).get("enabled", True):
+        ld.add_action(
+            Node(
+                package="image_processor_pkg",
+                executable="NetProbeNode.py",
+                name="net_probe",
+                parameters=[params_file],
+                respawn=True,
+                respawn_delay=2.0,
+            )
         )
-    )
 
     return ld

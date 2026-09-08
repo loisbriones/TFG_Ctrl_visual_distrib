@@ -20,7 +20,7 @@ MSG_SOURCE_DIR="/home/lois/TEMP/TFG_Ctrl_visual_distrib/python/src/image_process
 MSG_DEST_DIR="src/record_pkg/msg"
 
 # 3) Contenedor del sistema principal (para activar el debug de las cámaras)
-CEREBRO_FILTER="cerebro"
+CONTROL_FILTER="control"
 
 # ==============================================================================
 # 1. Validación de parámetros de entrada
@@ -50,10 +50,10 @@ else
 fi
 
 # ==============================================================================
-# 3. Activamos el modo debug de las cámaras en el contenedor cerebro
+# 3. Activamos el modo debug de las cámaras en el contenedor de control
 #    (antes de arrancar la grabación, que se queda en primer plano)
 # ==============================================================================
-CONTAINER_ID=$(docker ps -qf "name=$CEREBRO_FILTER")
+CONTAINER_ID=$(docker ps -qf "name=$CONTROL_FILTER")
 
 if [ -n "$CONTAINER_ID" ]; then
   CMD_CAMARAS=""
@@ -70,7 +70,7 @@ if [ -n "$CONTAINER_ID" ]; then
   "
   echo "¡Configuración completada con éxito!"
 else
-  echo "Aviso: no se encontró ningún contenedor '$CEREBRO_FILTER' en ejecución."
+  echo "Aviso: no se encontró ningún contenedor '$CONTROL_FILTER' en ejecución."
   echo "Se grabará igualmente, pero las cámaras no publicarán imágenes de debug."
 fi
 echo "----------------------------------------"

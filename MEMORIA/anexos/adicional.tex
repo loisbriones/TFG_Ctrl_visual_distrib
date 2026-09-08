@@ -59,10 +59,10 @@ En cada máquina con cámara se lanza un contenedor por cada una, indicando con 
 NODE_ID=camara_01 CAMERA_DEV=0 docker compose -p camara_01 -f docker-compose-camera.yml up
 \end{lstlisting}
 
-En la máquina que tiene el Arduino conectado se levanta el cerebro, que arranca un nodo de control por cada coche que no sea manual, el nodo de potencia y el nodo de sondeo de red, que se puede desactivar desde el fichero de parámetros si no se quieren medir latencias.
+En la máquina que tiene el Arduino conectado se levantan los nodos de control, uno por cada coche que no sea manual, junto con el nodo de potencia y el nodo de sondeo de red, que solo se levanta si está activado en el fichero de parámetros.
 
-\begin{lstlisting}[style=codigo, language=bash, caption={Arranque de los nodos de control y del nodo de potencia}, label={lst:cmd-brain}]
-docker compose -p cerebro -f docker-compose-brain.yml up
+\begin{lstlisting}[style=codigo, language=bash, caption={Arranque de los nodos de control y del nodo de potencia}, label={lst:cmd-control}]
+docker compose -p control -f docker-compose-control.yml up
 \end{lstlisting}
 
 Para una carrera conducida por personas se usa el lanzamiento manual, que levanta los mismos nodos de control pero sin el de potencia, de manera que arranca aunque el Arduino no esté conectado.

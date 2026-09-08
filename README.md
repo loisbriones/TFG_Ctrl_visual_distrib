@@ -108,8 +108,8 @@ El código LaTeX donde está recogida la memoria del proyecto.
 python/
 ├── Dockerfile                        La imagen, común a todos los nodos
 ├── docker-compose-camera.yml         Despliegue de una cámara
-├── docker-compose-brain.yml          Despliegue del cerebro
-├── docker-compose-manual.yml         Cerebro en modo manual, sin Arduino
+├── docker-compose-control.yml        Despliegue de los controladores
+├── docker-compose-manual.yml         Los mismos en modo manual, sin Arduino
 ├── docker-compose-visualizacion.yml  El panel en directo
 ├── arrancar_visualizacion.sh         Atajo para levantar el panel
 └── src/image_processor_pkg/
@@ -174,11 +174,11 @@ nodos hay que levantar, con qué parámetros y con qué nombre. Están en
 | Fichero | Qué levanta |
 |---|---|
 | `CameraLaunch.py` | Un `CameraNode`. Recibe por argumento el nombre de la cámara y qué webcam abrir |
-| `BrainLaunch.py` | Un `CarControllerNode` por cada coche que NO sea manual, el `RaceControllerNode` y el `NetProbeNode` |
+| `ControlLaunch.py` | Un `CarControllerNode` por cada coche que NO sea manual, el `RaceControllerNode` y, si está activado, el `NetProbeNode` |
 | `ManualLaunch.py` | Un `CarControllerNode` por cada coche manual. **No** levanta el puente Arduino |
 | `VisualizacionLaunch.py` | El `VisualizacionNode` del panel en directo |
 
-`BrainLaunch` y `ManualLaunch` leen `params.yaml` por su cuenta antes de
+`ControlLaunch` y `ManualLaunch` leen `params.yaml` por su cuenta antes de
 arrancar nada, porque cuántos nodos crear depende de cuántos coches haya. Cada
 uno se queda con su parte de la lista según el modo, así que para una carrera
 mixta se levantan los dos a la vez y no hay que tocar ninguna configuración.
@@ -359,12 +359,12 @@ que tiene que abrir:
 NODE_ID=camara_01 CAMERA_DEV=0 docker compose -f docker-compose-camera.yml up
 ```
 
-**2. El cerebro.** En el PC que tiene el Arduino enchufado. Levanta un
+**2. Los controladores.** En el PC que tiene el Arduino enchufado. Levanta un
 controlador por cada coche que no sea manual, el puente Arduino y el medidor de
 red:
 
 ```bash
-docker compose -f docker-compose-brain.yml up
+docker compose -f docker-compose-control.yml up
 ```
 
 **3. Carrera manual.** Los mismos controladores pero sin el puente Arduino,
@@ -418,6 +418,16 @@ raros justo porque el algoritmo estaba corriendo por debajo.
 **Las celdas del código son los puntos de la trayectoria de la memoria.** Es
 solo un cambio de nombre, está explicado en
 [`AlgoritmoVelocidad`](#algoritmovelocidad).
+
+**El topic se llama `pwd` pero lo que lleva es un PWM.** Fue una errata del
+principio del proyecto que se quedó y se fue arrastrando. No se ha cambiado
+porque el nombre del topic está grabado dentro de todos los bags publicados, y
+renombrarlo dejaría sin datos de PWM el análisis de todas las pruebas.
+
+**Donde el código dice "speed" es el valor de PWM.** Pasa con `minimum_speed`,
+`maximum_speed`, `calibration_speed`, `v_min`, `v_max` y el mensaje
+`SpeedCarril`. Se quedaron así desde el principio y renombrarlos tocaría
+demasiados sitios para lo que aportan.
 
 ---
 

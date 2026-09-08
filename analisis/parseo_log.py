@@ -70,11 +70,11 @@ RE_ZONA_DECISION = re.compile(
     r"(?:corto )?de ([\d.]+) px desde la celda (\d+) "
     r"\(derrapes_contador=(\d+)\)"
 )
-# Carveo resultante en la particion (una linea por tramo contiguo castigado)
-RE_ZONA_CARVE_NUEVA = re.compile(
+# Zona resultante en la particion (una linea por tramo contiguo castigado)
+RE_ZONA_NUEVA = re.compile(
     r"\[ZONA\] Nueva zona de derrape \[(\d+), (\d+)\] pwm=(\d+)"
 )
-RE_ZONA_CARVE_FUSION = re.compile(
+RE_ZONA_FUSION = re.compile(
     r"\[ZONA\] Fusión: el castigo \[(\d+), (\d+)\] absorbe (\d+) zona\(s\) "
     r"de derrape \((.+)\) -> zona \[(\d+), (\d+)\] pwm=(\d+)"
 )
@@ -163,7 +163,7 @@ class Carrera:
       cierres_vision   lista de (frame, vuelta) de derrapes cerrados por
                        salir del campo de vision / fin de cadena
       decisiones       lista de dicts [ZONA] decision (nueva/fusion+retroceso)
-      carveos          lista de dicts de carveos en la particion (con pwm)
+      zonas_creadas    lista de dicts de las zonas creadas en la particion (con pwm)
       gigante_castigos lista de {linea, vuelta, celda, antes, despues}
       derrames         lista de {linea, vuelta, px, t_abs} (reduccion_pendiente)
       externas         lista de {linea, vuelta, px, t_abs} (reduccion de otra
@@ -192,7 +192,7 @@ class Carrera:
         self.incoherentes = []
         self.cierres_vision = []
         self.decisiones = []
-        self.carveos = []
+        self.zonas_creadas = []
         self.gigante_castigos = []
         self.derrames = []
         self.externas = []
@@ -405,13 +405,13 @@ def parsear_log(ruta: Path) -> Carrera:
                 }
             )
             continue
-        m = RE_ZONA_CARVE_FUSION.search(cuerpo)
+        m = RE_ZONA_FUSION.search(cuerpo)
         if m:
             absorbidas = [
                 (int(a), int(b))
                 for a, b in re.findall(r"\[(\d+)-(\d+)\]", m.group(4))
             ]
-            c.carveos.append(
+            c.zonas_creadas.append(
                 {
                     "linea": n_linea,
                     "vuelta": vuelta_actual,
@@ -423,9 +423,9 @@ def parsear_log(ruta: Path) -> Carrera:
                 }
             )
             continue
-        m = RE_ZONA_CARVE_NUEVA.search(cuerpo)
+        m = RE_ZONA_NUEVA.search(cuerpo)
         if m:
-            c.carveos.append(
+            c.zonas_creadas.append(
                 {
                     "linea": n_linea,
                     "vuelta": vuelta_actual,

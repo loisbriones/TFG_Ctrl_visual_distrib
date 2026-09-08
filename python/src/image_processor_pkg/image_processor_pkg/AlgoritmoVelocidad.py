@@ -1081,7 +1081,7 @@ class EstrategiaPerfil:
             f"pwm {antes:.0f}->{zona['pwm']:.0f} (queda protegida)"
         )
 
-    def _carvear_particion(self, a, b, nueva):
+    def _insertar_zona(self, a, b, nueva):
         """
         Particiona las zonas metiendo la nueva y recortando las que ya estaban
         La nueva zona ocupa el intervalo [a, b]
@@ -1109,7 +1109,7 @@ class EstrategiaPerfil:
         resultado.append(nueva)
         self.zonas = sorted(resultado, key=lambda z: z["ini"])
 
-    def _carvear_derrape(self, a, b, vuelta):
+    def _crear_zona_derrape(self, a, b, vuelta):
         """
         Convierte el intervalo de celdas [a, b] en una zona de derrape y se
         traga las zonas de derrape que ya hubiera pegadas o solapadas. El PWM
@@ -1180,7 +1180,7 @@ class EstrategiaPerfil:
             "tipo": "derrape", "vueltas": vueltas_hist,
         }
 
-        self._carvear_particion(a2, b2, nueva)
+        self._insertar_zona(a2, b2, nueva)
 
     def _registrar_zona(self, ini, fin, vuelta, frame):
         """
@@ -1259,7 +1259,7 @@ class EstrategiaPerfil:
             if tramo_ini is None:
                 tramo_ini = c
             elif c is None or c != anterior + 1:
-                self._carvear_derrape(tramo_ini, anterior, vuelta)
+                self._crear_zona_derrape(tramo_ini, anterior, vuelta)
                 tramo_ini = c
             anterior = c
 
@@ -1313,7 +1313,7 @@ class EstrategiaPerfil:
             if tramo_ini is None:
                 tramo_ini = c
             elif c is None or c != anterior + 1:
-                self._carvear_derrape(tramo_ini, anterior, vuelta)
+                self._crear_zona_derrape(tramo_ini, anterior, vuelta)
                 tramo_ini = c
             anterior = c
 
