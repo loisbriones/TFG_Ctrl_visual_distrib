@@ -37,3 +37,11 @@ python/src/image_processor_pkg/logs_carrera/
 python/src/image_processor_pkg/logs_red/
 python/src/image_processor_pkg/cache_trayectoria_*.json
 python/src/image_processor_pkg/politica_*.json
+
+# Los HTML de análisis de las pruebas. Estuvieron versionados y eran 572 MB, el
+# 91% del repositorio, con la mitad de cada fichero ocupada por una copia de
+# plotly.js. Además GitHub no los abre, los enseña como texto. Ahora se publican
+# en la web de resultados, que sí los sirve como páginas, y los bags con los que
+# se generan van en las releases. La tabla que enlaza las tres cosas de cada
+# ejecución (análisis, vídeo y datos) es RESULTADOS.md.
+RESULTADOS_PRUEBAS/
