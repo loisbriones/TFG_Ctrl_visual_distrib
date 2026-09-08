@@ -49,7 +49,6 @@ es la arquitectura distribuida.
 6. ✉️ [Los mensajes](#los-mensajes)
 7. 🐳 [Despliegue](#despliegue)
 8. ⚠️ [Detalles que conviene saber](#detalles-que-conviene-saber)
-9. 🛠️ [Si algo no va](#si-algo-no-va)
 
 ---
 
@@ -429,27 +428,3 @@ renombrarlo dejaría sin datos de PWM el análisis de todas las pruebas.
 `SpeedCarril`. Se quedaron así desde el principio y renombrarlos tocaría
 demasiados sitios para lo que aportan.
 
----
-
-## Si algo no va
-
-**El coche no arranca en la vuelta de calibración.** El puente Arduino solo pone
-a rodar los carriles de los coches que **no** son manuales. En una carrera
-manual la vuelta de calibración hay que conducirla a mano, despacio y sin parar.
-
-**Una cámara no calibra y las demás sí.** Si esa cámara ya tiene el coche en su
-`cache_trayectoria_<camara_id>.json`, se salta la calibración y arranca en
-carrera. Hay que borrar ese fichero cada vez que se mueva la cámara.
-
-**El coche derrapa siempre en el mismo punto.** Suele ser un hueco de la
-calibración: la cámara perdió el coche en ese tramo y el algoritmo lo cruza con
-una recta. El log del algoritmo lo dice con un `[TRAY] AVISO` por cada hueco.
-Se arregla repitiendo la calibración, no bajando el PWM.
-
-**No se detecta ninguna pegatina.** Cada cámara da un tono distinto de un mismo
-color. Los rangos están en `COLOR_RANGES`, dentro de `ProcessImage.py`, y se
-comprueba mirando el mosaico de `/camaras`.
-
-**El panel no pinta nada al reproducir un bag.** Hay que levantarlo **antes** del
-`ros2 bag play`, porque la línea de meta se publica una sola vez, al principio.
-Y el `play` necesita `--ipc host`, o el DDS pierde los mensajes sin avisar.
