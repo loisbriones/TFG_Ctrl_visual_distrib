@@ -10,7 +10,7 @@
 
 Python es un lenguaje de programación de código abierto, interpretado y de tipado dinámico, lo que significa que no requiere especificar el tipo de las variables de forma explícita y que el código se ejecuta directamente mediante un intérprete, sin necesidad de compilación previa~\cite{python}.
 
-Admite múltiples paradigmas de programación, como la orientación a objetos, la programación funcional y la programación por procedimientos, y es multiplataforma, lo que permite ejecutar el mismo programa en distintos sistemas operativos sin modificaciones. Su extenso ecosistema de librerías científicas y de visión artificial, junto con su sintaxis sencilla, lo han convertido en uno de los lenguajes más populares en la actualidad.  En este proyecto es el lenguaje empleado para diseñar todos los nodos de la arquitectura distribuida, implementados sobre la librería \texttt{rclpy} de ROS2, y también el de las herramientas de grabación y análisis de las sesiones.
+Admite múltiples paradigmas de programación, como la orientación a objetos, la programación funcional y la programación por procedimientos, y es multiplataforma, lo que permite ejecutar el mismo programa en distintos sistemas operativos sin modificaciones. Su extenso ecosistema de librerías científicas y de visión artificial, junto con su sintaxis sencilla, lo han convertido en uno de los lenguajes más populares en la actualidad.  En este proyecto es el lenguaje empleado para diseñar todos los nodos de la arquitectura distribuida, implementados sobre la librería \texttt{rclpy} de \gls{ros2}, y también el de las herramientas de grabación y análisis de las sesiones.
 
 \subsubsection{C++}
 
@@ -18,7 +18,7 @@ C++ es un lenguaje compilado de propósito general, con tipado estático y capaz
 
 \subsubsection{HTML, CSS y JavaScript}
 
-El nodo de visualización sirve por HTTP una página sencilla desde la que se sigue la carrera en directo, con las imágenes de las cámaras y los datos que se publican en la red.
+El nodo de visualización sirve por \gls{http} una página sencilla desde la que se sigue la carrera en directo, con las imágenes de las cámaras y los datos que se publican en la red.
 
 \subsection{Librerías}
 \subsubsection{OpenCV}
@@ -39,13 +39,13 @@ La librería estándar de Python cubre el resto de necesidades del proyecto sin 
 \texttt{re} extrae mediante expresiones regulares los datos de los registros del algoritmo durante el análisis y \texttt{csv} exporta las tablas resultantes.
 
 \subsubsection{threading y concurrent.futures}
-Los módulos estándar \texttt{threading} y \texttt{concurrent.futures} permiten ejecutar tareas en paralelo dentro de un mismo proceso. En el nodo cámara se emplean para desacoplar la captura de vídeo del procesamiento (un hilo dedicado actualizar el buffer de la cámara) y para buscar en paralelo las pegatinas de varios coches sobre el mismo fotograma mediante un \textit{pool} de hilos.
+Los módulos estándar \texttt{threading} y \texttt{concurrent.futures} permiten ejecutar tareas en paralelo dentro de un mismo proceso. En el nodo cámara se emplean para desacoplar la captura de vídeo del procesamiento (un hilo dedicado a actualizar el buffer de la cámara) y para buscar en paralelo las pegatinas de varios coches sobre el mismo fotograma mediante un \textit{pool} de hilos.
 
 \subsection{Herramientas de despliegue}
 
 \subsubsection{Docker y Docker Compose}
 
-Docker es una plataforma de contenedores que permite empaquetar una aplicación junto con todas sus dependencias en una imagen ejecutable de forma idéntica en cualquier máquina~\cite{docker}. En este proyecto resulta clave para el despliegue distribuido, ya que permite que los equipos no tengan instalado ROS2 ni ninguna librería, únicamente Docker. Una única imagen, construida sobre la base oficial \texttt{ros:humble-ros-base}, sirve para todos los nodos del sistema.
+Docker es una plataforma de contenedores que permite empaquetar una aplicación junto con todas sus dependencias en una imagen ejecutable de forma idéntica en cualquier máquina~\cite{docker}. En este proyecto resulta clave para el despliegue distribuido, ya que permite que los equipos no tengan instalado \gls{ros2} ni ninguna librería, únicamente Docker. Una única imagen, construida sobre la base oficial \texttt{ros:humble-ros-base}, sirve para todos los nodos del sistema.
 
 Docker Compose complementa a Docker permitiendo describir en un fichero \gls{yaml} la configuración completa de arranque de un contenedor. De esta forma, poner en marcha cualquier equipo del sistema se reduce a un único comando.
 
@@ -53,7 +53,7 @@ Docker Compose complementa a Docker permitiendo describir en un fichero \gls{yam
 
 \subsubsection{Visual Studio Code}
 
-Visual Studio Code es un editor de código fuente gratuito y multiplataforma desarrollado por Microsoft~\cite{vscode}. Ofrece resaltado de sintaxis, autocompletado, depuración integrada y un amplio ecosistema de extensiones, entre ellas las de Python y ROS2, que facilitan el desarrollo y la depuración del proyecto.
+Visual Studio Code es un editor de código fuente gratuito y multiplataforma desarrollado por Microsoft~\cite{vscode}. Ofrece resaltado de sintaxis, autocompletado, depuración integrada y un amplio ecosistema de extensiones, entre ellas las de Python y \gls{ros2}, que facilitan el desarrollo y la depuración del proyecto.
 
 \subsubsection{Arduino IDE}
 
@@ -67,18 +67,18 @@ Git es un sistema de control de versiones distribuido~\cite{git}. Todo el desarr
 
 \subsubsection{YAML}
 
-El formato \gls{yaml} permite representar datos estructurados de forma legible para humanos y máquinas~\cite{pyyaml}. Es el formato estándar de configuración en ROS2 y de Docker Compose. %En este proyecto centraliza toda la configuración del sistema en un único fichero de parámetros: colores de las pegatinas y de la meta, resolución de las cámaras, umbrales del algoritmo de control o el puerto del Arduino, entre otros.
+El formato \gls{yaml} permite representar datos estructurados de forma legible para humanos y máquinas~\cite{pyyaml}. Es el formato estándar de configuración en \gls{ros2} y de Docker Compose. %En este proyecto centraliza toda la configuración del sistema en un único fichero de parámetros: colores de las pegatinas y de la meta, resolución de las cámaras, umbrales del algoritmo de control o el puerto del Arduino, entre otros.
 
 \subsubsection{JSON}
 
 El formato \gls{json} es un estándar ligero de intercambio de datos basado en texto. Se emplea para persistir en disco las trayectorias obtenidas durante la vuelta de calibración (tanto las de cada cámara como las del controlador), de forma que en arranques posteriores el sistema pueda cargarlas y omitir la calibración.
 
-\section{ROS2}
+\section{ROS~2}
 \label{sec:ros2}
 
-ROS2 (\textit{Robot Operating System 2}) es un conjunto de librerías y herramientas de código abierto para construir aplicaciones para robots~\cite{ros2docs}. A pesar de su nombre, no se trata de un sistema operativo, sino de un middleware que proporciona la infraestructura de comunicación, el sistema de construcción y las utilidades necesarias para componer aplicaciones a partir de procesos independientes llamados \textit{nodos}. En este trabajo se ha utilizado la distribución \textit{Humble Hawksbill}~\cite{ros2docs}, versión con soporte extendido (\gls{lts}) publicada en 2022.
+\gls{ros2} es un conjunto de librerías y herramientas de código abierto para construir aplicaciones para robots~\cite{ros2docs}. A pesar de su nombre, no se trata de un sistema operativo, sino de un middleware que proporciona la infraestructura de comunicación, el sistema de construcción y las utilidades necesarias para componer aplicaciones a partir de procesos independientes llamados \textit{nodos}. En este trabajo se ha utilizado la distribución \textit{Humble Hawksbill}~\cite{ros2docs}, versión con soporte extendido (\gls{lts}) publicada en 2022.
 
-ROS2 constituye la columna vertebral de la arquitectura de este proyecto. Por ese motivo, a continuación se recogen los conceptos de ROS2 que se emplean a lo largo de la memoria, con un pequeño resumen de cada uno para poder seguir la explicación y una referencia a la documentación oficial donde puede ampliarse.
+\gls{ros2} constituye la columna vertebral de la arquitectura de este proyecto. Por ese motivo, a continuación se recogen los conceptos de \gls{ros2} que se emplean a lo largo de la memoria, con un pequeño resumen de cada uno para poder seguir la explicación y una referencia a la documentación oficial donde puede ampliarse.
 
 \subsection{Conceptos generales}
 \paragraph{Nodos}
@@ -87,11 +87,11 @@ Procesos independientes que encapsulan una funcionalidad concreta (en nuestro ca
 
 \paragraph{Topics}
 \label{sec:ros2-topics}
-Los \emph{topics} son el mecanismo de comunicación más habitual en ROS2, un sistema de paso de mensajes asíncrono de tipo publicador-suscriptor con interfaces fuertemente tipadas~\cite{macenski2022}. %Sus extremos se organizan en un grafo computacional formado por los nodos, que es la unidad con la que se razona sobre sistemas complejos. En este proyecto se definen tipos de mensajes propios para intercambiar la posición del coche, el valor de PWM que se le aplica y la telemetría.
+Los \emph{topics} son el mecanismo de comunicación más habitual en \gls{ros2}, un sistema de paso de mensajes asíncrono de tipo publicador-suscriptor con interfaces fuertemente tipadas~\cite{macenski2022}. %Sus extremos se organizan en un grafo computacional formado por los nodos, que es la unidad con la que se razona sobre sistemas complejos. En este proyecto se definen tipos de mensajes propios para intercambiar la posición del coche, el valor de \gls{pwm} que se le aplica y la telemetría.
 
 \paragraph{Interfaces y mensajes propios}
 \label{sec:ros2-interfaces}
-Además de los tipos estándar, una aplicación puede definir los suyos en ficheros de texto con extensión \texttt{.msg}, en los que se declara un campo por línea con su tipo y su nombre~\cite{ros2interfaces}. Durante la compilación del paquete, ROS2 genera automáticamente a partir de ellos las clases que los nodos usan para publicar y recibir. Este proyecto define sus propios mensajes porque parte de la información que hay que intercambiar (posiciones de dos pegatinas, consignas de PWM por carril, telemetría del lazo de control) no se corresponde con ningún tipo estándar.
+Además de los tipos estándar, una aplicación puede definir los suyos en ficheros de texto con extensión \texttt{.msg}, en los que se declara un campo por línea con su tipo y su nombre~\cite{ros2interfaces}. Durante la compilación del paquete, \gls{ros2} genera automáticamente a partir de ellos las clases que los nodos usan para publicar y recibir. Este proyecto define sus propios mensajes porque parte de la información que hay que intercambiar (posiciones de dos pegatinas, consignas de \gls{pwm} por carril, telemetría del lazo de control) no se corresponde con ningún tipo estándar.
 
 \paragraph{Parámetros}
 \label{sec:ros2-parametros}
@@ -100,7 +100,7 @@ Valores de configuración declarados por cada nodo, que pueden establecerse desd
 \paragraph{Ficheros de lanzamiento}
 \label{sec:ros2-launch}
 
-El sistema de lanzamiento en ROS2 tiene como objetivo automatizar la ejecución de múltiples nodos con un solo comando. Ayuda al usuario a describir la configuración de su sistema y luego la ejecuta tal como se ha descrito. La configuración del sistema incluye qué programas ejecutar, dónde ejecutarlos, qué argumentos pasarles y las convenciones específicas de ROS que facilitan la reutilización de componentes en todo el sistema dotando a cada uno de una configuración diferente. También se encarga de supervisar el estado de los procesos lanzados, así como de informar o reaccionar a los cambios en el estado de dichos procesos~\cite{ros2launch}.
+El sistema de lanzamiento en \gls{ros2} tiene como objetivo automatizar la ejecución de múltiples nodos con un solo comando. Ayuda al usuario a describir la configuración de su sistema y luego la ejecuta tal como se ha descrito. La configuración del sistema incluye qué programas ejecutar, dónde ejecutarlos, qué argumentos pasarles y las convenciones específicas de ROS que facilitan la reutilización de componentes en todo el sistema dotando a cada uno de una configuración diferente. También se encarga de supervisar el estado de los procesos lanzados, así como de informar o reaccionar a los cambios en el estado de dichos procesos~\cite{ros2launch}.
 
 \paragraph{Paradigma publicador/suscriptor}
 \label{sec:pubsub}
@@ -122,18 +122,18 @@ Un nodo atiende su trabajo mediante \emph{callbacks}, funciones que se disparan 
 \subsection{Herramientas}
 \paragraph{Grabación de datos: rosbag2}
 \label{sec:ros2-rosbag}
-Utilidad que ROS2 incluye de serie para registrar en disco todos los mensajes que circulan por los \textit{topics} y reproducirlos después~\cite{rosbag2}. El fichero resultante se denomina \textit{bag}. El formato de almacenamiento escogido es mcap~\cite{mcap}, que guarda dentro del propio fichero la definición de cada tipo de mensaje registrado, de modo que una grabación sigue siendo legible aunque los mensajes cambien después.
+Utilidad que \gls{ros2} incluye de serie para registrar en disco todos los mensajes que circulan por los \textit{topics} y reproducirlos después~\cite{rosbag2}. El fichero resultante se denomina \textit{bag}. El formato de almacenamiento escogido es mcap~\cite{mcap}, que guarda dentro del propio fichero la definición de cada tipo de mensaje registrado, de modo que una grabación sigue siendo legible aunque los mensajes cambien después.
 
 \paragraph{Colcon}
 \label{sec:ros2-colcon}
-Colcon es la herramienta oficial de construcción de "workspaces" de ROS2~\cite{colcon}.  Se encarga de compilar el paquete del proyecto, generar el código de los mensajes personalizados a partir de sus definiciones e instalar los ejecutables y ficheros de configuración para que puedan ser lanzados con las utilidades de ROS2.
+Colcon es la herramienta oficial de construcción de ``workspaces'' de \gls{ros2}~\cite{colcon}.  Se encarga de compilar el paquete del proyecto, generar el código de los mensajes personalizados a partir de sus definiciones e instalar los ejecutables y ficheros de configuración para que puedan ser lanzados con las utilidades de ROS~2.
 
 
 
 \subsection{Middleware DDS y calidad de servicio (QoS)}
 \label{sec:dds-qos}
 
-\gls{dds} es un estándar de middleware publicador/suscriptor orientado a sistemas de tiempo real, definido por el Object Management Group~\cite{ddsspec}, sobre el que ROS2 construye toda su capa de comunicación. Dos de sus características son especialmente relevantes para este trabajo. La primera es el descubrimiento automático, por el que los participantes de un mismo dominio (identificado por un número, el \textit{domain ID}~\cite{ros2domainid}) se anuncian periódicamente en la red local y establecen las conexiones entre publicadores y suscriptores sin ninguna configuración manual de direcciones y sin ningún proceso maestro. Esos anuncios se envían por multicast, de forma que un participante nuevo llega a todos los demás sin conocer sus direcciones, y de ahí que el sistema necesite una red local que permita el tráfico multicast y que los contenedores empleen la pila de red de la máquina que los ejecuta (sección~\ref{subsec:despliegue-docker}). La segunda característica es la calidad de servicio (\gls{qos}~\cite{ros2qos}), con la que cada publicador y suscriptor declara sus garantías de entrega mediante un conjunto de políticas, las utilizadas en el proyecto son:
+\gls{dds} es un estándar de middleware publicador/suscriptor orientado a sistemas de tiempo real, definido por el Object Management Group~\cite{ddsspec}, sobre el que \gls{ros2} construye toda su capa de comunicación. Dos de sus características son especialmente relevantes para este trabajo. La primera es el descubrimiento automático, por el que los participantes de un mismo dominio (identificado por un número, el \textit{domain ID}~\cite{ros2domainid}) se anuncian periódicamente en la red local y establecen las conexiones entre publicadores y suscriptores sin ninguna configuración manual de direcciones y sin ningún proceso maestro. Esos anuncios se envían por multicast, de forma que un participante nuevo llega a todos los demás sin conocer sus direcciones, y de ahí que el sistema necesite una red local que permita el tráfico multicast y que los contenedores empleen la pila de red de la máquina que los ejecuta (sección~\ref{subsec:despliegue-docker}). La segunda característica es la calidad de servicio (\gls{qos}~\cite{ros2qos}), con la que cada publicador y suscriptor declara sus garantías de entrega mediante un conjunto de políticas, las utilizadas en el proyecto son:
 
 \begin{itemize}
 \item \textbf{Fiabilidad (\textit{reliability}):} en modo \textit{reliable} el middleware reenvía los mensajes perdidos hasta confirmar su entrega; en modo \textit{best effort} los mensajes se envían una única vez y pueden perderse.
@@ -143,7 +143,7 @@ Colcon es la herramienta oficial de construcción de "workspaces" de ROS2~\cite{
 \item \textbf{Historial (\textit{history} y \textit{depth}):} determina cuántos mensajes se almacenan en las colas de envío y recepción.
 \end{itemize}
 
-Estas políticas se negocian entre las dos partes: un suscriptor solo recibe mensajes de un publicador si el perfil que declara es compatible con el de este. ROS2 ofrece además perfiles predefinidos que agrupan valores habituales, como el pensado para sensores~\cite{ros2qos}.
+Estas políticas se negocian entre las dos partes: un suscriptor solo recibe mensajes de un publicador si el perfil que declara es compatible con el de este. \gls{ros2} ofrece además perfiles predefinidos que agrupan valores habituales, como el pensado para sensores~\cite{ros2qos}.
 
 La elección de estas políticas supone un compromiso entre latencia y garantías de entrega. Para los datos de posición, que se publican decenas de veces por segundo, se emplea el perfil de datos de sensor (\textit{best effort}), un mensaje perdido pierde importancia porque enseguida llega el siguiente, y resulta preferible perder un fotograma a acumular retardo reenviando información ya obsoleta. En cambio, para la posición de la línea de meta, que se publica una única vez al arrancar, se utiliza un perfil \textit{reliable} y \textit{transient local}, el mensaje debe llegar incluso a los controladores que arranquen después de que la cámara lo haya publicado.
 
@@ -173,7 +173,7 @@ La elección de estas políticas supone un compromiso entre latencia y garantía
 %    de la carrera.
 %\end{itemize}
 %
-%Como tercera capa de recuperación, el sistema de lanzamiento de ROS2 permite reiniciar
+%Como tercera capa de recuperación, el sistema de lanzamiento de ROS~2 permite reiniciar
 %automáticamente (\textit{respawn}) cualquier nodo que termine de forma inesperada, de manera
 %que un nodo caído se reincorpora al sistema al cabo de unos segundos.
 
@@ -220,7 +220,7 @@ El Archer AX55 es un router Wi-Fi 6 de doble banda, con cuatro puertos gigabit y
 \paragraph{Adaptador de red TP-Link Archer T3U}
 \label{sec:hw-adaptador}
 
-El Archer T3U es un adaptador de red inalámbrico en formato \gls{usb}, de doble banda y con soporte MU-MIMO. Se emplea uno en cada Raspberry Pi porque da mejor enlace que el chip de red integrado en la placa, aunque ambos son Wi-Fi 5.
+El Archer T3U es un adaptador de red inalámbrico en formato \gls{usb}, de doble banda y con soporte \gls{mumimo}. Se emplea uno en cada Raspberry Pi porque da mejor enlace que el chip de red integrado en la placa, aunque ambos son Wi-Fi 5.
 %Se emplea uno en cada Raspberry Pi, donde el sistema operativo lo reconoce como una segunda interfaz inalámbrica, \texttt{wlan1}, distinta de la que la placa lleva integrada. Esa separación es la que permite las pruebas de la sección~\ref{sec:pruebas-red}, en las que el retardo artificial se inyecta sobre esa interfaz y afecta por tanto solo al tráfico que sale de la cámara hacia el nodo de control.
 
 \begin{figure}[tbp]

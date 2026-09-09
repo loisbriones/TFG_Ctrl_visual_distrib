@@ -6,7 +6,7 @@
 \section{Software requerido}
 \label{sec:software-requerido}
 
-Cada máquina que participe en el sistema necesita un sistema operativo Linux con Docker y Docker Compose instalados, y git para clonar el repositorio~\cite{repogithub}. No hace falta instalar ROS2 ni ninguna de las librerías de visión, ya que van dentro de la imagen que construye el propio Docker la primera vez que se levanta un contenedor.
+Cada máquina que participe en el sistema necesita un sistema operativo Linux con Docker y Docker Compose instalados, y git para clonar el repositorio~\cite{repogithub}. No hace falta instalar \gls{ros2} ni ninguna de las librerías de visión, ya que van dentro de la imagen que construye el propio Docker la primera vez que se levanta un contenedor.
 
 Todas las máquinas tienen que estar en la misma red local y compartir el mismo \texttt{ROS\_DOMAIN\_ID}, que es lo que permite a los nodos descubrirse entre ellos sin ningún proceso central (sección~\ref{sec:dds-qos}). Esa red debe además dejar pasar el tráfico multicast, porque es por donde se realiza el descubrimiento.
 
@@ -44,9 +44,9 @@ cars:
     modo: "manual"
 \end{lstlisting}
 
-La lista \texttt{coches} determina cuántos detectores crea cada cámara, cuántos nodos de control se levantan y a qué \emph{topics} se suscribe el nodo de potencia, de modo que añadir un coche al sistema es añadir un nombre a esa lista. Cada nombre necesita después su propio bloque dentro de \texttt{cars}, donde se indican los colores de sus dos pegatinas, el carril del Arduino al que está conectado y el modo con el que se decide su PWM, que puede ser \texttt{manual}, \texttt{incremental}, \texttt{automatico} o \texttt{politica} (sección~\ref{subsec:modos-operacion}).
+La lista \texttt{coches} determina cuántos detectores crea cada cámara, cuántos nodos de control se levantan y a qué \emph{topics} se suscribe el nodo de potencia, de modo que añadir un coche al sistema es añadir un nombre a esa lista. Cada nombre necesita después su propio bloque dentro de \texttt{cars}, donde se indican los colores de sus dos pegatinas, el carril del Arduino al que está conectado y el modo con el que se decide su \gls{pwm}, que puede ser \texttt{manual}, \texttt{incremental}, \texttt{automatico} o \texttt{politica} (sección~\ref{subsec:modos-operacion}).
 
-Fuera de ese bloque, los valores que más se tocan de una sesión a otra son el rango de PWM del algoritmo, con \texttt{minimum\_speed} y \texttt{maximum\_speed}, y el umbral con el que se dan por buenos los derrapes, \texttt{umbral\_derrape}, ya que ambos dependen del coche y del estado del circuito, como se ve en el capítulo~\ref{cap:pruebas}. También conviene comprobar el color de la línea de meta y la resolución de captura de las cámaras.
+Fuera de ese bloque, los valores que más se tocan de una sesión a otra son el rango de \gls{pwm} del algoritmo, con \texttt{minimum\_speed} y \texttt{maximum\_speed}, y el umbral con el que se dan por buenos los derrapes, \texttt{umbral\_derrape}, ya que ambos dependen del coche y del estado del circuito, como se ve en el capítulo~\ref{cap:pruebas}. También conviene comprobar el color de la línea de meta y la resolución de captura de las cámaras.
 
 \section{Puesta en marcha}
 \label{sec:instrucciones-execucion}

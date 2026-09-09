@@ -13,7 +13,7 @@ Aunque para los seres vivos procesar estímulos visuales es casi instantáneo, r
 En este trabajo, la visión por computador es la base del sistema: permite capturar imágenes y procesarlas para identificar los coches y controlarlos después con esa información. Sin ese procesado no hay control posible. Para conseguirlo se emplea un conjunto de técnicas:
 
 \begin{itemize}
-    \item \textbf{Segmentación por color en espacio HSV:} Este tipo de espacio de color es mucho más robusto a los cambios  de iluminación, sobras y reflejos. Lo que facilita detectar los colores específicos asociados a pegatinas.     
+    \item \textbf{Segmentación por color en espacio HSV:} Este tipo de espacio de color es mucho más robusto a los cambios  de iluminación, sombras y reflejos. Lo que facilita detectar los colores específicos asociados a pegatinas.     
     \item \textbf{Detección de contornos y cálculo de centros geométricos} 
     \item \textbf{Seguimiento de 2 pegatinas:} Sistema de posicionamiento basado en 2 pegatinas, una frontal y una trasera, permiten controlar la posición del coche y el derrape.    
     \item \textbf{Regiones de interés (ROI) y máscaras de trayectoria:} Delimitación del área de búsqueda sobre el trazado del circuito para reducir la carga computacional y eliminar falsas detecciones en los márgenes de la imagen.
@@ -67,7 +67,7 @@ En este trabajo se emplea para determinar con mayor precisión el instante del p
 \section{Control por Modulación por Ancho de Pulso (PWM)}
 \label{sec:pwm-fundamentos}
 
-La modulación por ancho de pulso (\gls{pwm}) es una técnica que genera una señal cuadrada de amplitud fija que alterna entre 0\,V y la tensión de alimentación a una frecuencia constante, variando únicamente la proporción de tiempo en la que permanece en nivel alto, denominada ciclo de trabajo o \textit{duty cycle}. Aunque la salida es digital, la carga percibe una tensión media equivalente a la tensión de alimentación multiplicada por el ciclo de trabajo, emulando así un control analógico de potencia con muy pocas pérdidas, ya que los transistores de conmutación operan siempre completamente encendidos o apagados.
+El \gls{pwm} es una técnica que genera una señal cuadrada de amplitud fija que alterna entre 0\,V y la tensión de alimentación a una frecuencia constante, variando únicamente la proporción de tiempo en la que permanece en nivel alto, denominada ciclo de trabajo o \textit{duty cycle}. Aunque la salida es digital, la carga percibe una tensión media equivalente a la tensión de alimentación multiplicada por el ciclo de trabajo, emulando así un control analógico de potencia con muy pocas pérdidas, ya que los transistores de conmutación operan siempre completamente encendidos o apagados.
 
 
 \section{Trabajos relacionados}
@@ -109,13 +109,13 @@ Su limitación fundamental, señalada explícitamente en su propia memoria como 
 Este proyecto continúa ambos trabajos y aborda precisamente la evolución que Adrián dejaba planteada, convertir el sistema en una arquitectura distribuida. Los principales avances respecto a los trabajos de partida son:
 
 \begin{itemize}
-    \item Descomposición de la aplicación monolítica en nodos ROS2 independientes, ejecutables en máquinas distintas de la red local.
+    \item Descomposición de la aplicación monolítica en nodos \gls{ros2} independientes, ejecutables en máquinas distintas de la red local.
 
     \item Escalabilidad horizontal: el número de cámaras deja de estar limitado por un único equipo; añadir cobertura al circuito se reduce a lanzar un nuevo nodo cámara.
 
     \item Adaptación del algoritmo de control de velocidad al entorno multicámara.
 
-    \item Despliegue reproducible mediante contenedores Docker, sin necesidad de instalar ROS2 en las máquinas.
+    \item Despliegue reproducible mediante contenedores Docker, sin necesidad de instalar \gls{ros2} en las máquinas.
 
     \item Telemetría distribuida y herramienta de grabación y análisis de las sesiones.
 \end{itemize}
