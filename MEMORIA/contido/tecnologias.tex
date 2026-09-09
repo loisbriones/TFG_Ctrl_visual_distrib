@@ -182,6 +182,32 @@ La elección de estas políticas supone un compromiso entre latencia y garantía
 
 En esta sección se describen los dispositivos físicos que componen el montaje, y en la figura~\ref{fig:hardware} se recogen tal y como se emplearon durante las pruebas.
 
+\begin{figure}[tbp]
+    \centering
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imaxes/HARDWARE/coches_red.jpg}
+        \caption{Los dos coches con sus pegatinas, y las cajas del router y del adaptador de red}
+        \label{fig:hardware-coches}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imaxes/HARDWARE/arduino_l293d.jpg}
+        \caption{La placa Elegoo Uno R3 con el módulo L293D, cableada a la base de alimentación de la pista}
+        \label{fig:hardware-arduino}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imaxes/HARDWARE/equipos_computo.jpg}
+        \caption{El portátil, las dos webcams, una de las Raspberry Pi y uno de los adaptadores de red}
+        \label{fig:hardware-equipos}
+    \end{subfigure}
+    \caption{Material empleado en el montaje} %Sobre cada coche van las dos pegatinas de color con las que el sistema de visión obtiene su posición y detecta el derrape
+    \label{fig:hardware}
+\end{figure}
+
 \subsection{Circuito de Scalextric}
  
 % PENDIENTE LOIS: revisar la version del Scalextric (la base de alimentacion pone EVOLUTION y
@@ -222,29 +248,3 @@ El Archer AX55 es un router Wi-Fi 6 de doble banda, con cuatro puertos gigabit y
 
 El Archer T3U es un adaptador de red inalámbrico en formato \gls{usb}, de doble banda y con soporte \gls{mumimo}. Se emplea uno en cada Raspberry Pi porque da mejor enlace que el chip de red integrado en la placa, aunque ambos son Wi-Fi 5.
 %Se emplea uno en cada Raspberry Pi, donde el sistema operativo lo reconoce como una segunda interfaz inalámbrica, \texttt{wlan1}, distinta de la que la placa lleva integrada. Esa separación es la que permite las pruebas de la sección~\ref{sec:pruebas-red}, en las que el retardo artificial se inyecta sobre esa interfaz y afecta por tanto solo al tráfico que sale de la cámara hacia el nodo de control.
-
-\begin{figure}[tbp]
-    \centering
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{imaxes/HARDWARE/coches_red.jpg}
-        \caption{Los dos coches con sus pegatinas, y las cajas del router y del adaptador de red}
-        \label{fig:hardware-coches}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{imaxes/HARDWARE/arduino_l293d.jpg}
-        \caption{La placa Elegoo Uno R3 con el módulo L293D, cableada a la base de alimentación de la pista}
-        \label{fig:hardware-arduino}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{imaxes/HARDWARE/equipos_computo.jpg}
-        \caption{El portátil, las dos webcams, una de las Raspberry Pi y uno de los adaptadores de red}
-        \label{fig:hardware-equipos}
-    \end{subfigure}
-    \caption{Material empleado en el montaje} %Sobre cada coche van las dos pegatinas de color con las que el sistema de visión obtiene su posición y detecta el derrape
-    \label{fig:hardware}
-\end{figure}

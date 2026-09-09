@@ -28,7 +28,7 @@ Antes de arrancar nada hay que dejar preparada la parte física.
 
 Toda la configuración vive en el fichero \texttt{config/params.yaml}, que comparten los tres tipos de nodo y que se recoge completo en los códigos~\ref{lst:params-yaml} y~\ref{lst:params-yaml-2}. Lo que hay que revisar antes de cada sesión es el bloque de los coches, que es el que fija la escala del sistema.
 
-\begin{lstlisting}[style=codigo, language=yamlsimple, caption={Bloque del fichero de parámetros que define los coches}, label={lst:anexo-coches}]
+\begin{lstlisting}[style=codigo, language=yamlsimple, caption={Bloque del fichero de parámetros donde se definen los coches}, label={lst:anexo-coches}]
 coches: ["car1","car2"]
 
 cars:
@@ -55,19 +55,19 @@ Cada parte del sistema se levanta con un único comando desde el directorio \tex
 
 En cada máquina con cámara se lanza un contenedor por cada una, indicando con \texttt{NODE\_ID} el nombre con el que esa cámara se identifica en la red y con \texttt{CAMERA\_DEV} el dispositivo de vídeo que tiene que abrir.
 
-\begin{lstlisting}[style=codigo, language=bash, caption={Arranque de un nodo de captura}, label={lst:cmd-camara}]
+\begin{lstlisting}[style=codigo, language=bash, caption={Comando para arrancar un nodo de captura}, label={lst:cmd-camara}]
 NODE_ID=camara_01 CAMERA_DEV=0 docker compose -p camara_01 -f docker-compose-camera.yml up
 \end{lstlisting}
 
 En la máquina que tiene el Arduino conectado se levantan los nodos de control, uno por cada coche que no sea manual, junto con el nodo de potencia y el nodo de sondeo de red, que solo se levanta si está activado en el fichero de parámetros.
 
-\begin{lstlisting}[style=codigo, language=bash, caption={Arranque de los nodos de control y del nodo de potencia}, label={lst:cmd-control}]
+\begin{lstlisting}[style=codigo, language=bash, caption={Comando para arrancar los nodos de control y el nodo de potencia}, label={lst:cmd-control}]
 docker compose -p control -f docker-compose-control.yml up
 \end{lstlisting}
 
 Para una carrera conducida por personas se usa el lanzamiento manual, que levanta los mismos nodos de control pero sin el de potencia, de manera que arranca aunque el Arduino no esté conectado.
 
-\begin{lstlisting}[style=codigo, language=bash, caption={Arranque en modo manual}, label={lst:cmd-manual}]
+\begin{lstlisting}[style=codigo, language=bash, caption={Comando para arrancar el modo manual}, label={lst:cmd-manual}]
 docker compose -p manual -f docker-compose-manual.yml up
 \end{lstlisting}
 
@@ -75,7 +75,7 @@ Una carrera mixta, con un coche autónomo y otro conducido, se consigue levantan
 
 Por último, el panel de la carrera en directo se arranca con el script \texttt{arrancar\_visualizacion.sh}, que levanta su contenedor y abre el navegador en el puerto 8990, donde sirve el panel de datos y el mosaico de las cámaras (sección~\ref{subsec:visualizacion-directo}).
 
-\begin{lstlisting}[style=codigo, language=bash, caption={Arranque del panel en directo}, label={lst:cmd-visu}]
+\begin{lstlisting}[style=codigo, language=bash, caption={Comando para arrancar el panel en directo}, label={lst:cmd-visu}]
 ./arrancar_visualizacion.sh
 \end{lstlisting}
 

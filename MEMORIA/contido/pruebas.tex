@@ -11,12 +11,16 @@
 % sin él LaTeX lo lee como un subíndice.
 \newcommand{\video}[2][ver]{\href{https://youtu.be/\detokenize{#2}}{#1}}
 
-\lettrine{E}{n} este capítulo se recogen las pruebas realizadas sobre el sistema ya montado. La primera cuantifica la diferencia de comportamiento entre los dos coches con una misma configuración. La segunda comprueba, con un \gls{pwm} que sube solo, hasta dónde aguanta el mismo circuito. %en días distintos. La tercera ajusta el umbral de derrape del algoritmo y mide qué se gana con ello. La cuarta enfrenta al algoritmo con pilotos humanos, en el óvalo y en el circuito en ocho. La quinta le enfrenta a su propio perfil congelado, para ver si repetir la mejor vuelta que llegó a dar sirve de algo. La sexta comprueba si el algoritmo es capaz de adaptarse él solo a un cambio en la pista. La séptima enseña el panel en directo con dos coches corriendo a la vez. La octava mide cuánto retardo añade la red y a partir de qué punto llega a notarse. Y la última lleva el sistema a circuitos grandes, cubiertos con varias cámaras repartidas entre varias máquinas.
+\lettrine{E}{n} este capítulo se recogen las pruebas realizadas sobre el sistema ya montado. La primera cuantifica la diferencia de comportamiento entre los dos coches con una misma configuración. La segunda comprueba, con un \gls{pwm} que sube solo, hasta dónde aguanta el mismo circuito.
+%en días distintos.
+La tercera ajusta el umbral de derrape del algoritmo y mide qué se gana con ello. La cuarta enfrenta al algoritmo con pilotos humanos, en el óvalo y en el circuito en ocho. La quinta le enfrenta a su propio perfil congelado, para ver si repetir la mejor vuelta que llegó a dar sirve de algo. La sexta comprueba si el algoritmo es capaz de adaptarse él solo a un cambio en la pista. La séptima enseña el panel en directo con dos coches corriendo a la vez. La octava mide cuánto retardo añade la red y a partir de qué punto llega a notarse. Y la última lleva el sistema a circuitos grandes, cubiertos con varias cámaras repartidas entre varias máquinas.
 
 Todas las gráficas %que se muestran 
 proceden de la herramienta de análisis en diferido (sección~\ref{sec:sistema-visualizacion}).  
 De cada ejecución se grabó un vídeo con la imagen de las cámaras y los datos del control sobrepuestos, y por eso las tablas llevan una columna con el enlace al vídeo de cada fila. 
 Los pilotos que participaron en las pruebas de conducción manual se identifican como \emph{piloto 1} a \emph{piloto 5}, y la numeración es la misma en todo el capítulo. %Un mismo número es siempre la misma persona, aunque aparezca en secciones y circuitos distintos.
+
+% Indicar que los ficheros que genera la herramienta y los datos utilizados están subidos en el github.
 
 \section{Prueba comparativa entre coches}
 \label{sec:prueba-comparativa-coches}
@@ -73,7 +77,7 @@ Para que la única variable fuese el coche se fijó todo lo demás. Se escogió 
 
 
 La figura~\ref{fig:comparativa-trayectorias} muestra las trayectorias de las dos etiquetas en la vuelta 22. En el coche azul se aprecia %en la zona señalada 
-un salto grande entre posiciones consecutivas del eje trasero, lo que corresponde con un derrape. Mientras que en el coche rojo, con el mismo \gls{pwm} aplicado, la trasera recorre esa misma curva pegada a la trayectoria base sin llegar a separarse de ella.
+un salto grande entre posiciones consecutivas del eje trasero, lo que corresponde con un derrape. Mientras que en el coche rojo, con el mismo \gls{pwm}, su eje trasero recorre esa misma curva pegado a la trayectoria base sin llegar a separarse de ella.
 
 Una vez detectado el derrape el algoritmo castiga al coche azul y genera dos zonas, como se aprecia en la figura~\ref{fig:comparativa-zonas-azul}, la zona de derrape, que cubre los puntos del 47 a 68 y queda limitada a \gls{pwm} 89, y la que ya venía de antes, que se mantiene en 91. En el coche rojo no hubo ningún derrape que castigar y por tanto no se abre ninguna zona nueva, de modo que en la figura~\ref{fig:comparativa-zonas-rojo} sigue habiendo una única zona que además ha continuado subiendo hasta \gls{pwm} 92.
 
@@ -682,8 +686,6 @@ Aun con esos picos, en la pista no se notó nada, y encaja con lo que ya decía 
 \subsection{Segundo circuito}
 \label{subsec:circuito-grande-2}
 
-El segundo circuito, que aparece en la figura~\ref{fig:setup-grande-2}, es más largo que el primero. Se utilizaron también 4 cámaras y la distribución de los nodos fue la misma que en la prueba que se describe en la sección \ref{subsec:circuito-grande-1}. En esta prueba los coches usaron configuraciones distintas, porque no había forma de encontrar una que permitiera controlar los dos coches a la vez. El coche azul usó un rango de \gls{pwm} de 65 a 78 y el rojo de 70 a 90, los dos con el umbral de derrape en 10~px.
-
 \begin{figure}[tbp]
   \centering
   \begin{subfigure}[b]{0.48\textwidth}
@@ -703,17 +705,12 @@ El segundo circuito, que aparece en la figura~\ref{fig:setup-grande-2}, es más 
   \label{fig:setup-grande-2}
 \end{figure}
 
-La figura~\ref{fig:circuito-grande-2-tiempos} muestra el tiempo por vuelta de las dos ejecuciones aplicando el algoritmo y se ve el mismo comportamiento que en el primer circuito, con la bajada inicial mientras el perfil sube y la estabilización después.
-
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=0.85\linewidth]{imaxes/PRUEBAS/CIRCUITO_GRANDE/tiempos_vuelta_002.pdf}
   \caption{Tiempo por vuelta de dos ejecuciones automáticas en el segundo circuito grande.}
   \label{fig:circuito-grande-2-tiempos}
 \end{figure}
-
-Los resultados están en la tabla~\ref{tab:circuito-grande-2-tiempos} y el algoritmo gana las dos comparaciones con holgura. Con el coche rojo cierra en 217,56~s frente a los 358,27~s del piloto 1 y con el azul en 322,41~s frente a los 458,51 y 536,30~s de los pilotos 1 y 5. Además, ni siquiera queda el consuelo de la vuelta rápida, ya que, la mejor vuelta es del algoritmo en los dos coches, 4,129~s frente a 4,355~s en el rojo y 5,636~s frente a 6,076~s en el azul.
-%La diferencia de fondo es la de siempre y se ve en la última columna, porque la desviación típica del algoritmo se queda en 0,238 y 0,939~s mientras que la de los pilotos no baja de 2,7~s.
 
 \begin{table}[btp]
   \centering
@@ -733,8 +730,6 @@ Los resultados están en la tabla~\ref{tab:circuito-grande-2-tiempos} y el algor
   \label{tab:circuito-grande-2-tiempos}
 \end{table}
 
-El sondeo de red se mantuvo también en estas dos ejecuciones y sus medidas están en la tabla~\ref{tab:circuito-grande-2-red}. Salen prácticamente iguales que las del primer circuito, con medianas entre 6,70 y 7,86~ms y con algún percentil 99 por encima de los 100~ms, y de los 5\,826 sondeos enviados se perdieron cuatro mensajes.
-
 \begin{table}[btp]
   \centering
   \estilotabla
@@ -751,5 +746,14 @@ El sondeo de red se mantuvo también en estas dos ejecuciones y sus medidas est�
   \caption{Tiempo de ida y vuelta hasta cada Raspberry Pi en las ejecuciones automáticas del segundo circuito.}
   \label{tab:circuito-grande-2-red}
 \end{table}
+
+El segundo circuito, que aparece en la figura~\ref{fig:setup-grande-2}, es más largo que el primero. Se utilizaron también 4 cámaras y la distribución de los nodos fue la misma que en la prueba que se describe en la sección \ref{subsec:circuito-grande-1}. En esta prueba los coches usaron configuraciones distintas, porque no había forma de encontrar una que permitiera controlar los dos coches a la vez. El coche azul usó un rango de \gls{pwm} de 65 a 78 y el rojo de 70 a 90, los dos con el umbral de derrape en 10~px.
+
+La figura~\ref{fig:circuito-grande-2-tiempos} muestra el tiempo por vuelta de las dos ejecuciones aplicando el algoritmo y se ve el mismo comportamiento que en el primer circuito, con la bajada inicial mientras el perfil sube y la estabilización después.
+
+Los resultados están en la tabla~\ref{tab:circuito-grande-2-tiempos} y el algoritmo gana las dos comparaciones con holgura. Con el coche rojo cierra en 217,56~s frente a los 358,27~s del piloto 1 y con el azul en 322,41~s frente a los 458,51 y 536,30~s de los pilotos 1 y 5. Además, ni siquiera queda el consuelo de la vuelta rápida, ya que, la mejor vuelta es del algoritmo en los dos coches, 4,129~s frente a 4,355~s en el rojo y 5,636~s frente a 6,076~s en el azul.
+%La diferencia de fondo es la de siempre y se ve en la última columna, porque la desviación típica del algoritmo se queda en 0,238 y 0,939~s mientras que la de los pilotos no baja de 2,7~s.
+
+El sondeo de red se mantuvo también en estas dos ejecuciones y sus medidas están en la tabla~\ref{tab:circuito-grande-2-red}. Salen prácticamente iguales que las del primer circuito, con medianas entre 6,70 y 7,86~ms y con algún percentil 99 por encima de los 100~ms, y de los 5\,826 sondeos enviados se perdieron cuatro mensajes.
 
 %En resumen, el sistema se comportó como estaba pensado en los dos circuitos. Cuatro cámaras repartidas entre tres máquinas cubren un circuito grande, cada una aprende su porción del trazado, el controlador va conmutando entre ellas según por dónde pase el coche y el algoritmo ajusta el perfil de la misma forma que con una sola cámara. Además la red tampoco supuso problemas como habíamos visto en las pruebas de red. Además también el comportamiento del coche con el algoritmo es mejor frente a las personas con las que se comparó.

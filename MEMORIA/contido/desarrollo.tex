@@ -68,7 +68,9 @@ A partir de ahí se diseñó la arquitectura y se fue construyendo pieza a pieza
 El desarrollo se organizó en iteraciones cortas, cada una orientada a incorporar una capacidad concreta al sistema. La mayoría se validaban sobre el hardware antes de darlas por cerradas, de modo que las pruebas de cada etapa condicionaban el diseño de la siguiente.
 %Una iteración no se daba por cerrada hasta validar su resultado sobre el hardware, de modo que las pruebas de cada etapa condicionaban el diseño de la siguiente.
 
-Esta forma de trabajar sigue la filosofía de las metodologías ágiles, con entregas pequeñas y un replanteamiento continuo a la vista de lo aprendido en cada prueba, pero no se adoptó ningún marco concreto como Scrum o Kanban. %, Kanban o programación extrema. Sus roles y eventos están pensados para coordinar a un equipo y, en un proyecto de una sola persona y de unos meses de duración, añaden más carga de la que aportan. El seguimiento se resolvió con reuniones periódicas con los tutores, en las que se revisaba la iteración en curso y se acordaban los objetivos de la siguiente. El código se llevó con Git desde el principio (sección~\ref{sec:xestion-arquivos}), etiquetando el mensaje de cada \textit{commit} según la funcionalidad que se estaba diseñando, de manera que el propio historial permite reconstruir por dónde fue avanzando el trabajo.
+Esta forma de trabajar sigue la filosofía de las metodologías ágiles, con entregas pequeñas y un replanteamiento continuo a la vista de lo aprendido en cada prueba, pero no se adoptó ningún marco concreto como Scrum o Kanban.
+%, Kanban o programación extrema.
+Sus roles y eventos están pensados para coordinar a un equipo y, en un proyecto de una sola persona y de unos meses de duración, añaden más carga de la que aportan. El seguimiento se resolvió con reuniones periódicas con los tutores, en las que se revisaba la iteración en curso y se acordaban los objetivos de la siguiente. El código se llevó con Git desde el principio (sección~\ref{sec:xestion-arquivos}), etiquetando el mensaje de cada \textit{commit} según la funcionalidad que se estaba diseñando, de manera que el propio historial permite reconstruir por dónde fue avanzando el trabajo.
 
 \subsection{Gestión de archivos}
 \label{sec:xestion-arquivos}
@@ -167,10 +169,6 @@ Durante el desarrollo del proyecto, el alumno ha asumido de forma íntegra los d
 \section{Estimación de costes}
 \label{sec:custos}
 
-En este apartado se estima el coste total del proyecto a partir de los recursos materiales y humanos empleados. Los recursos software no generan coste alguno, ya que todo el software utilizado es libre o gratuito. 
-%
-El coste de los recursos hardware se recoge en la tabla~\ref{tab:costes_hardware}. Todo el material aparece a precio de compra salvo el ordenador portátil, que no se adquirió para este trabajo, sino que es un equipo personal empleado también para otras tareas. Su coste se estima por amortización, repartiendo los 1\,600~\euro{} que costó entre una vida útil de cuatro años, lo que supone 1,10~\euro{} al día y un total de 197~\euro{} por los 180 días que duró el desarrollo.
-
 \begin{table}[tbp]
     \centering
     \estilotabla
@@ -194,8 +192,6 @@ El coste de los recursos hardware se recoge en la tabla~\ref{tab:costes_hardware
     \label{tab:costes_hardware}
 \end{table}
 
-Respecto a los recursos humanos, el desarrollo se llevó a cabo a lo largo de aproximadamente 180 días, con una dedicación media en torno a las 3 horas diarias, aunque hubo días de un periodo mayor y otros en los que hubo menos, lo que supone un total cercano a las 540 horas de trabajo efectivas. El esfuerzo se distribuyó entre los distintos roles asignando a cada uno una carga horaria acorde con sus responsabilidades, concentrándose la mayor parte del tiempo en las tareas de programación. El desglose de horas y costes se muestra en la tabla~\ref{tab:costes_humanos}.
-
 \begin{table}[tbp]
     \centering
     \estilotabla
@@ -216,5 +212,11 @@ Respecto a los recursos humanos, el desarrollo se llevó a cabo a lo largo de ap
     \caption{Desglose de horas y costes de los recursos humanos}
     \label{tab:costes_humanos}
 \end{table}
+
+En este apartado se estima el coste total del proyecto a partir de los recursos materiales y humanos empleados. Los recursos software no generan coste alguno, ya que todo el software utilizado es libre o gratuito. 
+%
+El coste de los recursos hardware se recoge en la tabla~\ref{tab:costes_hardware}. Todo el material aparece a precio de compra salvo el ordenador portátil, que no se adquirió para este trabajo, sino que es un equipo personal empleado también para otras tareas. Su coste se estima por amortización, repartiendo los 1\,600~\euro{} que costó entre una vida útil de cuatro años, lo que supone 1,10~\euro{} al día y un total de 197~\euro{} por los 180 días que duró el desarrollo.
+
+Respecto a los recursos humanos, el desarrollo se llevó a cabo a lo largo de aproximadamente 180 días, con una dedicación media en torno a las 3 horas diarias, aunque hubo días de un periodo mayor y otros en los que hubo menos, lo que supone un total cercano a las 540 horas de trabajo efectivas. El esfuerzo se distribuyó entre los distintos roles asignando a cada uno una carga horaria acorde con sus responsabilidades, concentrándose la mayor parte del tiempo en las tareas de programación. El desglose de horas y costes se muestra en la tabla~\ref{tab:costes_humanos}.
 
 Sumando el coste de los recursos hardware (tabla~\ref{tab:costes_hardware}) y el de los recursos humanos (tabla~\ref{tab:costes_humanos}), y teniendo en cuenta que los recursos software no suponen coste alguno, el coste total estimado del proyecto asciende a \textbf{27\,678{,}18 \euro}.

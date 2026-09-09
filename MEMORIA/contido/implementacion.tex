@@ -217,9 +217,6 @@ La primera es la transición del coche entre cámaras. Cuando dos campos de visi
 %La tercera es la propagación de reducciones. Ocurre cuando un derrape se produce cerca del inicio de la porción visible de una cámara, algo habitual si una curva queda repartida entre dos. El retroceso del castigo se sale por el inicio antes de agotarse y los píxeles restantes corresponden a un tramo de otra cámara. La instancia anota ese sobrante como reducción pendiente; el controlador la recoge tras procesar cada posición y, según el orden aprendido, ordena a la cámara precedente que la aplique al final de su trayectoria, creando o ampliando allí la zona de derrape. Esa reducción externa no incrementa el contador de derrapes de quien la recibe, porque ese derrape ya lo contabilizó la cámara que lo observó, pero la zona queda protegida igual. Si tampoco cupiera en la trayectoria de la cámara anterior, el sobrante volvería a quedar pendiente y se seguiría propagando hacia atrás hasta agotarse. 
 La segunda es la propagación de reducciones. Ocurre cuando un derrape se produce cerca del inicio de la porción visible de una cámara, algo habitual si una curva queda repartida entre dos. El retroceso del castigo se sale por el inicio antes de agotarse y los píxeles restantes corresponden a un tramo de otra cámara. La instancia anota ese sobrante como reducción pendiente; el controlador la recoge tras procesar cada posición y, según el orden aprendido, ordena a la cámara precedente que la aplique al final de su trayectoria, creando o ampliando allí la zona de derrape. Esa reducción externa no incrementa el contador de derrapes de quien la recibe, porque ese derrape ya lo contabilizó la cámara que lo observó, pero la zona queda protegida igual. Si tampoco cupiera en la trayectoria de la cámara anterior, el sobrante volvería a quedar pendiente y se seguiría propagando hacia atrás hasta agotarse. 
 
-% TODO-AUTOR: incoherencia entre el pie de esta figura ("Perfil de PWM inicial")
-% y el texto de 6.4.1 que la referencia (creación de una zona de derrape entre
-% dos cámaras). Verificar qué muestra realmente la figura y corregir uno de los dos.
 \begin{figure}[tbp]
     \centering
     % Primera subfigura (Rotada 180 grados y recortada 0.5cm)
@@ -237,7 +234,7 @@ La segunda es la propagación de reducciones. Ocurre cuando un derrape se produc
         \caption{Trayectoria PWM de la cámara 02}
         \label{fig:trayectoria-pwm-partida-camara-02}
     \end{subfigure}
-    \caption{Perfil de PWM inicial repartido entre dos cámaras.}
+    \caption{Perfil de PWM repartido entre dos cámaras}
     \label{fig:trayectoria-pwm-partida}
 \end{figure}
 
@@ -431,11 +428,6 @@ También el análisis se ejecuta en un contenedor, que a diferencia del resto no
 \subsection{Panel de carrera en directo}
 \label{subsec:visualizacion-directo}
 
-Este panel trabaja mientras el tráfico circula por la red, igual que la herramienta de grabación. Es un nodo de \gls{ros2} que se limita a suscribirse a lo que ya publica el sistema y a servirlo por \gls{http} a un navegador.  
-La figura~\ref{fig:panel-directo} recoge lo que se ve durante una carrera. El trazado del circuito no se carga de ningún fichero, sino que se va dibujando con las posiciones que llegan de las cámaras, y sobre él aparecen la línea de meta y el coche unido a su etiqueta trasera, para ver a simple vista cuánto se separa de la trayectoria. Al lado queda la clasificación de los coches y los datos de cada uno, con la tensión que se le está aplicando, si está derrapando y a qué distancia, y debajo un registro de los eventos que van ocurriendo.
-
-En caso de necesitar la imagen que están capturando las cámaras, el mismo nodo sirve una segunda página, la de la figura~\ref{fig:panel-camaras}. Recibe los fotogramas que envía la cámara cuando tiene activo el modo de depuración (sección~\ref{subsec:modo-depuracion}). Solo se suscribe a las imágenes mientras esa página está abierta, de manera que con ella cerrada el tráfico es el mismo que si no existiera, y es la forma cómoda de colocar las cámaras antes de una carrera, viendo desde el navegador lo que ve cada una sin tener que ir máquina por máquina.
-
 \begin{figure}[tbp]
     \centering
     \includegraphics[width=\textwidth]{imaxes/IMPLEMENTACION/panel_directo.png}
@@ -449,6 +441,11 @@ En caso de necesitar la imagen que están capturando las cámaras, el mismo nodo
     \caption{Mosaico con la imagen de cada cámara en la página web.}
     \label{fig:panel-camaras}
 \end{figure}
+
+Este panel trabaja mientras el tráfico circula por la red, igual que la herramienta de grabación. Es un nodo de \gls{ros2} que se limita a suscribirse a lo que ya publica el sistema y a servirlo por \gls{http} a un navegador.  
+La figura~\ref{fig:panel-directo} recoge lo que se ve durante una carrera. El trazado del circuito no se carga de ningún fichero, sino que se va dibujando con las posiciones que llegan de las cámaras, y sobre él aparecen la línea de meta y el coche unido a su etiqueta trasera, para ver a simple vista cuánto se separa de la trayectoria. Al lado queda la clasificación de los coches y los datos de cada uno, con la tensión que se le está aplicando, si está derrapando y a qué distancia, y debajo un registro de los eventos que van ocurriendo.
+
+En caso de necesitar la imagen que están capturando las cámaras, el mismo nodo sirve una segunda página, la de la figura~\ref{fig:panel-camaras}. Recibe los fotogramas que envía la cámara cuando tiene activo el modo de depuración (sección~\ref{subsec:modo-depuracion}). Solo se suscribe a las imágenes mientras esa página está abierta, de manera que con ella cerrada el tráfico es el mismo que si no existiera, y es la forma cómoda de colocar las cámaras antes de una carrera, viendo desde el navegador lo que ve cada una sin tener que ir máquina por máquina.
 
 \section{Configuración y despliegue}
 \label{sec:configuracion_despliegue}
