@@ -119,21 +119,19 @@ En esta sección se explica el modelo de datos del sistema y la garantía de ent
 \begin{table}[tbp]
 	\centering
 	\estilotabla
-	\caption{Mensajes que intercambian los nodos del sistema}
-	\label{tab:mensajes}
-	\begin{tabular}{p{2.7cm}p{2.5cm}p{2.7cm}p{2.3cm}p{2.4cm}}
-		\toprule
-		\rowcolor{ArqAzulClaro}
+	\begin{tabular}{p{2.7cm}|p{2.5cm}|p{2.7cm}|p{2.3cm}|p{2.4cm}}
+		\rowcolor{udcpink!25}
 		\textbf{Mensaje} & \textbf{Emisor} & \textbf{Receptor} & \textbf{Cadencia} & \textbf{Entrega} \\
-		\midrule
+		\hline
 		Posición del coche & Nodo cámara & Nodo de control de su carril & Por coche y fotograma & Prima la actualidad \\
 		Línea de meta & Nodo cámara que la ve & Todos los nodos de control & Una vez, al arranque & Garantizada y persistente \\
 		Consigna de potencia & Nodo de control & Nodo de potencia & Por cada posición recibida & Prima la actualidad \\
 		Cambio de modo & Nodo de control & Todos los nodos & Por evento & Garantizada \\
 		Tiempo de vuelta & Nodo de control & Nodo de \emph{logs} & Por vuelta completada & Garantizada \\
 		Vista de la cámara & Nodo cámara & Nodo de \emph{logs} & Periódica & Prima la actualidad \\
-		\bottomrule
 	\end{tabular}
+	\caption{Mensajes que intercambian los nodos del sistema}
+	\label{tab:mensajes}
 \end{table}
 
 \subsection{Modelo de datos}
@@ -169,13 +167,10 @@ Los mensajes que siguen van dirigidos al nodo de \emph{logs}, que se limita a es
 \begin{table}[tbp]
 	\centering
 	\estilotabla
-	\caption{Resumen de los \emph{topics} del sistema}
-	\label{tab:topics-ros2}
-	\begin{tabular}{p{3.5cm}p{3.3cm}p{3.0cm}p{3.2cm}}
-		\toprule
-		\rowcolor{ArqAzulClaro}
+	\begin{tabular}{p{3.5cm}|p{3.3cm}|p{3.0cm}|p{3.2cm}}
+		\rowcolor{udcpink!25}
 		\textbf{Topic} & \textbf{Mensaje} & \textbf{Publica} & \textbf{Suscribe} \\
-		\midrule
+		\hline
 		\texttt{/carN/position} & \texttt{CarLocation} & Nodos cámara & Nodo de control $N$ \\
 		\texttt{/finish\_\allowbreak line\_position} & \texttt{FinishLine} & Cámara que la observa & Nodos de control \\
 		\texttt{/carN/pwd} & \texttt{SpeedCarril} & Nodo de control $N$ & Nodo de potencia \\
@@ -183,8 +178,9 @@ Los mensajes que siguen van dirigidos al nodo de \emph{logs}, que se limita a es
 		\texttt{/telemetria/carN/\allowbreak car\_control} & \texttt{CarControl\allowbreak Telemetry} & Nodo de control $N$ & Visualización \\
 		\texttt{/telemetria/carN/\allowbreak time\_per\_lap} & \texttt{TimePerLap} & Nodo de control $N$ & Visualización \\
 		\texttt{/camaraX/\allowbreak camara\_debug} & \texttt{CompressedImage} & Nodo cámara $X$ & Visualización \\
-		\bottomrule
 	\end{tabular}
+	\caption{Resumen de los \emph{topics} del sistema}
+	\label{tab:topics-ros2}
 \end{table}
 
 Los tipos que \gls{ros2} trae por defecto no bastan para modelar la información de la tabla~\ref{tab:mensajes}, de modo que fue necesario crear mensajes propios (sección~\ref{sec:ros2-interfaces}).

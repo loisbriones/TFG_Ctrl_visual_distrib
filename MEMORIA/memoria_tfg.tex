@@ -47,7 +47,7 @@
   \usepackage{siunitx}
   \usepackage{tikz}
   \usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
-  \usepackage{booktabs}
+% \usepackage{booktabs}   % as táboas seguen o formato da plantilla (\hline), non booktabs
   \usepackage{eurosym}
 
 %%% COLOCACIÓN DOS FLOTANTES %%%
@@ -71,18 +71,20 @@
 \renewcommand{\lstlistlistingname}{Índice de códigos}
 
 %%% ESTILO COMÚN DAS TÁBOAS %%%
-% Aplícase xusto detrás do \centering de cada \begin{table}. Os tons son os da paleta
-% definida en estilo_tfg.sty, a mesma dos esquemas da arquitectura, para que as táboas
-% non queden en branco. A fila de cabeceira lévase aparte con \rowcolor{ArqAzulClaro}.
-% O argumento opcional é a primeira fila de datos: 2 cando a cabeceira ocupa unha liña
-% e 3 cando ocupa dúas (as táboas de resultados levan unha segunda liña coas unidades).
+% Aplícase xusto detrás do \centering de cada \begin{table}. As cores son as da plantilla
+% da FIC (contido/demo.tex do modelo): cabeceira udcpink!25 e filas alternas udcgray!25,
+% igual que a raia \hline que pecha a cabeceira e as raias verticais entre columnas.
+% O argumento opcional é a primeira fila de datos: 2 cando a cabeceira ocupa unha liña,
+% 3 ou 4 cando ocupa dúas ou tres (as táboas de resultados levan liñas coas unidades).
 \newcommand{\estilotabla}[1][2]{%
   \footnotesize                          % tamaño de letra de todas as táboas da memoria
   \renewcommand{\arraystretch}{1.15}%    % o 1.5 global de estilo_tfg.sty deixa as filas altísimas
-  \setlength{\tabcolsep}{5pt}%           % o 18pt global non colle nas táboas de moitas columnas
-  % \rowcolors colorea segundo a paridade do número de fila, así que hai que pasarlle as
-  % cores na orde que corresponda para que a primeira fila de datos sempre saia sombreada.
-  \ifodd#1\relax\rowcolors{#1}{ArqGrisClaro}{}\else\rowcolors{#1}{}{ArqGrisClaro}\fi
+  \setlength{\tabcolsep}{4pt}%           % o 18pt global non colle; con 4pt as raias verticais
+                                        % (0,5 mm de \arrayrulewidth) non ensanchan as táboas
+  % \rowcolors colorea segundo a paridade do número de fila. Na plantilla a cabeceira ocupa
+  % unha liña e a primeira fila de datos, a 2, sae sombreada; para que sexa así tamén nas
+  % táboas de cabeceira dobre ou triple hai que darlle as cores na orde que corresponda.
+  \ifodd#1\relax\rowcolors{#1}{udcgray!25}{white}\else\rowcolors{#1}{white}{udcgray!25}\fi
 }
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
