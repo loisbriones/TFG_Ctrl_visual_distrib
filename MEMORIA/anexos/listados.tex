@@ -274,7 +274,8 @@ def generate_launch_description():
     if hay_autonomo:
         ld.add_action(Node(
             package="image_processor_pkg", executable="RaceControllerNode.py",
-            name="arduino_bridge", parameters=[params_file]))
+            name="arduino_bridge", parameters=[params_file],
+            respawn=True, respawn_delay=2.0))
 
     if params.get("net_probe", {}).get("enabled", True):
         ld.add_action(Node(

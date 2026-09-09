@@ -722,8 +722,9 @@ class ImageProcessor(Node):
                 ]
 
         else:
-            # Como no se detecto nada se agranda el ROI para buscar en mas sitio
-            info["roi_size"] = min(info["roi_size"] + 50, max(self.width, self.height))
+            # Sin deteccion se pierde el rastro y calcular_roi_bounds pasa a
+            # buscar sobre el frame entero en el proximo ciclo
+            # info["roi_size"] = min(info["roi_size"] + 50, max(self.width, self.height))
             info["current_cx"] = None
             info["prev_cx"] = None
             # A None para que el debug no siga dibujando el coche donde ya no esta

@@ -565,7 +565,8 @@ La figura~\ref{fig:red-cdf} enseña como se distribuye el tiempo acumulado de id
   \label{fig:red-cdf}
 \end{figure}
 
-Esos milisegundos hay que verlos al lado del resto del control, y eso es lo que hace la figura~\ref{fig:red-presupuesto}, que muestra como se reparte la latencia entre los tres pasos que van desde que se captura el fotograma hasta que el algoritmo devuelve el valor que hay que aplicar de tensión. El tiempo que supone la red es el más pequeño de los tres con diferencia, incluso por WiFi no llega a una quinta parte del total, se queda en 22~ms. Y ese total cabe dentro de los 33~ms que pasan entre dos fotogramas.
+%Esos milisegundos hay que verlos al lado del resto del control, y eso es lo que hace la figura~\ref{fig:red-presupuesto}, que muestra como se reparte la latencia entre los tres pasos que van desde que se captura el fotograma hasta que el algoritmo devuelve el valor que hay que aplicar de tensión. El tiempo que supone la red es el más pequeño de los tres con diferencia, incluso por WiFi no llega a una quinta parte del total, se queda en 22~ms. Y ese total cabe dentro de los 33~ms que pasan entre dos fotogramas.
+Esos milisegundos hay que verlos al lado del resto del control, y eso es lo que hace la figura~\ref{fig:red-presupuesto}, que muestra como se reparte la latencia entre los tres pasos que van desde que se captura el fotograma hasta que el algoritmo devuelve el valor que hay que aplicar de tensión. El tiempo que supone la red es pequeño al lado del que le lleva al nodo cámara procesar un fotograma. Incluso el retardo que añade el WiFi no llega ni a una quinta parte de los 22~ms que suma el lazo de control completo, que son el procesado en la cámara, el envío por la red y la decisión del algoritmo. Y ese total cabe dentro de los 33~ms que separan dos fotogramas, así que el lazo se cierra antes de que llegue el siguiente.
 
 \begin{figure}[tbp]
   \centering

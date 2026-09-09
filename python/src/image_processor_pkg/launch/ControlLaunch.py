@@ -66,6 +66,8 @@ def generate_launch_description():
                 executable="RaceControllerNode.py",
                 name="arduino_bridge",
                 parameters=[params_file],
+                respawn=True,
+                respawn_delay=2.0,
             )
         )
 
