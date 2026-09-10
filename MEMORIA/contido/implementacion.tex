@@ -394,7 +394,7 @@ Tanto el montaje como la comunicación con la placa son los del trabajo de Adri�
 \section{Sistema de visualización y análisis}
 \label{sec:sistema-visualizacion}
 
-Alrededor del sistema hay tres herramientas independientes. La de \textbf{grabación} se despliega junto al resto mientras la sesión está en marcha y guarda en disco todos los mensajes que circulan por la red. La de \textbf{análisis} coge después esa información y construye un \emph{dashboard} web con las gráficas que permiten analizar la carrera vuelta a vuelta. Además durante la carrera podemos ir viendo información en directo en caso de levantar el \textbf{nodo de visualización}. Las dos primeras se comunican a través de los ficheros que una escribe y la otra lee (figura~\ref{fig:flujo-visualizacion}).
+Alrededor del sistema hay tres herramientas independientes. La de \textbf{grabación} se despliega junto al resto mientras la sesión está en marcha y guarda en disco todos los mensajes que circulan por la red. La de \textbf{análisis} coge después esa información y construye un \emph{dashboard} web con las gráficas que permiten analizar la carrera vuelta a vuelta y el \textbf{nodo de visualización} que permite ir viendo información en directo durante la carrera en caso de levantarlo. Las dos primeras se comunican a través de los ficheros que una escribe y la otra lee (figura~\ref{fig:flujo-visualizacion}).
 
 \begin{figure}[tbp]
     \centering
@@ -414,7 +414,7 @@ El nodo cámara ofrece un modo de depuración, desactivado por defecto y activab
 La herramienta de grabación tiene como cometido capturar sin pérdidas todo el tráfico de la red durante una sesión y dejarlo en disco, sin procesar ni interpretar nada. Se construye sobre \emph{rosbag2} (sección~\ref{sec:ros2-rosbag}), empaquetada en un contenedor junto con las definiciones de los mensajes propios del proyecto, que hay que compilar dentro para que pueda interpretarlos.
 
 Está configurada para grabar todos los \emph{topics} del dominio y para seguir sondeando la red mientras corre, suscribiéndose a los que vayan apareciendo. Así no hace falta saber de antemano qué nodos van a estar presentes ni imponer ningún orden de arranque. La calidad de servicio se resuelve sola, porque la herramienta ajusta el perfil de cada suscripción al que ofrece su publicador, de modo que no hay ninguna lista de \emph{topics} ni ningún fichero de \gls{qos} que mantener. 
-Se escogió el formato \emph{mcap} porque lleva embebida la definición de cada mensaje, lo que permite analizar los \emph{bags} aunque ya no tengamos acceso a los mensajes.
+Se escogió el formato \emph{mcap} porque lleva embebida la definición de cada mensaje, lo que permite analizar los \emph{bags} aunque ya no tengamos acceso a ellos.
 
 \subsection{Herramienta de análisis en diferido}
 \label{subsec:visualizacion-analisis}

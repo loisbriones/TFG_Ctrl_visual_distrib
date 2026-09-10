@@ -20,13 +20,13 @@ Los requisitos funcionales declaran el comportamiento y las acciones que debe of
     
     \item \textbf{Captura y detección distribuida de la posición.} El sistema debe capturar y procesar en tiempo real las imágenes de múltiples cámaras, con o sin solapamiento entre sus campos de visión, detectando la posición de los coches mediante segmentación por color.
     
-    \item \textbf{Control adaptativo de la velocidad.} El sistema debe aplicar un algoritmo que ajuste dinámicamente la velocidad de cada coche en función de su posición y de las características del circuito, buscando recorrer cada tramo a la máxima velocidad posible sin comprometer la estabilidad (sin salirse ni derrapar en las curvas).
+    \item \textbf{Control adaptativo de la velocidad.} El sistema debe aplicar un algoritmo que ajuste dinámicamente la velocidad de cada coche en función de su posición, buscando recorrer cada tramo a la máxima velocidad posible sin comprometer la estabilidad (sin salirse ni derrapar en las curvas).
      
     \item \textbf{Visualización y telemetría en tiempo real.} El sistema debe mostrar en tiempo real información de interés para el usuario, como las imágenes procesadas, la posición, la trayectoria seguida y los tiempos por vuelta. Recopilando además la telemetría temporal de cada etapa del procesamiento para su posterior análisis.
     
     \item \textbf{Detección del paso por meta y cálculo de tiempos.} El sistema debe detectar el paso de cada coche por la línea de meta y, a partir de ella, registrar y calcular el número de vueltas completadas así como el tiempo por vuelta.
     
-    \item \textbf{Arquitectura distribuida sobre red local.} El sistema debe diseñarse como un conjunto de nodos distribuidos que cooperan a través de una red local (wifi o Ethernet), repartiendo entre distintas máquinas las tareas de captura, detección, control y actuación. La comunicación entre nodos debe realizarse mediante el intercambio de mensajes por la red, sin memoria compartida, de forma que el sistema pueda cubrir circuitos de mayor tamaño y no quede limitado por los recursos ni por el número de puertos de un único equipo.
+    \item \textbf{Arquitectura distribuida sobre red local.} El sistema debe diseñarse como un conjunto de nodos distribuidos que cooperan a través de una red local (wifi o Ethernet), repartiendo entre distintas máquinas las tareas de captura, detección, control y actuación. La comunicación entre nodos debe realizarse mediante el intercambio de mensajes por la red, de forma que el sistema pueda cubrir circuitos de mayor tamaño y no quede limitado por los recursos ni por el número de puertos de un único equipo.
 \end{enumerate}
 
 \subsection{Requisitos no funcionales}
@@ -34,7 +34,7 @@ Los requisitos funcionales declaran el comportamiento y las acciones que debe of
 Los requisitos no funcionales definen las condiciones bajo las que debe operar el sistema, incluyendo aspectos como el rendimiento, la escalabilidad, la robustez o la estructura del código. Aunque no describen funciones concretas, resultan esenciales para garantizar que el sistema sea estable, mantenible y adecuado para su propósito.
 
 \begin{enumerate}
-\item \textbf{Arquitectura modular y distribuida.} La lógica del sistema debe organizarse en nodos independientes con responsabilidades delimitadas (captura y detección, control por rail y actuación sobre el hardware), comunicados a través de la red, de forma que cada nodo pueda ejecutarse en una máquina distinta sin compartir estado en memoria.
+\item \textbf{Arquitectura modular y distribuida.} La lógica del sistema debe organizarse en nodos independientes con responsabilidades delimitadas (captura y detección, control por rail y actuación sobre el hardware), comunicados a través de la red, de forma que cada nodo pueda ejecutarse en una máquina distinta.
 
 \item \textbf{Escalabilidad.} La arquitectura debe permitir aumentar el número de cámaras, raíles y coches, así como cubrir circuitos de mayor tamaño y complejidad, añadiendo nuevos nodos a la red sin necesidad de rediseñar el sistema.
 
@@ -143,7 +143,7 @@ del proyecto.
 
 \subsection{Recursos hardware}
 
-El material empleado se agrupa en cuatro bloques. El primero es la pista, un circuito de Scalextric con la electrónica que le aplica la tensión, formada por la placa Elegoo Uno R3 y el módulo controlador L293D. El segundo es el equipamiento de visión, con cuatro cámaras web (dos Microsoft LifeCam HD-5000 y dos Logitech Brio 100) y dos placas Raspberry Pi 5, que son las que ejecutan los nodos de captura. El tercero es el equipamiento de red, con el router TP-Link Archer AX55 que da la red local y los dos adaptadores Archer T3U de las Raspberry. El cuarto es el ordenador portátil ASUS Vivobook S 14, donde se ejecutaban habitualmente los nodos de control y el nodo de potencia, por lo que es el que tenía la placa conectada por USB. Todo ello se detalla, junto con su coste, en la tabla~\ref{tab:costes_hardware} de la sección~\ref{sec:custos}.
+El material empleado se agrupa en cuatro bloques. El primero es la pista, un circuito de Scalextric junto con la electrónica que aplica la tensión, formada por la placa Elegoo Uno R3 y el módulo controlador L293D. El segundo es el equipamiento de visión, con cuatro cámaras web (dos Microsoft LifeCam HD-5000 y dos Logitech Brio 100) y dos placas Raspberry Pi 5, que son las que ejecutan los nodos de captura. El tercero es el equipamiento de red, con el router TP-Link Archer AX55 que da la red local y los dos adaptadores Archer T3U de las Raspberry. El cuarto es el ordenador portátil ASUS Vivobook S 14, donde se ejecutaban habitualmente los nodos de control y el nodo de potencia, por lo que es el que tenía la placa conectada por USB. Todo ello se detalla, junto con su coste, en la tabla~\ref{tab:costes_hardware} de la sección~\ref{sec:custos}.
 
 \subsection{Recursos software}
 
@@ -204,8 +204,7 @@ Durante el desarrollo del proyecto, el alumno ha asumido de forma íntegra los d
         Analista                & 45  & 45 & 2\,025  \\
         Arquitecto de software  & 50  & 55 & 2\,750  \\
         Programador             & 320 & 50 & 16\,000 \\
-        Responsable de pruebas  & 35  & 40 & 1\,400  \\
-        Documentador            & 35  & 40 & 1\,400  \\
+        Responsable de pruebas  & 70  & 40 & 2\,800  \\
         \hline
         \textbf{Total} & \textbf{540} & --- & \textbf{26\,875} \\
     \end{tabular}

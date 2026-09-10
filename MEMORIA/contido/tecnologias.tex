@@ -10,7 +10,7 @@
 
 Python es un lenguaje de programación de código abierto, interpretado y de tipado dinámico, lo que significa que no requiere especificar el tipo de las variables de forma explícita y que el código se ejecuta directamente mediante un intérprete, sin necesidad de compilación previa~\cite{python}.
 
-Admite múltiples paradigmas de programación, como la orientación a objetos, la programación funcional y la programación por procedimientos, y es multiplataforma, lo que permite ejecutar el mismo programa en distintos sistemas operativos sin modificaciones. Su extenso ecosistema de librerías científicas y de visión artificial, junto con su sintaxis sencilla, lo han convertido en uno de los lenguajes más populares en la actualidad.  En este proyecto es el lenguaje empleado para diseñar todos los nodos de la arquitectura distribuida, implementados sobre la librería \texttt{rclpy} de \gls{ros2}, y también el de las herramientas de grabación y análisis de las sesiones.
+Admite múltiples paradigmas de programación, como la orientación a objetos, la programación funcional y la programación por procedimientos, y es multiplataforma, lo que permite ejecutar el mismo programa en distintos sistemas operativos sin modificaciones. En este proyecto es el lenguaje empleado para diseñar todos los nodos de la arquitectura distribuida, implementados sobre la librería \texttt{rclpy} de \gls{ros2}, y también el de las herramientas de grabación y análisis de las sesiones.
 
 \subsubsection{C++}
 
@@ -18,13 +18,13 @@ C++ es un lenguaje compilado de propósito general, con tipado estático y capaz
 
 \subsubsection{HTML, CSS y JavaScript}
 
-El nodo de visualización sirve por \gls{http} una página sencilla desde la que se sigue la carrera en directo, con las imágenes de las cámaras y los datos que se publican en la red.
+Con ellos se construyen las dos páginas web del sistema. Una es el panel desde el que se sigue la carrera en directo, que sirve por \gls{http} el nodo de visualización con las imágenes de las cámaras y los datos que se publican en la red. La otra es el \emph{dashboard} de la herramienta de análisis en diferido.
 
 \subsection{Librerías}
 \subsubsection{OpenCV}
 OpenCV es una librería de visión por computador de código abierto ampliamente utilizada~\cite{opencv,bradski2008}. En este proyecto es el componente central del análisis visual, se emplea para: capturar imágenes desde las cámaras, convertir los fotogramas al espacio de color \gls{hsv}, segmentar las pegatinas de los coches y la línea de meta mediante máscaras de color, aplicar operaciones morfológicas de limpieza y extraer los contornos de los objetos detectados.
 \subsubsection{NumPy}
-NumPy es una librería optimizada para el cálculo numérico con arreglos multidimensionales~\cite{numpy}. Se utiliza para representar y operar sobre las trayectorias del circuito (arrays de puntos), calculando de forma vectorizada distancias entre puntos y segmentos y el punto de la trayectoria más cercano a una posición. %o las máscaras binarias derivadas de los fotogramas. Estas operaciones se ejecutan decenas de veces por segundo, por lo que su eficiencia resulta esencial para el funcionamiento en tiempo real.
+NumPy es una librería optimizada para el cálculo numérico con matrices multidimensionales~\cite{numpy}. Se utiliza para representar y operar sobre las trayectorias del circuito (vectores de puntos), calculando distancias entre puntos y segmentos y el punto de la trayectoria más cercano a una posición. %o las máscaras binarias derivadas de los fotogramas. Estas operaciones se ejecutan decenas de veces por segundo, por lo que su eficiencia resulta esencial para el funcionamiento en tiempo real.
 
 \subsubsection{pyserial}
 Pyserial permite establecer comunicación serie entre Python y dispositivos externos como microcontroladores~\cite{pyserial}. En este proyecto se emplea en el nodo potencia para enviar los comandos de velocidad al Arduino a través del puerto \gls{usb}, así como para recibir las confirmaciones de la placa.
@@ -36,10 +36,7 @@ Plotly es una librería de generación de gráficas interactivas que se visualiz
 Pandas es una librería de análisis de datos que organiza la información en tablas indexadas~\cite{pandas}. Se emplea en las herramientas de análisis para volcar en tablas los registros que deja el algoritmo de control y los mensajes leídos de las grabaciones, y calcular sobre ellas las métricas de cada sesión, como los tiempos por vuelta o el número de derrapes.
 \subsubsection{Módulos estándar de Python}
 La librería estándar de Python cubre el resto de necesidades del proyecto sin añadir dependencias. El módulo \texttt{json} guarda y recupera del disco las trayectorias aprendidas en la calibración, \texttt{os} construye las rutas de los ficheros de caché y de registro y crea los directorios donde se guardan, \texttt{math} resuelve los cálculos geométricos puntuales, %como la distancia entre dos puntos, que no llegan a justificar una operación vectorizada,
-\texttt{re} extrae mediante expresiones regulares los datos de los registros del algoritmo durante el análisis y \texttt{csv} exporta las tablas resultantes.
-
-\subsubsection{threading y concurrent.futures}
-Los módulos estándar \texttt{threading} y \texttt{concurrent.futures} permiten ejecutar tareas en paralelo dentro de un mismo proceso. En el nodo cámara se emplean para desacoplar la captura de vídeo del procesamiento (un hilo dedicado a actualizar el buffer de la cámara) y para buscar en paralelo las pegatinas de varios coches sobre el mismo fotograma mediante un \textit{pool} de hilos.
+\texttt{re} extrae mediante expresiones regulares los datos de los registros del algoritmo durante el análisis y \texttt{csv} exporta las tablas resultantes. Los módulos \texttt{threading} y \texttt{concurrent.futures} permiten ejecutar tareas en paralelo dentro de un mismo proceso. En el nodo cámara se emplean para desacoplar la captura de vídeo del procesamiento (un hilo dedicado a actualizar el buffer de la cámara) y para buscar en paralelo las pegatinas de varios coches sobre el mismo fotograma mediante un \textit{pool} de hilos.
 
 \subsection{Herramientas de despliegue}
 
@@ -71,7 +68,7 @@ El formato \gls{yaml} permite representar datos estructurados de forma legible p
 
 \subsubsection{JSON}
 
-El formato \gls{json} es un estándar ligero de intercambio de datos basado en texto. Se emplea para persistir en disco las trayectorias obtenidas durante la vuelta de calibración (tanto las de cada cámara como las del controlador), de forma que en arranques posteriores el sistema pueda cargarlas y omitir la calibración.
+El formato \gls{json} es un estándar ligero de intercambio de datos basado en texto. Se emplea para guardar en disco las trayectorias obtenidas durante la vuelta de calibración (tanto las de cada cámara como las del controlador), de forma que en arranques posteriores el sistema pueda cargarlas y omitir la calibración.
 
 \section{ROS~2}
 \label{sec:ros2}
@@ -81,59 +78,59 @@ El formato \gls{json} es un estándar ligero de intercambio de datos basado en t
 \gls{ros2} constituye la columna vertebral de la arquitectura de este proyecto. Por ese motivo, a continuación se recogen los conceptos de \gls{ros2} que se emplean a lo largo de la memoria, con un pequeño resumen de cada uno para poder seguir la explicación y una referencia a la documentación oficial donde puede ampliarse.
 
 \subsection{Conceptos generales}
-\paragraph{Nodos}
+\paragraph{Nodos:}
 \label{sec:ros2-nodos}
 Procesos independientes que encapsulan una funcionalidad concreta (en nuestro caso, la gestión de una cámara, el control de un coche o el puente con el Arduino) y que pueden ejecutarse en máquinas distintas~\cite{ros2nodes}.
 
-\paragraph{Topics}
+\paragraph{Topics:}
 \label{sec:ros2-topics}
 Los \emph{topics} son el mecanismo de comunicación más habitual en \gls{ros2}, un sistema de paso de mensajes asíncrono de tipo publicador-suscriptor con interfaces fuertemente tipadas~\cite{macenski2022}. %Sus extremos se organizan en un grafo computacional formado por los nodos, que es la unidad con la que se razona sobre sistemas complejos. En este proyecto se definen tipos de mensajes propios para intercambiar la posición del coche, el valor de \gls{pwm} que se le aplica y la telemetría.
 
-\paragraph{Interfaces y mensajes propios}
+\paragraph{Interfaces y mensajes propios:}
 \label{sec:ros2-interfaces}
 Además de los tipos estándar, una aplicación puede definir los suyos en ficheros de texto con extensión \texttt{.msg}, en los que se declara un campo por línea con su tipo y su nombre~\cite{ros2interfaces}. Durante la compilación del paquete, \gls{ros2} genera automáticamente a partir de ellos las clases que los nodos usan para publicar y recibir. Este proyecto define sus propios mensajes porque parte de la información que hay que intercambiar (posiciones de dos pegatinas, consignas de \gls{pwm} por carril, telemetría del lazo de control) no se corresponde con ningún tipo estándar.
 
-\paragraph{Parámetros}
+\paragraph{Parámetros:}
 \label{sec:ros2-parametros}
 Valores de configuración declarados por cada nodo, que pueden establecerse desde un fichero \gls{yaml} común y modificarse en caliente durante la ejecución~\cite{ros2params}.
 
-\paragraph{Ficheros de lanzamiento}
+\paragraph{Ficheros de lanzamiento:}
 \label{sec:ros2-launch}
 
 El sistema de lanzamiento en \gls{ros2} tiene como objetivo automatizar la ejecución de múltiples nodos con un solo comando. Ayuda al usuario a describir la configuración de su sistema y luego la ejecuta tal como se ha descrito. La configuración del sistema incluye qué programas ejecutar, dónde ejecutarlos, qué argumentos pasarles y las convenciones específicas de ROS que facilitan la reutilización de componentes en todo el sistema dotando a cada uno de una configuración diferente. También se encarga de supervisar el estado de los procesos lanzados, así como de informar o reaccionar a los cambios en el estado de dichos procesos~\cite{ros2launch}.
 
-\paragraph{Paradigma publicador/suscriptor}
+\paragraph{Paradigma publicador/suscriptor:}
 \label{sec:pubsub}
 
 En el modelo publicador/suscriptor, los procesos no se comunican directamente entre sí, sino a través de canales con nombre (\textit{topics})~\cite{ros2topics}: los publicadores envían mensajes a un topic sin conocer quién los recibirá, y los suscriptores escuchan un topic sin conocer quién publica en él. Este desacoplamiento aporta grandes ventajas que simplifican el diseño.
 
 El paradigma encaja de forma natural en el problema de este proyecto. Cada nodo cámara publica las posiciones que detecta sin saber cuántos controladores existen, y cada controlador se suscribe a las posiciones de su coche sin saber cuántas cámaras cubren el circuito. Añadir una cámara o un coche no requiere reconfigurar ningún otro componente del sistema.
 
-\paragraph{Namespaces}
+\paragraph{Namespaces:}
 \label{sec:ros2-namespaces}
 Es un mecanismo de encapsulación jerárquica que agrupa identificadores del sistema (nodos, tópicos, servicios o parámetros) bajo un prefijo de ruta común, de forma análoga a los directorios de un sistema de ficheros~\cite{ros2names}. Un nodo lanzado dentro de un \textit{namespace} ve resueltos sus nombres relativos bajo ese prefijo.
 
 Facilita el intercambio de mensajes cuando tenemos nodos iguales. Por ejemplo, en el caso del nodo de control, cuando lo programamos no sabemos cuántos coches vamos a tener, por lo que simplemente se le indica que publique en el \emph{topic} \texttt{pwd}. Es después, en el fichero de lanzamiento (sección~\ref{sec:ros2-launch}) donde se asigna un \emph{namespace}, por ejemplo, \texttt{car1}. Al hacerlo de esta forma el nodo va a acabar publicando el valor en el \emph{topic} \texttt{/car1/pwd}. Con dos coches se lanzan dos instancias del mismo nodo, ambas configuradas para publicar en \texttt{pwd}, pero el \emph{namespace} hace que una acabe publicando en \texttt{/car1/pwd} y la otra en \texttt{/car2/pwd}, sin colisionar entre ellas. El mecanismo es idéntico para la suscripción. Un nodo lanzado en \texttt{car1} que se suscribe a \texttt{pwd} recibe lo que se publica en \texttt{/car1/pwd}.
 
-\paragraph{Executors y \emph{callback groups}}
+\paragraph{Executors y \emph{callback groups}:}
 \label{sec:ros2-executors}
 Un nodo atiende su trabajo mediante \emph{callbacks}, funciones que se disparan al llegar un mensaje o al vencer un temporizador (\emph{timer}). Quien las ejecuta es el \emph{executor}, que toma uno o varios hilos del sistema operativo y con ellos va invocando los \emph{callbacks} del nodo a medida que llegan los mensajes y los eventos~\cite{ros2executors}. El \texttt{SingleThreadedExecutor} trabaja con un único hilo y los atiende de uno en uno; el \texttt{MultiThreadedExecutor} dispone de varios y puede ejecutar más de uno a la vez. Cuánto paralelismo se obtiene depende de los \emph{callback groups}, que agrupan los \emph{callbacks} de un nodo y de los que hay dos tipos: en un grupo mutuamente excluyente (\texttt{MutuallyExclusiveCallbackGroup}) los \emph{callbacks} nunca se ejecutan a la vez entre sí, mientras que en uno reentrante (\texttt{ReentrantCallbackGroup}) sí pueden hacerlo. Los de grupos distintos siempre pueden ejecutarse en paralelo, y los que se crean sin indicar grupo se asignan al grupo por defecto del nodo.
 
 \subsection{Herramientas}
-\paragraph{Grabación de datos: rosbag2}
+\paragraph{Grabación de datos (rosbag2):}
 \label{sec:ros2-rosbag}
-Utilidad que \gls{ros2} incluye de serie para registrar en disco todos los mensajes que circulan por los \textit{topics} y reproducirlos después~\cite{rosbag2}. El fichero resultante se denomina \textit{bag}. El formato de almacenamiento escogido es mcap~\cite{mcap}, que guarda dentro del propio fichero la definición de cada tipo de mensaje registrado, de modo que una grabación sigue siendo legible aunque los mensajes cambien después.
+Utilidad que \gls{ros2} incluye de serie para registrar en disco todos los mensajes que circulan por los \textit{topics} y reproducirlos después~\cite{rosbag2}. El fichero resultante se denomina \textit{bag}. El formato de almacenamiento escogido es \emph{mcap}~\cite{mcap}, que guarda dentro del propio fichero la definición de cada tipo de mensaje registrado, de modo que una grabación sigue siendo legible aunque los mensajes cambien después.
 
-\paragraph{Colcon}
+\paragraph{Colcon:}
 \label{sec:ros2-colcon}
-Colcon es la herramienta oficial de construcción de ``workspaces'' de \gls{ros2}~\cite{colcon}.  Se encarga de compilar el paquete del proyecto, generar el código de los mensajes personalizados a partir de sus definiciones e instalar los ejecutables y ficheros de configuración para que puedan ser lanzados con las utilidades de ROS~2.
+Es la herramienta oficial de construcción de ``workspaces'' de \gls{ros2}~\cite{colcon}.  Se encarga de compilar el paquete del proyecto, generar el código de los mensajes personalizados a partir de sus definiciones e instalar los ejecutables y ficheros de configuración para que puedan ser lanzados con las utilidades de ROS~2.
 
 
 
 \subsection{Middleware DDS y calidad de servicio (QoS)}
 \label{sec:dds-qos}
 
-\gls{dds} es un estándar de middleware publicador/suscriptor orientado a sistemas de tiempo real, definido por el Object Management Group~\cite{ddsspec}, sobre el que \gls{ros2} construye toda su capa de comunicación. Dos de sus características son especialmente relevantes para este trabajo. La primera es el descubrimiento automático, por el que los participantes de un mismo dominio (identificado por un número, el \textit{domain ID}~\cite{ros2domainid}) se anuncian periódicamente en la red local y establecen las conexiones entre publicadores y suscriptores sin ninguna configuración manual de direcciones y sin ningún proceso maestro. Esos anuncios se envían por multicast, de forma que un participante nuevo llega a todos los demás sin conocer sus direcciones, y de ahí que el sistema necesite una red local que permita el tráfico multicast y que los contenedores empleen la pila de red de la máquina que los ejecuta (sección~\ref{subsec:despliegue-docker}). La segunda característica es la calidad de servicio (\gls{qos}~\cite{ros2qos}), con la que cada publicador y suscriptor declara sus garantías de entrega mediante un conjunto de políticas, las utilizadas en el proyecto son:
+\gls{dds} es un estándar de middleware publicador/suscriptor orientado a sistemas de tiempo real, definido por el Object Management Group~\cite{ddsspec}, sobre el que \gls{ros2} construye toda su capa de comunicación. Dos de sus características son especialmente relevantes para este trabajo. La primera es el descubrimiento automático, por el que los participantes de un mismo dominio (identificado por un número, el \textit{domain ID}~\cite{ros2domainid}) se anuncian periódicamente en la red local y establecen las conexiones entre publicadores y suscriptores sin ninguna configuración manual de direcciones y sin ningún proceso maestro. Esos anuncios se envían por multicast, de forma que un participante nuevo llega a todos los demás sin conocer sus direcciones, y de ahí que el sistema necesite una red local que permita el tráfico multicast y que los contenedores empleen la pila de red de la máquina que los ejecuta (sección~\ref{subsec:despliegue-docker}). La segunda característica es la calidad de servicio, (\gls{qos}~\cite{ros2qos}) con la que cada publicador y suscriptor declara sus garantías de entrega mediante un conjunto de políticas. Las utilizadas en el proyecto son:
 
 \begin{itemize}
 \item \textbf{Fiabilidad (\textit{reliability}):} en modo \textit{reliable} el middleware reenvía los mensajes perdidos hasta confirmar su entrega; en modo \textit{best effort} los mensajes se envían una única vez y pueden perderse.
@@ -145,7 +142,7 @@ Colcon es la herramienta oficial de construcción de ``workspaces'' de \gls{ros2
 
 Estas políticas se negocian entre las dos partes: un suscriptor solo recibe mensajes de un publicador si el perfil que declara es compatible con el de este. \gls{ros2} ofrece además perfiles predefinidos que agrupan valores habituales, como el pensado para sensores~\cite{ros2qos}.
 
-La elección de estas políticas supone un compromiso entre latencia y garantías de entrega. Para los datos de posición, que se publican decenas de veces por segundo, se emplea el perfil de datos de sensor (\textit{best effort}), un mensaje perdido pierde importancia porque enseguida llega el siguiente, y resulta preferible perder un fotograma a acumular retardo reenviando información ya obsoleta. En cambio, para la posición de la línea de meta, que se publica una única vez al arrancar, se utiliza un perfil \textit{reliable} y \textit{transient local}, el mensaje debe llegar incluso a los controladores que arranquen después de que la cámara lo haya publicado.
+La elección de estas políticas supone un compromiso entre latencia y garantías de entrega. Para los datos de posición, que se publican decenas de veces por segundo, se emplea el perfil de datos de sensor \textit{best effort} ya que un mensaje perdido no tiene importancia porque enseguida llega el siguiente, y resulta preferible perder un fotograma a acumular retardo reenviando información ya obsoleta. En cambio, para la posición de la línea de meta, que se publica una única vez al arrancar, se utiliza un perfil \textit{reliable} y \textit{transient local}, porque el mensaje debe llegar incluso a los controladores que arranquen después de que la cámara lo haya publicado.
 
 %\subsection{Tolerancia a fallos: heartbeat, failover y watchdog}
 %\label{sec:tolerancia-fallos}
@@ -213,38 +210,38 @@ En esta sección se describen los dispositivos físicos que componen el montaje,
 % PENDIENTE LOIS: revisar la version del Scalextric (la base de alimentacion pone EVOLUTION y
 % las pistas son de varios modelos mezclados) y buscar el numero de modelo de los dos coches
 % que se usaron, los de la foto del montaje.
-Se emplea un circuito analógico de coches tipo \textit{slot} con dos carriles alimentados de forma independiente, de modo que la tensión aplicada a cada carril determina la velocidad del coche que circula por él. Sobre los coches se colocan dos pegatinas de colores distintivos, una delantera y otra trasera, que el sistema de visión utiliza para determinar su posición y orientación. Además, sobre la pista se sitúa una marca de color en la línea de meta, que el sistema detecta automáticamente para contabilizar vueltas y finalizar la calibración. La parte delantera del coche va guiada por la ranura del carril, mientras que la trasera no lleva imán y se abre en las curvas cuando el coche entra más rápido de lo que los neumáticos aguantan, que es justo lo que el sistema interpreta como un derrape.
+Se emplea un circuito analógico de coches tipo \textit{slot} con dos carriles alimentados de forma independiente, de modo que la tensión aplicada a cada carril determina la velocidad del coche que circula por él. Sobre los coches se colocan dos pegatinas de colores distintivos, una delantera y otra trasera, que el sistema de visión utiliza para determinar su posición y orientación. Además, sobre la pista se sitúa una marca de color en la línea de meta, que el sistema detecta automáticamente para contabilizar vueltas y finalizar la calibración. La parte delantera del coche va guiada por la ranura del carril, mientras que la trasera no lleva imán y se abre en las curvas cuando el coche entra más rápido de lo que los neumáticos aguantan, que es justo lo que el sistema interpreta como un derrape. Se usaron dos marcas Carrera y Scalextric.
 
 \subsection{Control}
-\paragraph{Placa Elegoo Uno R3}
+\paragraph{Placa Elegoo Uno R3:}
 
-La placa Elegoo Uno R3 es una réplica compatible de la placa Arduino Uno R3, basada en el microcontrolador ATmega328P. Dispone de entradas y salidas digitales y analógicas y de conexión \gls{usb}, y es totalmente compatible con el \gls{ide} oficial de Arduino. Su función en el sistema es recibir por el puerto serie los comandos de velocidad enviados por el nodo de potencia y generar las señales \gls{pwm} correspondientes para cada carril, actuando como intermediario entre el software y el mundo físico.
+Esta placa es una réplica compatible de la placa Arduino Uno R3, basada en el microcontrolador ATmega328P. Dispone de entradas y salidas digitales y analógicas y de conexión \gls{usb}, y es totalmente compatible con el \gls{ide} oficial de Arduino. Su función en el sistema es recibir por el puerto serie los comandos de velocidad enviados por el nodo de potencia y generar las señales \gls{pwm} correspondientes para cada carril, actuando como intermediario entre el software y el mundo físico.
 
-\paragraph{Módulo controlador L293D}
+\paragraph{Módulo controlador L293D:}
 
-El L293D es un circuito integrado que implementa dos puentes en H, lo que permite controlar dos flujos de corriente simultáneos e independientes. Se emplea habitualmente como controlador de motores de corriente continua. 
+Circuito integrado que implementa dos puentes en H, lo que permite controlar dos flujos de corriente simultáneos e independientes. Se emplea habitualmente como controlador de motores de corriente continua. 
 
 \subsection{Webcams}
 
-Se emplean cuatro webcams de dos modelos distintos, dos Microsoft LifeCam HD-5000 y dos Logitech Brio 100. Las primeras capturan vídeo en alta definición (720p) a 30 fotogramas por segundo a través de \gls{usb}, y las segundas llegan a 1080p a esa misma cadencia, con enfoque fijo. %y obturador de privacidad integrado. En el sistema se usan todas a la misma resolución, ya que lo que importa no es el detalle de la imagen sino mantener los 30 fotogramas por segundo.
+Se emplean cuatro webcams de dos modelos distintos, dos Microsoft LifeCam HD-5000 y dos Logitech Brio 100. Las primeras capturan vídeo en alta definición (720p) a 30 fotogramas por segundo con conexión \gls{usb}, y las segundas llegan a 1080p a esa misma cadencia, con enfoque fijo. %y obturador de privacidad integrado. En el sistema se usan todas a la misma resolución, ya que lo que importa no es el detalle de la imagen sino mantener los 30 fotogramas por segundo.
 
 Cada cámara se sitúa sobre una parte del trazado, de forma que el conjunto cubra el circuito completo. Para reducir el ancho de banda \gls{usb} se solicita a la cámara el flujo comprimido en \gls{mjpg}, y se desactiva el autoenfoque para evitar variaciones de imagen durante la carrera.
 
 \subsection{Computación}
-\paragraph{Raspberry Pi 5}
-Están equipadas con un procesador ARM Cortex-A76 de cuatro núcleos de 64 bits a 2,4 GHz, 8 GB de \gls{ram} y puertos \gls{usb} 3.0. Al ser un ordenador completo con Linux, puede ejecutar cualquiera de los nodos del sistema, y de hecho la arquitectura no le asigna ningún papel fijo. En las pruebas de este trabajo se destinaron a los nodos de captura, conectándoles las cámaras para que adquirieran las imágenes y publicaran en la red la posición del coche en tiempo real.
+\paragraph{Raspberry Pi 5:}
+Placa equipada con un procesador ARM Cortex-A76 de cuatro núcleos de 64 bits a 2,4 GHz, 8 GB de \gls{ram} y puertos \gls{usb} 3.0. Al ser un ordenador completo con Linux, puede ejecutar cualquiera de los nodos del sistema y de hecho la arquitectura no le asigna ningún papel fijo. En las pruebas de este trabajo se destinaron a los nodos de captura, conectándoles las cámaras para que adquirieran las imágenes y publicaran en la red la posición del coche en tiempo real.
 
-\paragraph{ASUS Vivobook S 14}
+\paragraph{ASUS Vivobook S 14:}
 Está equipado con un procesador AMD Ryzen AI 9 HX 370 de 12 núcleos a una frecuencia de hasta 5,16 GHz, gráficos integrados AMD Radeon 890M, 32 GB de memoria RAM LPDDR5X y 1 TB de almacenamiento SSD NVMe. El equipo opera bajo el sistema operativo Linux CachyOS en arquitectura x86\_64. Durante las ejecuciones era donde iban los nodos de control y el nodo de potencia, al tener la conexión serie hacia el Arduino.
 
 \subsection{Comunicaciones}
-\paragraph{Router TP-Link Archer AX55}
+\paragraph{Router TP-Link Archer AX55:}
 \label{sec:hw-router}
 
-El Archer AX55 es un router Wi-Fi 6 de doble banda, con cuatro puertos gigabit y una velocidad conjunta anunciada de 3 Gbps. Es el que proporciona la red local sobre la que se apoya toda la arquitectura, ya que el descubrimiento automático de \gls{dds} (sección~\ref{sec:dds-qos}) exige que las máquinas compartan red y que esta deje pasar el tráfico multicast. Sus dos formas de conexión, el cable y el WiFi, son justamente las que distinguen los escenarios A2 y A3 de las pruebas de red de la sección~\ref{sec:pruebas-red}.
+Es un router Wi-Fi 6 de doble banda, con cuatro puertos gigabit y una velocidad conjunta anunciada de 3 Gbps. Es el que proporciona la red local sobre la que se apoya toda la arquitectura, ya que el descubrimiento automático de \gls{dds} (sección~\ref{sec:dds-qos}) exige que las máquinas compartan red y que esta deje pasar el tráfico multicast. Sus dos formas de conexión, el cable y el WiFi, son justamente las que distinguen los escenarios A2 y A3 de las pruebas de red de la sección~\ref{sec:pruebas-red}.
 
-\paragraph{Adaptador de red TP-Link Archer T3U}
+\paragraph{Adaptador de red TP-Link Archer T3U:}
 \label{sec:hw-adaptador}
 
-El Archer T3U es un adaptador de red inalámbrico en formato \gls{usb}, de doble banda y con soporte \gls{mumimo}. Se emplea uno en cada Raspberry Pi porque da mejor enlace que el chip de red integrado en la placa, aunque ambos son Wi-Fi 5.
+Es un adaptador de red inalámbrico en formato \gls{usb}, de doble banda y con soporte \gls{mumimo}. Se emplea uno en cada Raspberry Pi porque da mejor enlace que el chip de red integrado en la placa, aunque ambos son Wi-Fi 5.
 %Se emplea uno en cada Raspberry Pi, donde el sistema operativo lo reconoce como una segunda interfaz inalámbrica, \texttt{wlan1}, distinta de la que la placa lleva integrada. Esa separación es la que permite las pruebas de la sección~\ref{sec:pruebas-red}, en las que el retardo artificial se inyecta sobre esa interfaz y afecta por tanto solo al tráfico que sale de la cámara hacia el nodo de control.

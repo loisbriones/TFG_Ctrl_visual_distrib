@@ -125,7 +125,9 @@ El problema no afecta solo al algoritmo, porque en las pruebas de conducción ma
 \section{Prueba PWM incremental}
 \label{sec:prueba_pwm_incremental}
 
-Durante las pruebas unitarias aparecieron problemas en el comportamiento del circuito, los valores y las configuraciones que servían un día para un coche ya no valían al día siguiente. Para salir de dudas se realizó una prueba con el mismo \emph{setup} que en la prueba~\ref{sec:prueba-comparativa-coches}, por tanto es el mismo circuito de la figura~\ref{fig:setup-ovalo}. Para ver el comportamiento para un \gls{pwm} se aplicó el modo incremental, descrito en la sección~\ref{subsec:modos-operacion}, aumentando el valor cada 10 vueltas. Se realizaron seis ejecuciones, recogidas en la tabla~\ref{tab:incremental-sesiones}, se usaron los dos coches y en dos días distintos.
+El objetivo de esta prueba es simplificar al máximo el sistema y ver cómo responde. Para ello se saca el algoritmo del lazo y se aplicó el modo incremental, descrito en la sección~\ref{subsec:modos-operacion}, aumentando el valor cada 10 vueltas. La idea era poder ver el rango útil sobre el que podría trabajar el algoritmo y en qué puntos del circuito aparecen normalmente los derrapes. Otra razón para hacer esta prueba es que durante las pruebas unitarias aparecieron problemas en el comportamiento del circuito, los valores de pwm que servían un día para un coche ya no valían al día siguiente. 
+
+Se realizó una prueba con el mismo \emph{setup} que en la prueba~\ref{sec:prueba-comparativa-coches}, por tanto es el mismo circuito de la figura~\ref{fig:setup-ovalo}. Se realizaron seis ejecuciones, recogidas en la tabla~\ref{tab:incremental-sesiones}, se usaron los dos coches y en dos días distintos.
 
 \begin{table}[btp]
   \centering
@@ -146,7 +148,7 @@ Durante las pruebas unitarias aparecieron problemas en el comportamiento del cir
   \label{tab:incremental-sesiones}
 \end{table}
 
-Con el coche azul, el 22/07 una vuelta se daba en 1,774~s con un \gls{pwm} de 75, mientras que el 03/08 ese mismo valor necesitaba 3,095~s y hubo que llegar hasta 110 para acercarse al tiempo que el otro día se conseguía con 74. Con el coche rojo ocurre justo lo contrario, porque el 03/08 fue más rápido que el 22/07 en todos los valores comunes, entre 0,15 y 0,58~s por vuelta. Los números están en la tabla~\ref{tab:incremental-por-pwm}. Cabe destacar que la distancia de derrape se mantiene en valores parecidos entre las sesiones, alrededor de 6~px el azul y de 8~px el rojo. 
+Con el coche azul, el 22/07 una vuelta se daba en 1,774~s con un \gls{pwm} de 75, mientras que el 03/08 ese mismo valor necesitaba 3,095~s y ni subiendo hasta 110 se recuperó el tiempo que el otro día se conseguía con 75, porque se quedó en 1,937~s frente a los 1,774~s de aquel día. Con el coche rojo ocurre justo lo contrario, porque el 03/08 fue más rápido que el 22/07 en todos los valores comunes. Los números están en la tabla~\ref{tab:incremental-por-pwm}.
 
 \begin{table}[btp]
   \centering
@@ -167,6 +169,10 @@ Con el coche azul, el 22/07 una vuelta se daba en 1,774~s con un \gls{pwm} de 75
     85 & 1,774 & 5,7 & 2,226 & 4,4 & 1,911 & 8,0 & 1,515 & 9,2 \\
     90 & 1,763 & 6,1 & 2,029 & 5,2 & 1,737 & 7,1 & 1,510 & 9,1 \\
     93 & 1,762 & 6,5 & 1,954 & 6,2 & 1,633 & 6,6 & 1,480 & 8,7 \\
+    95 & --- & --- & 1,978 & 6,0 & 1,621 & 6,5 & 1,462 & 8,3 \\
+    100 & --- & --- & 2,000 & 7,2 & --- & --- & 1,424 & 7,5 \\
+    105 & --- & --- & 1,923 & 8,3 & --- & --- & 1,388 & 7,1 \\
+    110 & --- & --- & 1,937 & 11,5 & --- & --- & 1,410 & 7,8 \\
   \end{tabular}
   \caption{Tiempo por vuelta y distancia de derrape ($d$, percentil 95)}
   \label{tab:incremental-por-pwm}
@@ -194,7 +200,6 @@ A partir de los resultados obtenidos también se aprecia que pasado cierto punto
 \end{figure}
 
 La causa más probable de estos problemas es el propio montaje de la pista, que exige un buen contacto entre los carriles y que además se monta con piezas mezcladas de varios modelos de Scalextric, de manera que el comportamiento del coche no siempre es el esperado y resulta difícil predecirlo de un día para otro, sumado al desgaste en las escobillas de los coches que también puede afectar al contacto con el carril. Esto obliga a tener cuidado al cargar una política ya fijada, porque puede funcionar un día y dejar de hacerlo en otro. Con el algoritmo el problema se puede sortear, ya que basta con relanzarlo o cambiar sus parámetros en caliente, pero no deja de ser un apaño y es una de las limitaciones que se le detectaron, porque no llega a adaptarse por sí solo al comportamiento del circuito. Un algoritmo suficientemente bueno subiría su propio techo de \gls{pwm} al ver que el circuito no responde, y eso no se contempló durante el diseño porque no se esperaba este comportamiento, que en los trabajos anteriores no aparece reportado.
-
 
 \section{Prueba de ajuste de los parámetros del algoritmo}
 \label{sec:prueba-algo-parametros}
@@ -225,7 +230,7 @@ a los tiempos que teníamos antes de empezar la carrera.
   \label{fig:parametros-tiempos}
 \end{figure}
 
-La razón de esos picos se ve en la figura~\ref{fig:parametros-derrapes}. Con el umbral en 9~px los derrapes siguen produciéndose, pero se mantienen acotados alrededor de esa misma cifra y solo en unas pocas vueltas llegan a los 10~px. Con el umbral en 12~px el sistema no reacciona hasta que el derrape ya está desarrollado y para entonces el castigo llega tarde, con máximos que se disparan por encima de los 20~px. Ese contraste se aprecia mejor en la figura~\ref{fig:derrape-vuelta}. Con el umbral en 9~px el derrape se detecta mientras todavía está creciendo y el pico se queda en los 10~px, mientras que con 12~px se produce un salto de esa misma franja hasta los 19~px sin ningún paso intermedio. La nube de puntos grises del fondo, que acumula todas las vueltas de la ejecución, se concentra justo entre los 9 y los 10~px, de manera que ahí está la frontera y una vez superada el derrape ya no se puede contener.
+La razón de esos picos se ve en la figura~\ref{fig:parametros-derrapes}. Con el umbral en 9~px los derrapes siguen produciéndose, pero se mantienen acotados alrededor de esa misma cifra y solo en unas pocas vueltas llegan a los 10~px. Con el umbral en 12~px el sistema no reacciona hasta que el derrape ya está desarrollado y para entonces el castigo llega tarde, con máximos que se disparan por encima de los 20~px. Ese contraste se aprecia mejor en la figura~\ref{fig:derrape-vuelta}. Con el umbral en 9~px el derrape se detecta mientras todavía está creciendo y el pico se queda en los 10~px, mientras que con 12~px se produce un salto de esa misma franja hasta los 19~px sin ningún paso intermedio. La nube de puntos grises del fondo, que acumula todas las vueltas de la ejecución, se concentra justo entre los 9 y los 10~px, de manera que ahí está la frontera.
 
 \begin{figure}[tbp]
   \centering
@@ -265,7 +270,7 @@ La razón de esos picos se ve en la figura~\ref{fig:parametros-derrapes}. Con el
   \label{fig:derrape-vuelta}
 \end{figure}
 
-Las métricas de las tres ejecuciones se recogen en la tabla~\ref{tab:parametros-azul} y permiten precisar en qué consiste la mejora. Las medianas de las dos configuraciones con \gls{pwm} 70--94 son casi iguales, 1,733~s frente a 1,755~s, y las mejores vueltas resultan indistinguibles, 1,663~s frente a 1,661~s, de modo que bajar el umbral no hace al coche más rápido en su vuelta buena, sino que le quita las vueltas malas. Eso se refleja en la media, que cae de 1,872~s a 1,759~s, y en la peor vuelta, que pasa de 2,839~s a 2,418~s, y sobre todo en la desviación típica, que se reduce a menos de la mitad, de 0,228~s a 0,094~s. Sobre las 50 vueltas la diferencia acumulada es de 5,66~segundos, así que en una carrera entre ambas configuraciones ganaría la más conservadora, que mantiene el ritmo, frente a la que pierde varias décimas cada vez que tarda en detectar un derrape.
+Las métricas de las tres ejecuciones se recogen en la tabla~\ref{tab:parametros-azul} y permiten precisar en qué consiste la mejora. Las medianas de las dos configuraciones con \gls{pwm} 70--94 son casi iguales, 1,733~s frente a 1,755~s, y las mejores vueltas resultan indistinguibles, 1,663~s frente a 1,661~s, de modo que bajar el umbral de derrape no hace al coche más rápido en su vuelta buena, sino que le quita las vueltas malas. Eso se refleja en la media, que cae de 1,872~s a 1,759~s y sobre todo en la desviación típica, que se reduce a menos de la mitad, de 0,228~s a 0,094~s. Sobre las 50 vueltas la diferencia acumulada es de 5,66~segundos, así que en una carrera entre ambas configuraciones ganaría la más conservadora, que mantiene el ritmo, frente a la que pierde varias décimas cada vez que tarda en detectar un derrape.
 
 \begin{table}[btp]
   \centering
@@ -368,7 +373,7 @@ Los resultados sobre el circuito en ocho se recogen en las tablas~\ref{tab:vs-pe
   \label{tab:vs-personas-ocho-azul}
 \end{table}
 
-En el coche azul la distancia entre el algoritmo y los pilotos se dispara respecto al óvalo. ALGO 002 completa las 50 vueltas en 202,89~s y el mejor de los dos pilotos necesita 276,72~s, un 36\,\% más, mientras que el segundo se va hasta los 427,23~s, más del doble. Al ser un circuito más complejo, ninguna de las configuraciones del algoritmo pierde frente a un piloto, como sí llegó a pasar en el óvalo, y la vuelta rápida también es suya.
+En el coche azul la distancia entre el algoritmo y los pilotos se dispara respecto al óvalo. ALGO 002 completa las 50 vueltas en 202,89~s y el mejor de los dos pilotos necesita 276,72~s, un 36\,\% más, mientras que el segundo se va hasta los 427,23~s, más del doble. Al ser un circuito más complejo, ninguna de las configuraciones del algoritmo pierde frente a un piloto, como sí llegó a pasar en el óvalo, y la vuelta rápida también es suya.na sola cámara,
 %Aquí ya no se sostiene el consuelo del óvalo, porque la vuelta rápida también es del algoritmo, y ninguna de las cuatro configuraciones queda por detrás de un piloto, algo que allí sí llegó a pasar con ALGO 012.
 %Entre esas cuatro se repite además el patrón de la sección~\ref{sec:prueba-algo-parametros}: ALGO 003 sube el techo de PWM a 85 sin tocar el umbral y es con diferencia la peor, con 243,92~s, mientras que ALGO 004 mantiene ese techo, baja el umbral a 8~px y vuelve a los 205,00~s.
 
@@ -417,11 +422,11 @@ En esta prueba se aplica una \emph{política óptima}, es decir, con un perfil y
 %La motivación sale de las gráficas de tiempo de las pruebas anteriores, en las que a veces parece que el coche encuentra un buen ritmo y después vuelve a perderlo, si esa vuelta buena se pudiera congelar y repetir, los tiempos deberían mantenerse. 
 El objetivo es validar el comportamiento del sistema con una misma política, sin cambios del algoritmo. 
 Para evitar cambios, toda la prueba %Como el comportamiento del circuito cambia de un día para otro, según se vio en la sección~\ref{sec:prueba_pwm_incremental}, todo 
-se hizo el mismo día sobre el mismo montaje, el óvalo de la figura~\ref{fig:setup-ovalo} con una sola cámara, sin tocar la configuración y sin mover ni la pista ni la cámara, de modo que el contacto entre los carriles fuese el mismo en las cuatro ejecuciones. La primera es una ejecución de referencia con el algoritmo, con el coche azul, un rango de \gls{pwm} de 65 a 88 y un umbral de derrape de 11~px, y de ella sale la política que después se repite tres veces.
+se hizo el mismo día sobre el mismo montaje, el óvalo de la figura~\ref{fig:setup-ovalo} con una sola cámara, sin tocar la configuración y sin mover ni la pista ni la cámara. La primera es una ejecución de referencia con el algoritmo, con el coche azul, un rango de \gls{pwm} de 65 a 88 y un umbral de derrape de 11~px, y de ella sale la política que después se repite tres veces.
 
 La mejor vuelta de esa ejecución de referencia es la 17, con 1,681~s, y resulta ser también la vuelta en la que el coche derrapa, ya que su distancia máxima llega a 12,4~px con el umbral en 11. Al cerrarse ese derrape el algoritmo castiga los puntos del 44 a 57, y el perfil que queda inmediatamente después es el que se guardó como política, con la zona de derrape a 79 de \gls{pwm} y el resto de la trayectoria a 83. El fichero completo está en el código~\ref{lst:politica-json}.
 
-Los resultados se recogen en la tabla~\ref{tab:politica-tiempos} y a primera vista la política gana, porque completa las 50 vueltas entre 90,42 y 91,71~s frente a los 98,29~s del algoritmo, unos siete segundos menos. Pero ninguna de las tres repeticiones iguala la mejor vuelta del algoritmo, 1,681~s frente a 1,719, 1,760 y 1,766~s, y las medianas son prácticamente las mismas en las cuatro, entre 1,797 y 1,814~s. En la figura~\ref{fig:politica-tiempos} se puede ver cómo el algoritmo arranca en su tensión mínima y necesita catorce vueltas para ponerse al ritmo que la política lleva desde la primera, de modo que solo en las diez vueltas iniciales pierde 26,01~s frente a los 18,40~s de la política. Toda la ventaja está ahí.
+Los resultados se recogen en la tabla~\ref{tab:politica-tiempos} y a primera vista la política gana, porque completa las 50 vueltas entre 90,42 y 91,71~s frente a los 98,29~s del algoritmo, unos siete segundos menos. Pero ninguna de las tres repeticiones iguala la mejor vuelta del algoritmo, 1,681~s frente a 1,719, 1,760 y 1,766~s, y las medianas son prácticamente las mismas en las cuatro. En la figura~\ref{fig:politica-tiempos} se puede ver cómo el algoritmo arranca en su tensión mínima y necesita catorce vueltas para ponerse al ritmo que la política lleva desde la primera, de modo que solo en las diez vueltas iniciales pierde 26,01~s frente a los 18,40~s de la política. Toda la ventaja está ahí.
 
 \begin{table}[btp]
   \centering
@@ -510,7 +515,7 @@ El objetivo de esta prueba es comprobar cuánto retardo añade la red al lazo de
 %
 Todas las ejecuciones se hicieron con el coche azul, en el mismo carril, con la cámara sin mover y con la misma configuración: rango de \gls{pwm} de 65 a 90 y umbral de derrape de 10~px. De cada escenario se hicieron tres repeticiones de 50 vueltas, 18 ejecuciones en total.
 
-El retardo no se puede medir restando la marca de tiempo que la cámara pone en el mensaje menos el instante en que el controlador lo recibe, porque son dos relojes de dos máquinas distintas lo que puede ocasionar que haya desfase entre ellas. Por eso se añadió un nodo que manda a la cámara mensajes de prueba, del mismo tamaño que uno de posición, y cronometra lo que tardan en volver. Al ser un viaje de ida y vuelta las dos marcas las toma el mismo reloj y el desfase desaparece al restar, que es el motivo por el que el RFC~2681 define una métrica de ida y vuelta~\cite{rfc2681}. La cámara devuelve también lo que ha tardado ella en contestar, y ese tiempo se descuenta. De forma que el retardo podemos estimarlo como la mitad del tiempo que tardamos en hacer el viaje de ida y vuelta.
+El retardo no se puede medir restando la marca de tiempo que la cámara pone en el mensaje menos el instante en que el controlador lo recibe, porque son dos relojes de dos máquinas distintas, lo que puede ocasionar un desfase entre ellas. Para evitar este problema, se mide el \gls{rtt} desde un único nodo, enviando mensajes de prueba del mismo tamaño que los de posición y cronometrando cuánto tardan en volver. Al ser un viaje de ida y vuelta, ambas marcas de tiempo se toman con el mismo reloj, por lo que el desfase desaparece al restar. Asumiendo simetría en la red local, el retardo de ida se estima como la mitad del \gls{rtt} medido.
 
 En los tres escenarios el nodo de potencia se ejecuta en la misma máquina que los controladores. Es una decisión de despliegue y no una limitación, esa máquina ya tiene que ser potente porque lleva un controlador por coche, y teniendo ese equipo lo razonable es enchufarle el Arduino y no añadir un salto de red entre decidir la tensión y aplicarla. La arquitectura permite separarlos, aunque ese caso no se ha probado.
 
@@ -522,20 +527,31 @@ El peor escenario es el WiFi y aun así se queda en 7,27~ms de mediana, y en nin
 \begin{table}[btp]
   \centering
   \estilotabla
-  \begin{tabular}{l|r|r|r|r|r|c}
+  \begin{tabular}{l|c|r|r|r|r|r|c}
     \rowcolor{udcpink!25}
-    \textbf{Escenario} & \textbf{Sondeos} & \textbf{Mediana (ms)}  & \textbf{p95 (ms)}  & \textbf{p99 (ms)}  & \textbf{Máximo (ms)}  & \textbf{Vídeos} \\
+    \textbf{Escenario} & \textbf{Rep.} & \textbf{Sondeos} & \textbf{Mediana  (ms)}  & \textbf{p95  (ms)}  & \textbf{p99  (ms)}  & \textbf{Máximo  (ms)}  & \textbf{Vídeo} \\
              % \rowcolor{ArqAzulClaro} & & (ms) & (ms) & (ms) & (ms) & \\
     \hline
-    A1 (una máquina) & 1680 & 3,36 & \textbf{8,74} & 19,80 & 54,27 & \video[1]{_k24VAe4ZKA} \video[2]{UcFcyrnVMPU} \video[3]{B5GPN1_kwRk} \\
-    A2 (cable)       & 1720 & \textbf{2,42} & 10,00 & \textbf{12,54} & \textbf{16,92} & \video[1]{s7n5IlJ0zcY} \video[2]{NUcfTrVroxo} \video[3]{xYX2Y-OD7LU} \\
-    A3 (WiFi)        & 1664 & 7,27 & 14,96 & 17,76 & 27,80 & \video[1]{gaz0K9iMLp4} \video[2]{Y6tdL2naRiI} \video[3]{hypQh8q4sQI} \\
+    A1 (una máquina) & 1 & 564 & 3,22 & 7,43 & 10,87 & 22,14 & \video{_k24VAe4ZKA} \\
+     & 2 & 547 & 3,48 & 9,15 & 21,63 & 29,42 & \video{UcFcyrnVMPU} \\
+     & 3 & 569 & 3,38 & 10,61 & 23,31 & 54,27 & \video{B5GPN1_kwRk} \\
+     & \textbf{Conjunto} & \textbf{1680} & \textbf{3,36} & \textbf{8,74} & \textbf{19,80} & \textbf{54,27} &  \\
+    \hline
+    A2 (cable) & 1 & 651 & 2,28 & 9,18 & 11,85 & 16,92 & \video{s7n5IlJ0zcY} \\
+     & 2 & 524 & 2,21 & 9,29 & 12,19 & 14,02 & \video{NUcfTrVroxo} \\
+     & 3 & 545 & 2,59 & 10,64 & 12,91 & 16,49 & \video{xYX2Y-OD7LU} \\
+     & \textbf{Conjunto} & \textbf{1720} & \textbf{2,42} & \textbf{10,00} & \textbf{12,54} & \textbf{16,92} &  \\
+    \hline
+    A3 (WiFi) & 1 & 536 & 7,06 & 15,10 & 18,10 & 22,41 & \video{gaz0K9iMLp4} \\
+     & 2 & 528 & 7,43 & 15,53 & 17,37 & 18,30 & \video{Y6tdL2naRiI} \\
+     & 3 & 600 & 7,32 & 13,80 & 17,11 & 27,80 & \video{hypQh8q4sQI} \\
+     & \textbf{Conjunto} & \textbf{1664} & \textbf{7,27} & \textbf{14,96} & \textbf{17,76} & \textbf{27,80} &  \\
   \end{tabular}
-  \caption{Tiempo de ida y vuelta por escenario, con las tres repeticiones juntas.}
+  \caption{Tiempo de ida y vuelta de cada repetición y de las tres juntas.}
   \label{tab:red-rtt}
 \end{table}
 
-La figura~\ref{fig:red-cdf} muestra cómo se distribuye el tiempo acumulado de ida y vuelta. Se puede ver cómo las tres curvas suben de golpe por lo que la mayoría de mensajes la latencia es inferior a los 20~ms.
+La figura~\ref{fig:red-cdf} muestra cómo se distribuye el \gls{rtt}. Se puede ver cómo las tres curvas suben de golpe por lo que la mayoría de mensajes la latencia es inferior a los 20~ms.
 %Destacar que la de WiFi va desplazada unos milisegundos a la derecha de las otras dos, y esa es toda la diferencia entre las tres.
 
 \begin{figure}[tbp]
@@ -555,48 +571,74 @@ Esos milisegundos hay que verlos al lado del resto del control, y eso es lo que 
   \label{fig:red-presupuesto}
 \end{figure}
 
-Sobre la pista no se traduce en nada, y eso lo dice la tabla~\ref{tab:red-tiempos-a}. Los tres escenarios completan las 50 vueltas en un tiempo parecido y sus mejores vueltas son casi iguales, con el WiFi como el más rápido de los tres aun siendo el que más retardo tiene. Que uno salga mejor que otro no es representativo, lo importante es que los valores quedan cerca. Las tres repeticiones de A2 dieron 97,35, 100,63 y 104,51~s, con lo que hay diferencias dentro de ejecuciones del mismo escenario. Lo que se ve ahí es la variabilidad del coche y del circuito que ya describe la sección~\ref{sec:prueba_pwm_incremental}.
+Sobre la pista no se traduce en nada, y eso lo dice la tabla~\ref{tab:red-tiempos-a}. Los tres escenarios completan las 50 vueltas en un tiempo parecido y sus mejores vueltas son casi iguales, con el WiFi como el más rápido de los tres aun siendo el que más retardo tiene. Que uno salga mejor que otro no es representativo, lo importante es que los valores quedan cerca. Lo que se ve ahí es la variabilidad del coche y del circuito que ya describe la sección~\ref{sec:prueba_pwm_incremental}.
 
 \begin{table}[btp]
   \centering
   \estilotabla
-  \begin{tabular}{l|r|r|r|r|r|c}
+  \begin{tabular}{l|c|r|r|r|r|r|c}
     \rowcolor{udcpink!25}
-    \textbf{Escenario} & \textbf{Contrarreloj  (s)} & \textbf{Mejor  (s)} & \textbf{Mediana  (s)} & \textbf{Media  (s)} & \textbf{$\sigma$} & \textbf{Vídeos} \\
+    \textbf{Escenario} & \textbf{Rep.} & \textbf{Contrarreloj  (s)} & \textbf{Mejor  (s)} & \textbf{Mediana  (s)} & \textbf{Media  (s)} & \textbf{$\sigma$  (s)} & \textbf{Vídeo} \\
            %   \rowcolor{ArqAzulClaro} & (s) & (s) & (s) & (s) & (s) & \\
     \hline
-    A3 (WiFi)        & \textbf{97,91} & 1,725 & 1,819 & \textbf{1,958} & \textbf{0,285} & \video[1]{gaz0K9iMLp4} \video[2]{Y6tdL2naRiI} \video[3]{hypQh8q4sQI} \\
-    A2 (cable)       & 100,83 & \textbf{1,716} & \textbf{1,808} & 2,017 & 0,552 & \video[1]{s7n5IlJ0zcY} \video[2]{NUcfTrVroxo} \video[3]{xYX2Y-OD7LU} \\
-    A1 (una máquina) & 102,45 & 1,740 & 1,843 & 2,049 & 0,405 & \video[1]{_k24VAe4ZKA} \video[2]{UcFcyrnVMPU} \video[3]{B5GPN1_kwRk} \\
+    A3 (WiFi) & 1 & 95,19 & 1,725 & 1,802 & 1,904 & 0,220 & \video{gaz0K9iMLp4} \\
+     & 2 & 98,02 & 1,726 & 1,805 & 1,960 & 0,302 & \video{Y6tdL2naRiI} \\
+     & 3 & 100,54 & 1,758 & 1,851 & 2,011 & 0,332 & \video{hypQh8q4sQI} \\
+     & \textbf{Conjunto} & \textbf{97,91} & \textbf{1,725} & \textbf{1,819} & \textbf{1,958} & \textbf{0,285} &  \\
+    \hline
+    A2 (cable) & 1 & 104,51 & 1,750 & 1,844 & 2,090 & 0,936 & \video{s7n5IlJ0zcY} \\
+     & 2 & 97,34 & 1,716 & 1,776 & 1,947 & 0,331 & \video{NUcfTrVroxo} \\
+     & 3 & 100,62 & 1,760 & 1,803 & 2,012 & 0,391 & \video{xYX2Y-OD7LU} \\
+     & \textbf{Conjunto} & \textbf{100,83} & \textbf{1,716} & \textbf{1,808} & \textbf{2,017} & \textbf{0,552} &  \\
+    \hline
+    A1 (una máquina) & 1 & 104,25 & 1,808 & 1,889 & 2,085 & 0,415 & \video{_k24VAe4ZKA} \\
+     & 2 & 101,51 & 1,757 & 1,837 & 2,030 & 0,383 & \video{UcFcyrnVMPU} \\
+     & 3 & 101,58 & 1,740 & 1,804 & 2,032 & 0,416 & \video{B5GPN1_kwRk} \\
+     & \textbf{Conjunto} & \textbf{102,45} & \textbf{1,740} & \textbf{1,843} & \textbf{2,049} & \textbf{0,405} &  \\
   \end{tabular}
-  \caption{Tiempos de las 50 vueltas por escenario.}
+  \caption{Tiempos de las 50 vueltas de cada repetición y media de las tres.}
   \label{tab:red-tiempos-a}
 \end{table}
 
 Que la red no se note cuando es buena no dice hasta dónde aguanta el control cuando deja de serlo. Para verlo se repitió el escenario del WiFi añadiendo retardo a mano con \texttt{tc netem}~\cite{netem}, una herramienta del \emph{kernel} de Linux que retiene los paquetes el tiempo que se le indique. La regla se pone en la Raspberry Pi con \texttt{sudo tc qdisc add dev wlan1 root netem delay 25ms}, se pasa de un punto al siguiente cambiando \texttt{add} por \texttt{change}, y al terminar se quita con ese mismo comando y \texttt{del}. Se probaron 25, 50 y 100~ms, con tres repeticiones cada uno. No se subió más porque con más de 100~ms entre dos máquinas de la misma sala el problema ya no es el control.
 
-Como la regla está en la salida de la Raspberry Pi, el retardo lo sufre el sentido cámara~$\rightarrow$~PC, que es justamente por donde viajan las posiciones, y por eso aparece una sola vez en el tiempo de ida y vuelta de la tabla~\ref{tab:red-tiempos-b}. Con el retardo puesto aparecen además mensajes perdidos, veintitrés de unos cinco mil, pero concentrados en unas pocas repeticiones sueltas y sin relación con el retardo aplicado.
+Como la regla está en la salida de la Raspberry Pi, el retardo lo sufre el sentido cámara~$\rightarrow$~PC, que es justamente por donde viajan las posiciones, y por eso aparece una sola vez en el \gls{rtt} de la tabla~\ref{tab:red-tiempos-b}. Con el retardo puesto aparecen además mensajes perdidos, veintitrés de los 5\,108 que se enviaron, pero concentrados en cuatro repeticiones sueltas y sin relación con el retardo aplicado.
 
 \begin{table}[btp]
   \centering
   \estilotabla[3]
-  \begin{tabular}{l|r|r|r|r|r|r|c}
+  \begin{tabular}{l|c|r|r|r|r|r|r|c}
     \rowcolor{udcpink!25}
-    \textbf{Retardo} & \textbf{Ida y vuelta  (ms)} & \textbf{Contrarreloj  (s)} & \textbf{Mejor  (s)} & \textbf{Mediana  (s)} & \textbf{Media  (s)} & \textbf{$\sigma$} & \textbf{Vídeos} \\
+    \textbf{Retardo} & \textbf{Rep.} & \textbf{Ida y vuelta} & \textbf{Contrarreloj} & \textbf{Mejor} & \textbf{Mediana} & \textbf{Media} & \textbf{$\sigma$} & \textbf{Vídeo} \\
        %     \rowcolor{ArqAzulClaro}
     \rowcolor{udcpink!25}
-    \textbf{inyectado} & \textbf{(ms)} & \textbf{(s)} & \textbf{(s)} & \textbf{(s)} & \textbf{(s)} & \textbf{(s)} & \\
+    \textbf{inyectado} & & \textbf{(ms)} & \textbf{(s)} & \textbf{(s)} & \textbf{(s)} & \textbf{(s)} & \textbf{(s)} & \\
     \hline
-    0 ms   & 7,27 & 97,91 & 1,725 & 1,819 & 1,958 & 0,285 & \video[1]{gaz0K9iMLp4} \video[2]{Y6tdL2naRiI} \video[3]{hypQh8q4sQI} \\
-    25 ms  & 33,21 & 100,98 & 1,750 & 1,870 & 2,020 & 0,322 & \video[1]{OKxPSBEzGvA} \video[2]{njiwCS1gtBc} \video[3]{2R-SNNJ0Sb4} \\
-    50 ms  & 58,48 & 99,69 & 1,730 & 1,857 & 1,994 & 0,307 & \video[1]{XJpB3IVhecY} \video[2]{h5jY27Ne27U} \video[3]{OADJDD47o-8} \\
-    100 ms & 108,35 & 105,41 & 1,735 & 1,889 & 2,108 & 0,427 & \video[1]{vQzWw2bY3Wk} \video[2]{EtzGwm9uMgg} \video[3]{UZWNLb6DXgc} \\
+    0 ms & 1 & 7,06 & 95,19 & 1,725 & 1,802 & 1,904 & 0,220 & \video{gaz0K9iMLp4} \\
+     & 2 & 7,43 & 98,02 & 1,726 & 1,805 & 1,960 & 0,302 & \video{Y6tdL2naRiI} \\
+     & 3 & 7,32 & 100,54 & 1,758 & 1,851 & 2,011 & 0,332 & \video{hypQh8q4sQI} \\
+     & \textbf{Conjunto} & \textbf{7,27} & \textbf{97,91} & \textbf{1,725} & \textbf{1,819} & \textbf{1,958} & \textbf{0,285} &  \\
+    \hline
+    25 ms & 1 & 33,12 & 99,92 & 1,750 & 1,841 & 1,998 & 0,334 & \video{OKxPSBEzGvA} \\
+     & 2 & 33,34 & 100,74 & 1,760 & 1,880 & 2,015 & 0,296 & \video{njiwCS1gtBc} \\
+     & 3 & 33,19 & 102,28 & 1,771 & 1,887 & 2,046 & 0,336 & \video{2R-SNNJ0Sb4} \\
+     & \textbf{Conjunto} & \textbf{33,21} & \textbf{100,98} & \textbf{1,750} & \textbf{1,870} & \textbf{2,020} & \textbf{0,322} &  \\
+    \hline
+    50 ms & 1 & 58,68 & 98,60 & 1,776 & 1,874 & 1,972 & 0,236 & \video{XJpB3IVhecY} \\
+     & 2 & 58,28 & 98,89 & 1,773 & 1,859 & 1,978 & 0,262 & \video{h5jY27Ne27U} \\
+     & 3 & 58,56 & 101,57 & 1,730 & 1,838 & 2,031 & 0,423 & \video{OADJDD47o-8} \\
+     & \textbf{Conjunto} & \textbf{58,48} & \textbf{99,69} & \textbf{1,730} & \textbf{1,857} & \textbf{1,994} & \textbf{0,307} &  \\
+    \hline
+    100 ms & 1 & 108,82 & 105,16 & 1,776 & 1,872 & 2,103 & 0,445 & \video{vQzWw2bY3Wk} \\
+     & 2 & 108,31 & 107,62 & 1,773 & 1,916 & 2,152 & 0,431 & \video{EtzGwm9uMgg} \\
+     & 3 & 108,06 & 103,46 & 1,735 & 1,879 & 2,069 & 0,407 & \video{UZWNLb6DXgc} \\
+     & \textbf{Conjunto} & \textbf{108,35} & \textbf{105,41} & \textbf{1,735} & \textbf{1,889} & \textbf{2,108} & \textbf{0,427} &  \\
   \end{tabular}
-  \caption{Retardo medido y tiempos de las 50 vueltas según el retardo inyectado.}
+  \caption{Retardo medido y tiempos de las 50 vueltas de cada repetición, con la media de las tres.}
   \label{tab:red-tiempos-b}
 \end{table}
 
-El coche completa sus 50 vueltas en los cuatro casos y la mejor vuelta no empeora en ninguno. Con 25 y 50~ms los tiempos no se distinguen del punto de partida. Con 100~ms sí aparece algo: las tres repeticiones de ese punto dieron 103,46, 105,16 y 107,62~s, todas por encima de cualquiera de las tres sin retardo, y la vuelta mediana sube de 1,819 a 1,889~s, es una subida pequeña pero relevante.
+El coche completa sus 50 vueltas en los cuatro casos y la mejor vuelta no empeora en ninguno. Con 25 y 50~ms los tiempos no se distinguen del punto de partida. Con 100~ms sí aparece algo, porque las tres repeticiones de ese punto quedan por encima de cualquiera de las tres sin retardo y la vuelta mediana sube de 1,819 a 1,889~s, una subida pequeña pero relevante.
 
 La conclusión es que la red no es lo que limita el control. Por cable o por WiFi añade unos pocos milisegundos, muy por debajo de lo que tarda la propia cámara en procesar el fotograma, y el sistema se comporta igual que con todo junto en una máquina. Hay que inyectar 100~ms, más de diez veces el peor retardo medido aquí, para que empiece a notarse algo, y ni siquiera entonces el coche pierde el control. Encaja con lo observado durante el resto del trabajo, ya que buena parte de las pruebas se hicieron por WiFi sin notar ninguna diferencia.
 
