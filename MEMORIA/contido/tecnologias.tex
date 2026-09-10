@@ -18,7 +18,7 @@ C++ es un lenguaje compilado de propósito general, con tipado estático y capaz
 
 \subsubsection{HTML, CSS y JavaScript}
 
-Con ellos se construyen las dos páginas web del sistema. Una es el panel desde el que se sigue la carrera en directo, que sirve por \gls{http} el nodo de visualización con las imágenes de las cámaras y los datos que se publican en la red. La otra es el \emph{dashboard} de la herramienta de análisis en diferido.
+HTML~\cite{html}, CSS~\cite{css} y JavaScript~\cite{ecmascript} son los tres lenguajes sobre los que se construye cualquier página web, el primero define la estructura del documento, el segundo su estilo y el tercero su comportamiento en el navegador. Con ellos se construyen las dos páginas web del sistema. Una es el panel desde el que se sigue la carrera en directo, que sirve por \gls{http} las imágenes de las cámaras y los datos que se publican en la red. La otra es el \emph{dashboard} de la herramienta de análisis en diferido.
 
 \subsection{Librerías}
 \subsubsection{OpenCV}
@@ -64,11 +64,11 @@ Git es un sistema de control de versiones distribuido~\cite{git}. Todo el desarr
 
 \subsubsection{YAML}
 
-El formato \gls{yaml} permite representar datos estructurados de forma legible para humanos y máquinas~\cite{pyyaml}. Es el formato estándar de configuración en \gls{ros2} y de Docker Compose. %En este proyecto centraliza toda la configuración del sistema en un único fichero de parámetros: colores de las pegatinas y de la meta, resolución de las cámaras, umbrales del algoritmo de control o el puerto del Arduino, entre otros.
+El formato \gls{yaml} permite representar datos estructurados de forma legible para humanos y máquinas~\cite{yaml}. Es el formato estándar de configuración en \gls{ros2} y de Docker Compose. %En este proyecto centraliza toda la configuración del sistema en un único fichero de parámetros: colores de las pegatinas y de la meta, resolución de las cámaras, umbrales del algoritmo de control o el puerto del Arduino, entre otros.
 
 \subsubsection{JSON}
 
-El formato \gls{json} es un estándar ligero de intercambio de datos basado en texto. Se emplea para guardar en disco las trayectorias obtenidas durante la vuelta de calibración (tanto las de cada cámara como las del controlador), de forma que en arranques posteriores el sistema pueda cargarlas y omitir la calibración.
+El formato \gls{json} es un estándar ligero de intercambio de datos basado en texto~\cite{json}. Se emplea para guardar en disco las trayectorias obtenidas durante la vuelta de calibración (tanto las de cada cámara como las del controlador), de forma que en arranques posteriores el sistema pueda cargarlas y omitir la calibración.
 
 \section{ROS~2}
 \label{sec:ros2}

@@ -8,7 +8,7 @@
 
 La visión por computador, también denominada visión artificial, es un área multidisciplinar que tiene como propósito dotar a los sistemas computacionales de la capacidad de percibir, procesar y comprender su entorno a partir de imágenes o secuencias de vídeo~\cite{szeliski2022}.
 
-Aunque para los seres vivos procesar estímulos visuales es casi instantáneo, replicar esa capacidad en sistemas artificiales sigue siendo un reto complejo~\cite{bradski2008}. Su desarrollo combina principios de matemáticas, física, procesamiento de señales y ciencias de la computación, entre otras disciplinas, y se ha visto impulsado en gran medida por librerías de propósito general como OpenCV~\cite{opencv}, que han estandarizado y acelerado el procesamiento en tiempo real.
+Aunque para los seres vivos procesar estímulos visuales es casi instantáneo, replicar esa capacidad en sistemas artificiales sigue siendo un reto complejo~\cite{szeliski2022}. Su desarrollo combina principios de matemáticas, física, procesamiento de señales y ciencias de la computación, entre otras disciplinas, y se ha visto impulsado en gran medida por librerías de propósito general como OpenCV~\cite{opencv}, que han estandarizado y acelerado el procesamiento en tiempo real.
 
 En este trabajo, la visión por computador es la base del sistema: permite capturar imágenes y procesarlas para identificar los coches y controlarlos después con esa información. Sin ese procesado no hay control posible. Para conseguirlo se emplea un conjunto de técnicas:
 
@@ -22,7 +22,7 @@ En este trabajo, la visión por computador es la base del sistema: permite captu
 \subsection{Seguimiento de objetos}
 \label{sec:seguimiento}
 
-El seguimiento de objetos, o \textit{tracking}, es el proceso algorítmico que permite obtener la trayectoria de los objetos en una secuencia de imágenes~\cite{bradski2008}. En lugar de tratar cada imagen de manera independiente, los algoritmos de seguimiento combinan la detección visual instantánea con modelos de predicción basados en el estado previo del objeto.
+El seguimiento de objetos, o \textit{tracking}, es el proceso algorítmico que permite obtener la trayectoria de los objetos en una secuencia de imágenes~\cite{yilmaz2006}. En lugar de tratar cada imagen de manera independiente, los algoritmos de seguimiento combinan la detección visual instantánea con modelos de predicción basados en el estado previo del objeto.
 
 Para garantizar robustez frente a perturbaciones, es crítico seleccionar las propiedades visuales más distintivas y estables del objeto. Normalmente las características más usadas son las que recoge Yilmaz et al. en su revisión del seguimiento de objetos~\cite{yilmaz2006}:
 
@@ -44,7 +44,7 @@ Para situar el \gls{roi} en cada fotograma se recurre a la extrapolación lineal
 \[
     x_{n+1} \approx x_n + (x_n - x_{n-1}), \qquad
     y_{n+1} \approx y_n + (y_n - y_{n-1}),
-\] y la ventana de búsqueda se centra en el punto predicho. Cuando la detección falla (por ejemplo, por una oclusión o porque el coche abandona el campo de visión de la cámara), la ventana se amplía progresivamente en los fotogramas siguientes hasta cubrir la imagen completa, garantizando la readquisición del vehículo en cuanto vuelve a ser visible.
+\] y la ventana de búsqueda se centra en el punto predicho. Cuando la detección falla (por ejemplo, por una oclusión o porque el coche abandona el campo de visión de la cámara), la ventana se amplía hasta cubrir la imagen completa, garantizando la readquisición del vehículo en cuanto vuelve a ser visible.
 
 \subsection{Interpolación lineal}
 \label{sec:interpolacion}
@@ -67,7 +67,7 @@ En este trabajo se emplea para determinar con mayor precisión el instante del p
 \section{Control por Modulación por Ancho de Pulso (PWM)}
 \label{sec:pwm-fundamentos}
 
-El \gls{pwm} es una técnica que genera una señal cuadrada de amplitud fija que alterna entre 0\,V y la tensión de alimentación a una frecuencia constante, variando únicamente la proporción de tiempo en la que permanece en nivel alto, denominada ciclo de trabajo o \textit{duty cycle}. Aunque la salida es digital, la carga percibe una tensión media equivalente a la tensión de alimentación multiplicada por el ciclo de trabajo, emulando así un control analógico de potencia con muy pocas pérdidas, ya que los transistores de conmutación operan siempre completamente encendidos o apagados.
+El \gls{pwm} es una técnica que genera una señal cuadrada de amplitud fija que alterna entre 0\,V y la tensión de alimentación a una frecuencia constante, variando únicamente la proporción de tiempo en la que permanece en nivel alto, denominada ciclo de trabajo o \textit{duty cycle}~\cite{arduinopwm}. Aunque la salida es digital, la carga percibe una tensión media equivalente a la tensión de alimentación multiplicada por el ciclo de trabajo, emulando así un control analógico de potencia con muy pocas pérdidas, ya que los transistores de conmutación operan siempre completamente encendidos o apagados.
 
 
 \section{Trabajos relacionados}
@@ -77,7 +77,7 @@ Este trabajo no parte de cero, sino que continúa una línea de Trabajos de Fin 
 
 \subsection{Línea de trabajos previos}
 
-La línea comienza con el TFG de Miguel Fernández López, centrado en la detección y el seguimiento visual de un coche de Scalextric, incluyendo la identificación de sectores de la pista y el cálculo de tiempos de vuelta, y con el TFG de Julián Barcia Facal, que aportó el diseño del hardware de control basado en Arduino y señales \gls{pwm}. Ambos trabajos están descritos en detalle en las memorias anteriores~\cite{tfgmario,tfgadrian}.
+La línea comienza con el TFG de Miguel Fernández López~\cite{fernandezlopez2022}, centrado en la detección y el seguimiento visual de un coche de Scalextric, con la identificación de sectores de la pista y el cálculo de tiempos de vuelta, y sigue con el de Julián Barcia Facal~\cite{barciafacal2023}, que monitorizó la posición del coche con sensores lumínicos e inerciales sobre tres microcontroladores Arduino comunicados por MQTT, uno de los cuales controla además la tensión de los carriles con señales \gls{pwm}.
 
 \subsection{TFG de Mario López Cea}
 \label{sec:tfg-mario}
