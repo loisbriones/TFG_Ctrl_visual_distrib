@@ -125,7 +125,7 @@ El problema no afecta solo al algoritmo, porque en las pruebas de conducción ma
 \section{Prueba PWM incremental}
 \label{sec:prueba_pwm_incremental}
 
-El objetivo de esta prueba es simplificar al máximo el sistema y ver cómo responde. Para ello se saca el algoritmo del lazo y se aplicó el modo incremental, descrito en la sección~\ref{subsec:modos-operacion}, aumentando el valor cada 10 vueltas. La idea era poder ver el rango útil sobre el que podría trabajar el algoritmo y en qué puntos del circuito aparecen normalmente los derrapes. Otra razón para hacer esta prueba es que durante las pruebas unitarias aparecieron problemas en el comportamiento del circuito, los valores de pwm que servían un día para un coche ya no valían al día siguiente. 
+El objetivo de esta prueba es simplificar al máximo el sistema y ver cómo responde. Para ello se saca el algoritmo del lazo y se aplicó el modo incremental, descrito en la sección~\ref{subsec:modos-operacion}, aumentando el valor cada 10 vueltas. La idea era poder ver el rango útil sobre el que podría trabajar el algoritmo y ver cómo se comportaba el coche. Otra razón para hacer esta prueba es que durante las pruebas unitarias aparecieron problemas en el comportamiento del circuito, los valores de pwm que servían un día para un coche ya no valían al día siguiente. 
 
 Se realizó una prueba con el mismo \emph{setup} que en la prueba~\ref{sec:prueba-comparativa-coches}, por tanto es el mismo circuito de la figura~\ref{fig:setup-ovalo}. Se realizaron seis ejecuciones, recogidas en la tabla~\ref{tab:incremental-sesiones}, se usaron los dos coches y en dos días distintos.
 
