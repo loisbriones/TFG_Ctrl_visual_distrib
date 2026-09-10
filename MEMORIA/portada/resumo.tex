@@ -9,31 +9,28 @@
   través de una red local: un nodo cámara por cada cámara, que detecta la posición de cada
   coche por segmentación de color; un nodo de control por carril, que reconstruye la
   trayectoria durante una vuelta de calibración y decide la tensión que hay que aplicar; y un
-  nodo puente, que traduce esas consignas en señales PWM sobre el Arduino que alimenta la
-  pista. Los nodos pueden repartirse por la red en cualquier combinación.
+  nodo de potencia, que traduce esas consignas en señales PWM sobre el Arduino que alimenta la
+  pista. Los nodos pueden repartirse por la red en cualquier combinación, y todo el despliegue
+  es reproducible mediante contenedores Docker.
   %, incluido el sistema entero en un solo equipo.
 
-  La calibración es automática y consume una única vuelta: arranca y termina al cruzar la
-  meta, sin intervención humana y sin configurar a mano tramos, metas ni coches. La
-  trayectoria obtenida se discretiza en una cadena de celdas que se particiona en zonas de PWM
-  uniforme, sobre las que el algoritmo de control sube la potencia en las zonas limpias y la
-  castiga en las que registran un derrape, detectado por la separación de la etiqueta trasera
-  respecto a la trayectoria base. El algoritmo funciona sobre varias cámaras encadenadas, con
-  o sin solapamiento entre sus campos de visión.
+  La calibración es automática y consume una única vuelta, empieza y termina al cruzar la
+  meta, sin intervención humana. De ella se obtiene la trayectoria base, sobre la que se apoya
+  el resto del sistema. El algoritmo va creando sobre ella zonas de derrape, a las que castiga
+  bajando la tensión, mientras que las demás la van subiendo. Cada cámara aporta la parte del
+  circuito que ve, con o sin solapamiento.
 
   Al repartir el lazo de control por la red, la latencia pasa a ser un factor de diseño, por lo
-  que todos los mensajes llevan marcas de tiempo y contadores de fotograma, y el sistema
-  incorpora una herramienta de grabación que registra sin pérdidas todo el tráfico y otra de
-  análisis en diferido que construye un panel web con las trayectorias, los tiempos por vuelta
-  y las latencias de cada etapa. Todo el despliegue es reproducible mediante contenedores
-  Docker.
+  que los mensajes que lo recorren llevan marcas de tiempo con las que medir cuánto tarda cada
+  etapa. Esos mensajes, junto con los de telemetría, los captura un nodo mientras circulan por
+  la red para su posterior análisis. El sistema cuenta además con un panel web desde el que
+  seguir la carrera en directo.
 
-  El sistema se ha evaluado en condiciones reales sobre dos circuitos, uno cubierto por una
-  única cámara y otro en ocho que necesita dos cámaras en máquinas distintas, con dos coches de
-  comportamiento muy diferente y ejecuciones de 50 vueltas. Las pruebas confirman que el
-  control automático bate a los pilotos humanos en tiempo acumulado, no por firmar la vuelta
-  más rápida, sino por la regularidad, y que el ajuste del umbral de derrape debe adaptarse a
-  las características de cada coche.
+  El sistema se ha probado en condiciones reales sobre circuitos de distinto tamaño, desde uno
+  pequeño que cubre una sola cámara hasta circuitos grandes que necesitan varias cámaras
+  repartidas entre varias máquinas, y con diferentes coches. Se comparó el control automático
+  con el de pilotos humanos y se estudió la latencia de la red, que queda descartada como
+  factor limitante frente a otros elementos del montaje que sí dificultan el control.
 
   \vspace*{25pt}
   \begin{segundoresumo}
@@ -43,31 +40,29 @@
     covered. Here the system is broken down into ROS~2 nodes that cooperate over a local
     network: one camera node per physical camera, which detects the position of each car by
     colour segmentation; one control node per lane, which reconstructs the trajectory during a
-    calibration lap and decides the voltage to apply; and a bridge node, which turns those
+    calibration lap and decides the voltage to apply; and a power node, which turns those
     setpoints into PWM signals on the Arduino that powers the track. The nodes can be spread
-    across the network in any combination.
+    across the network in any combination, and the whole deployment is reproducible through
+    Docker containers.
     %, including running the whole system on a single  machine.
 
-    Calibration is automatic and takes a single lap: it starts and ends when the car crosses
-    the finish line, with no human intervention and without manually configuring sections,
-    finish lines or cars. The resulting trajectory is discretised into a chain of cells that is
-    partitioned into zones of uniform PWM, over which the control algorithm raises the power in
-    clean zones and penalises those where a skid is recorded, detected from the separation
-    between the rear sticker and the base trajectory. The algorithm works across several
-    chained cameras, with or without overlapping fields of view.
+    Calibration is automatic and takes a single lap, starting and ending when the car crosses
+    the finish line, with no human intervention. That lap yields the base trajectory, on which
+    the rest of the system relies. Over it the algorithm builds skid zones, which it penalises
+    by lowering the voltage, while raising it in all the others. Each camera contributes the
+    part of the track it sees, with or without overlap.
 
-    Once the control loop is spread over the network, latency becomes a design factor, so every
-    message carries timestamps and frame counters, and the system includes a recording tool
-    that losslessly logs all the traffic and an offline analysis tool that builds a web
-    dashboard with the trajectories, the lap times and the latency of each stage. The whole
-    deployment is reproducible through Docker containers.
+    Once the control loop is spread over the network, latency becomes a design factor, so the
+    messages that travel through it carry timestamps that make it possible to measure how long
+    each stage takes. Those messages, together with the telemetry ones, are captured by a node
+    as they travel across the network, for later analysis. The system also provides a web
+    dashboard from which the race can be followed live.
 
-    The system has been evaluated under real conditions on two tracks, one covered by a single
-    camera and an eight-shaped track requiring two cameras on different machines, with two
-    cars of very different behaviour and 50-lap runs. The tests confirm that the automatic
-    control beats human drivers on total time, not by setting the fastest lap but through
-    consistency, and that the skid threshold has to be tuned to the characteristics of each
-    car.
+    The system has been tested under real conditions on tracks of different sizes, from a small
+    one covered by a single camera to large tracks that need several cameras spread across
+    several machines, and with different cars. The automatic control was compared against human
+    drivers, and network latency was studied and ruled out as a limiting factor, unlike other
+    elements of the physical setup that do make control harder.
   \end{segundoresumo}
 \vspace*{25pt}
 \input{portada/palabras_chave}
